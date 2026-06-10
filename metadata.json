@@ -1,0 +1,6 @@
+{
+  "name": "UMESC - União de Militares Evangélicos de SC",
+  "description": "Plataforma oficial da União de Militares Evangélicos de Santa Catarina. Agência missionária focada em projetos de alcance social e espiritual, doações, voluntariado e cadastro de membros alinhado com a LGPD.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

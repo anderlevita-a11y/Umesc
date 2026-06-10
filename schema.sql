@@ -1,0 +1,233 @@
+-- ====================================================================
+-- SCRIPT DE INICIALIZAÇÃO E CORREÇÃO DEFINITIVA (SUPABASE / POSTGRESQL)
+-- Finalidade: Criação completa das tabelas 'members' e 'admins' com RLS,
+--             permissões de API e recarga do cache de esquemas (Anti-Erro PGRST205)
+--
+-- COMO UTILIZAR NO SUPABASE:
+-- 1. Copie todo o conteúdo deste arquivo.
+-- 2. Acesse seu projeto no Supabase (https://supabase.com).
+-- 3. No menu lateral esquerdo, clique em "SQL Editor" (ícone de terminal '>_').
+-- 4. Clique em "+ New query" para criar uma nova aba.
+-- 5. Cole este código no editor.
+-- 6. Clique no botão "Run" (ou pressione Ctrl+Enter / Cmd+Enter).
+-- ====================================================================
+
+-- 1. EXTENSÕES NECESSÁRIAS
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 2. RESET TOTAL (Opcional - execute para limpar tabelas antigas e recriá-las de forma limpa)
+-- Se você possui dados que deseja preservar, comente as duas linhas abaixo com "--"
+DROP TABLE IF EXISTS public.admins CASCADE;
+DROP TABLE IF EXISTS public.members CASCADE;
+
+-- 3. CRIAR TABELA DE ADMINISTRADORES (Acesso ao Painel)
+CREATE TABLE public.admins (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL, -- Armazena a senha administrativa de forma visível ou hash simples coerente
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Comentários descritivos da tabela admins
+COMMENT ON TABLE public.admins IS 'Gerenciamento de acessos administrativos do Portal UMESC';
+
+-- 4. CRIAR TABELA DE MEMBROS ASSOCIADOS (Ficha cadastral e termo LGPD)
+CREATE TABLE public.members (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    cpf VARCHAR(15) UNIQUE NOT NULL,
+    birth_date DATE NOT NULL,
+    military_force VARCHAR(50) NOT NULL, -- PM, BM, FFAA, Civil, Apoiador, etc.
+    rank VARCHAR(100) NOT NULL, -- Patente / Posto / Profissão
+    rg_militar VARCHAR(100) DEFAULT ''::character varying,
+    church VARCHAR(255) NOT NULL,
+    phone VARCHAR(30) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    lgpd_consent BOOLEAN DEFAULT TRUE NOT NULL,
+    marketing_consent BOOLEAN DEFAULT FALSE NOT NULL,
+    registration_date DATE DEFAULT CURRENT_DATE NOT NULL,
+    security_hash VARCHAR(255) UNIQUE NOT NULL, -- Assinatura hash para acesso individual
+    password VARCHAR(255) DEFAULT 'umesc123'::character varying NOT NULL, 
+    approved BOOLEAN DEFAULT FALSE NOT NULL, -- Status de moderação pela diretoria
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Comentários descritivos da tabela members
+COMMENT ON TABLE public.members IS 'Ficha de inscrição de filiados e termos sob as regras da LGPD';
+
+-- 5. ÍNDICES DE VELOCIDADE DE BUSCA (Melhora latência de consultas no app)
+CREATE INDEX IF NOT EXISTS idx_members_cpf ON public.members(cpf);
+CREATE INDEX IF NOT EXISTS idx_members_security_hash ON public.members(security_hash);
+CREATE INDEX IF NOT EXISTS idx_members_approved ON public.members(approved);
+CREATE INDEX IF NOT EXISTS idx_admins_email ON public.admins(email);
+
+-- 6. POPULAR TABELA DE ADMINISTRADORES COM ACESSO PADRÃO
+INSERT INTO public.admins (email, password)
+VALUES ('admin@umesc.org.br', 'adminUMESC2026')
+ON CONFLICT (email) DO UPDATE 
+SET password = EXCLUDED.password;
+
+-- 7. POPULAR MEMBROS INICIAIS DE DEMONSTRAÇÃO (REMOVIDO A PEDIDO DO USUÁRIO)
+-- NENHUM ASSOCIADO REGISTRADO INICIALMENTE PRA COMPLETO RESPEITO AO AMBIENTE DE PRODUÇÃO POR PADRÃO
+
+
+-- 8. CONCEDER PERMISSÕES EXPLICITAS À GATWAY DO SUPABASE (anon, authenticated, service_role)
+-- Crucial para evitar erros de permissão ou tabelas não localizadas na API do cliente REST
+GRANT ALL ON TABLE public.members TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.admins TO anon, authenticated, service_role;
+
+-- 9. CONFIGURAR SEGURANÇA NO NÍVEL DE LINHA (Row Level Security - RLS)
+ALTER TABLE public.members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admins ENABLE ROW LEVEL SECURITY;
+
+-- Limpeza de políticas pré-existentes
+DROP POLICY IF EXISTS "Leitura livre para todos" ON public.members;
+DROP POLICY IF EXISTS "Inserção livre para todos" ON public.members;
+DROP POLICY IF EXISTS "Atualização livre para todos" ON public.members;
+DROP POLICY IF EXISTS "Deleção livre para todos" ON public.members;
+DROP POLICY IF EXISTS "Leitura livre de admins" ON public.admins;
+
+-- Criar políticas atualizadas com referências explícitas ao schema public
+CREATE POLICY "Leitura livre para todos" ON public.members 
+    FOR SELECT USING (true);
+
+CREATE POLICY "Inserção livre para todos" ON public.members 
+    FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Atualização livre para todos" ON public.members 
+    FOR UPDATE USING (true);
+
+CREATE POLICY "Deleção livre para todos" ON public.members 
+    FOR DELETE USING (true);
+
+CREATE POLICY "Leitura livre de admins" ON public.admins 
+    FOR SELECT USING (true);
+
+-- 10. RECARREGAR AUTOMATICAMENTE O CACHE DE ESQUEMAS DO PORTGREST NO SUPABASE (PGRST205 FIX)
+-- Executa a notificação oficial do Supabase para que a API REST reconheça as tabelas imediatamente!
+NOTIFY pgrst, 'reload schema';
+
+-- ====================================================================
+-- 11. TABELAS PARA CONGRESSOS E EVENTOS INTEGRADOS
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.congresses (
+    id VARCHAR(55) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    date VARCHAR(255) NOT NULL,
+    location VARCHAR(255) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    pix_key VARCHAR(255) NOT NULL,
+    pix_receiver_name VARCHAR(255) NOT NULL,
+    status VARCHAR(20) DEFAULT 'open' NOT NULL, -- 'open' ou 'closed'
+    is_featured BOOLEAN DEFAULT FALSE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE NOT NULL, -- Permite deixar ativo/inativo ocultando do frontend
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+COMMENT ON TABLE public.congresses IS 'Gerenciamento de congressos, simpósios e retiros oficiais da UMESC';
+
+-- 12. TABELAS DE OFICINAS / WORKSHOPS DO CONGRESSO
+CREATE TABLE IF NOT EXISTS public.workshops (
+    id VARCHAR(55) PRIMARY KEY,
+    congress_id VARCHAR(55) REFERENCES public.congresses(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    speaker VARCHAR(255) NOT NULL,
+    capacity INTEGER NOT NULL,
+    registered_count INTEGER DEFAULT 0 NOT NULL,
+    time_slot VARCHAR(255) NOT NULL
+);
+
+COMMENT ON TABLE public.workshops IS 'Oficinas e simpósios específicos ministrados em cada congresso';
+
+-- 13. CRONOGRAMA / AGENDA DO CONGRESSO
+CREATE TABLE IF NOT EXISTS public.agenda_items (
+    id VARCHAR(55) PRIMARY KEY,
+    congress_id VARCHAR(55) REFERENCES public.congresses(id) ON DELETE CASCADE,
+    day VARCHAR(100) NOT NULL,
+    time VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT
+);
+
+COMMENT ON TABLE public.agenda_items IS 'Planejamento e cronograma de sessões públicas e privativas de cada congresso';
+
+-- 14. INSCRIÇÕES REALIZADAS PARA O CONGRESSO (QR CODE + PAGAMENTOS)
+CREATE TABLE IF NOT EXISTS public.inscriptions (
+    id VARCHAR(55) PRIMARY KEY, -- INS-XXXXXX
+    congress_id VARCHAR(55) REFERENCES public.congresses(id) ON DELETE CASCADE,
+    congress_title VARCHAR(255) NOT NULL,
+    member_cpf VARCHAR(15) NOT NULL,
+    member_name VARCHAR(255) NOT NULL,
+    member_email VARCHAR(255) NOT NULL,
+    member_phone VARCHAR(30) NOT NULL,
+    member_rank VARCHAR(100) NOT NULL,
+    selected_workshop_ids JSONB DEFAULT '[]'::jsonb NOT NULL,
+    payment_status VARCHAR(30) DEFAULT 'pendente' NOT NULL, -- pendente, em_analise, pago, recusado
+    payment_proof_url TEXT,
+    payment_proof_name VARCHAR(255),
+    registration_date TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    qr_code_token VARCHAR(255) NOT NULL,
+    checked_in BOOLEAN DEFAULT FALSE NOT NULL,
+    checked_in_at TIMESTAMP WITH TIME ZONE
+);
+
+COMMENT ON TABLE public.inscriptions IS 'Controle financeiro e homologação de ingressos por filiados fardados';
+
+-- 15. PERMISSÕES PARA AS NOVAS TABELAS NO SUPABASE
+GRANT ALL ON TABLE public.congresses TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.workshops TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.agenda_items TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.inscriptions TO anon, authenticated, service_role;
+
+-- 16. CONFIGURAR SEGURANÇA NO NÍVEL DE LINHA (RLS) PARA AS NOVAS TABELAS
+ALTER TABLE public.congresses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.workshops ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agenda_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inscriptions ENABLE ROW LEVEL SECURITY;
+
+-- Limpeza de políticas pré-existentes
+DROP POLICY IF EXISTS "Leitura livre para todos de congressos" ON public.congresses;
+DROP POLICY IF EXISTS "Inserção livre para todos de congressos" ON public.congresses;
+DROP POLICY IF EXISTS "Atualização livre para todos de congressos" ON public.congresses;
+DROP POLICY IF EXISTS "Deleção livre para todos de congressos" ON public.congresses;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de workshops" ON public.workshops;
+DROP POLICY IF EXISTS "Inserção livre para todos de workshops" ON public.workshops;
+DROP POLICY IF EXISTS "Atualização livre para todos de workshops" ON public.workshops;
+DROP POLICY IF EXISTS "Deleção livre para todos de workshops" ON public.workshops;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de agenda_items" ON public.agenda_items;
+DROP POLICY IF EXISTS "Inserção livre para todos de agenda_items" ON public.agenda_items;
+DROP POLICY IF EXISTS "Atualização livre para todos de agenda_items" ON public.agenda_items;
+DROP POLICY IF EXISTS "Deleção livre para todos de agenda_items" ON public.agenda_items;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de inscriptions" ON public.inscriptions;
+DROP POLICY IF EXISTS "Inserção livre para todos de inscriptions" ON public.inscriptions;
+DROP POLICY IF EXISTS "Atualização livre para todos de inscriptions" ON public.inscriptions;
+DROP POLICY IF EXISTS "Deleção livre para todos de inscriptions" ON public.inscriptions;
+
+-- Criar políticas atualizadas para congresses, workshops, agenda_items e inscriptions
+CREATE POLICY "Leitura livre para todos de congressos" ON public.congresses FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de congressos" ON public.congresses FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de congressos" ON public.congresses FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de congressos" ON public.congresses FOR DELETE USING (true);
+
+CREATE POLICY "Leitura livre para todos de workshops" ON public.workshops FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de workshops" ON public.workshops FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de workshops" ON public.workshops FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de workshops" ON public.workshops FOR DELETE USING (true);
+
+CREATE POLICY "Leitura livre para todos de agenda_items" ON public.agenda_items FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de agenda_items" ON public.agenda_items FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de agenda_items" ON public.agenda_items FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de agenda_items" ON public.agenda_items FOR DELETE USING (true);
+
+CREATE POLICY "Leitura livre para todos de inscriptions" ON public.inscriptions FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de inscriptions" ON public.inscriptions FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de inscriptions" ON public.inscriptions FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de inscriptions" ON public.inscriptions FOR DELETE USING (true);
+
+-- 17. NOTIFICAÇÃO COMPLEMENTAR DO CACHE DO ESQUEMA DO PORTGREST NO SUPABASE
+NOTIFY pgrst, 'reload schema';
