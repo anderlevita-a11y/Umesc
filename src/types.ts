@@ -74,6 +74,7 @@ export interface MemberRegistration {
   paused?: boolean; // New: Option to pause registration
   archived?: boolean; // New: Option to archive registration (only for paused registrations)
   photoUrl?: string; // New: Profile / credential photo (3x4)
+  isDirector?: boolean; // New: Option to promote member to director (can login to administrative panel)
 }
 
 export interface DonationSim {
@@ -84,6 +85,19 @@ export interface DonationSim {
   email: string;
   isAnonymous: boolean;
   lgpdConsent: boolean;
+}
+
+export interface Donation {
+  id: string;
+  projectId: string;
+  projectName: string;
+  donorName: string;
+  donorWhatsapp: string;
+  amount: number;
+  paymentStatus: "pendente" | "pago" | "em_analise" | "recusado";
+  paymentProofUrl?: string;
+  paymentProofName?: string;
+  registrationDate: string;
 }
 
 export interface FichaFiliacao {
@@ -116,4 +130,24 @@ export interface FichaFiliacao {
   ipAddress: string;
   securitySeal: string;
 }
+
+export interface MemberContent {
+  id: string;
+  title: string;
+  category: "Informativo Geral" | "Devocional Diário" | "Aviso de Farda" | "Convocação de Assembléia" | "Boletim Extraordinário";
+  bodyText: string;
+  attachmentUrl?: string;
+  status: "Pronto" | "Rascunho" | "Arquivado";
+  createdAt: string;
+}
+
+export interface CapelaniaService {
+  id: string;
+  title: string;
+  description: string;
+  buttonText: string;
+  emoji: string;
+  tabLink: "notices" | "structure" | "registration" | "congressos";
+}
+
 

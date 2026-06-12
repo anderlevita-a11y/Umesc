@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Project, Coordinator, Announcement, ScheduleEvent, DocumentFile } from "./types";
+import { Project, Coordinator, Announcement, ScheduleEvent, DocumentFile, CapelaniaService } from "./types";
 
 export const UMESC_ABOUT = {
   acronym: "UMESC",
@@ -236,7 +236,7 @@ export const INITIAL_DOCUMENTS: DocumentFile[] = [
     fileSize: "1.2 MB",
     publishedDate: "2024-03-12",
     downloadCount: 412,
-    url: "estatuto_umesc_consolidado.pdf"
+    url: "https://drive.google.com/file/d/1BxiMVs0XRA5nFMdKvBdBAnkaUbqFAZfX/view?usp=sharing"
   },
   {
     id: "doc_2",
@@ -272,6 +272,34 @@ export const INITIAL_DOCUMENTS: DocumentFile[] = [
     fileSize: "680 KB",
     publishedDate: "2025-10-14",
     downloadCount: 540,
-    url: "cartilha_direitos_data_protection_lgpd_umesc.pdf"
+    url: "https://drive.google.com/file/d/1yD7XNqf2Qv_bHw8z5O6-1X624o5z9X78/view?usp=sharing"
   }
 ];
+
+export const DEFAULT_CAPELANIA_SERVICES: CapelaniaService[] = [
+  {
+    id: "capsrv_1",
+    title: "Guarnição e Auxílio",
+    description: "Acolhimento imediato a militares em face de estresse severo ou crises emocionais.",
+    buttonText: "Fazer Inscrição / Solicitar Ajuda →",
+    emoji: "✓",
+    tabLink: "registration"
+  },
+  {
+    id: "capsrv_2",
+    title: "Literaturas de Uniforme",
+    description: "Entrega gratuita de Bíblias compactas de bolso para leitura em postos e patrulhas.",
+    buttonText: "Quadro de Avisos / Livros →",
+    emoji: "📖",
+    tabLink: "notices"
+  },
+  {
+    id: "capsrv_3",
+    title: "Resgate e Ação Social",
+    description: "Sopões e agasalhos na serra e planalto em parcerias voluntárias catarinenses.",
+    buttonText: "Projetos e Informativos →",
+    emoji: "♥",
+    tabLink: "notices"
+  }
+];
+

@@ -6,7 +6,7 @@ import {
 import { congressService, Congress } from "../lib/congressService.ts";
 
 interface PublicCongressBannerProps {
-  onEnterMemberDashboard: (tab: "notices" | "agenda" | "structure" | "registration" | "congressos") => void;
+  onEnterMemberDashboard: (tab: "notices" | "structure" | "registration" | "congressos") => void;
 }
 
 // Robust date-parsing utility to make countdown work on any Portuguese written date formats

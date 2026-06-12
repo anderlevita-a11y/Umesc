@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { 
-  ShieldAlert, ShieldCheck, Users, Briefcase, BookOpen, Layers, Calendar, 
+  ShieldAlert, ShieldCheck, Shield, Users, Briefcase, BookOpen, Layers, Calendar, 
   Trash2, Edit, Plus, Check, X, LogIn, LogOut, ArrowLeft, RefreshCw, BarChart2, PieChart, Info,
-  Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode
+  Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
+  Coins, ExternalLink, Paperclip, Compass, Bell
 } from "lucide-react";
-import { membersService, adminService, isSupabaseConfigured } from "../lib/supabase.ts";
+import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
-import { MemberRegistration, Project, FichaFiliacao } from "../types";
+import { donationsService } from "../lib/donationService.ts";
+import { MemberRegistration, Project, FichaFiliacao, Donation, MemberContent, CapelaniaService, Announcement, DocumentFile } from "../types";
 import { generateFichaPdf } from "../lib/fichaPdfHelper.ts";
 import { RevistaEdition } from "./RevistasSection.tsx";
-import { DEFAULT_DIRETORIA, COORDINATORS_DATA, INITIAL_PROJECTS } from "../data.ts";
+import { DEFAULT_DIRETORIA, COORDINATORS_DATA, INITIAL_PROJECTS, DEFAULT_CAPELANIA_SERVICES, INITIAL_ANNOUNCEMENTS, INITIAL_DOCUMENTS } from "../data.ts";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
 import CongressoManager from "./CongressoManager.tsx";
 
@@ -79,6 +81,35 @@ const DEFAULT_EVENTOS = [
   }
 ];
 
+const DEFAULT_MEMBER_CONTENTS: MemberContent[] = [
+  {
+    id: "content_1",
+    title: "Mensagem Espiritual de Alento aos Guerreiros",
+    category: "Devocional Diário",
+    bodyText: "Prezados irmãos de farda, meditemos hoje no Salmo 91: 'Aquele que habita no esconderijo do Altíssimo, à sombra do Onipotente descansará.' Em cada patrulha, em cada plantão, o Senhor é o vosso escudo e fortaleza. Deus abençoe a todos os policiais e bombeiros militares hoje!",
+    attachmentUrl: "https://umesc.org.br/devocional",
+    status: "Pronto",
+    createdAt: "2026-06-11"
+  },
+  {
+    id: "content_2",
+    title: "Convocação para 35º Congresso Anual da UMESC",
+    category: "Convocação de Assembléia",
+    bodyText: "Atenção Coordenadores e Associados! Convocamos todos os membros ativos a participarem da nossa Assembléia Geral Extraordinária preparatória para o 35º Congresso Anual. Data: 25 de Junho às 19:30 via Zoom Link.",
+    attachmentUrl: "https://zoom.us/j/umesc-symposium",
+    status: "Pronto",
+    createdAt: "2026-06-10"
+  },
+  {
+    id: "content_3",
+    title: "Informativo de Recadastramento Obrigatório de Fardas",
+    category: "Aviso de Farda",
+    bodyText: "Lembramos a todos os membros associados homologados que o preenchimento da nova Ficha de Filiação Digital já está disponível no Portal UMESC. Favor atualizar seus dados de Lotação, Patente e endereço de contatos para emissão das credenciais atualizadas.",
+    status: "Pronto",
+    createdAt: "2026-06-08"
+  }
+];
+
 interface AdminPortalProps {
   onBackToHome: () => void;
 }
@@ -91,7 +122,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas" | "conteudos" | "servicos" | "voluntarios" | "doacoes">("dashboard");
 
   // Supabase Connection State Diagnostics
   const [dbStatus, setDbStatus] = useState<{
@@ -183,13 +214,22 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [members, setMembers] = useState<MemberRegistration[]>([]);
   const [fichas, setFichas] = useState<FichaFiliacao[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [donations, setDonations] = useState<Donation[]>([]);
   const [revistas, setRevistas] = useState<RevistaEdition[]>([]);
   const [convites, setConvites] = useState<any[]>([]);
   const [eventos, setEventos] = useState<any[]>([]);
+  const [volunteers, setVolunteers] = useState<CapelaniaVolunteer[]>([]);
+  const [loadingVolunteers, setLoadingVolunteers] = useState(false);
 
   // Search members state
   const [searchMember, setSearchMember] = useState("");
   const [membersFilter, setMembersFilter] = useState<"all" | "pending" | "approved" | "paused" | "archived">("all");
+
+  // Donations admin state
+  const [selectedProofView, setSelectedProofView] = useState<Donation | null>(null);
+  const [doacaoFilterProject, setDoacaoFilterProject] = useState<string>("all");
+  const [doacaoFilterStatus, setDoacaoFilterStatus] = useState<string>("all");
+  const [deletingDonationId, setDeletingDonationId] = useState<string | null>(null);
 
   // Modals for Create/Edit inputs
   const [editingMember, setEditingMember] = useState<MemberRegistration | null>(null);
@@ -201,6 +241,34 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [revistaForm, setRevistaForm] = useState<Partial<RevistaEdition> | null>(null);
   const [conviteForm, setConviteForm] = useState<any | null>(null);
   const [eventoForm, setEventoForm] = useState<any | null>(null);
+  
+  // Member Contents admin state
+  const [memberContents, setMemberContents] = useState<MemberContent[]>([]);
+  const [contentForm, setContentForm] = useState<Partial<MemberContent> | null>(null);
+  const [deletingContent, setDeletingContent] = useState<MemberContent | null>(null);
+  const [selectedContentForDispatch, setSelectedContentForDispatch] = useState<MemberContent | null>(null);
+  const [searchContentQuery, setSearchContentQuery] = useState("");
+  const [filterContentCategory, setFilterContentCategory] = useState<string>("all");
+
+  // Announcements state
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementForm, setAnnouncementForm] = useState<Partial<Announcement> | null>(null);
+  const [deletingAnnouncement, setDeletingAnnouncement] = useState<Announcement | null>(null);
+
+  // Sub-tabs for "conteudos" ("avisos" | "arquivos")
+  const [conteudosSubTab, setConteudosSubTab] = useState<"avisos" | "arquivos">("avisos");
+
+  // Documents/Repository state
+  const [documents, setDocuments] = useState<DocumentFile[]>([]);
+  const [documentForm, setDocumentForm] = useState<Partial<DocumentFile> | null>(null);
+  const [deletingDocument, setDeletingDocument] = useState<DocumentFile | null>(null);
+  const [searchDocQuery, setSearchDocQuery] = useState("");
+  const [filterDocCategory, setFilterDocCategory] = useState<string>("all");
+
+  // Capelania Services admin state
+  const [capelaniaServices, setCapelaniaServices] = useState<CapelaniaService[]>([]);
+  const [capelaniaServiceForm, setCapelaniaServiceForm] = useState<Partial<CapelaniaService> | null>(null);
+  const [deletingCapelaniaService, setDeletingCapelaniaService] = useState<CapelaniaService | null>(null);
 
   const [diretoria, setDiretoria] = useState<any[]>([]);
   const [diretoriaForm, setDiretoriaForm] = useState<{ id?: string, name: string, role: string, church?: string } | null>(null);
@@ -214,6 +282,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [deletingEvento, setDeletingEvento] = useState<any | null>(null);
   const [deletingDiretoria, setDeletingDiretoria] = useState<any | null>(null);
   const [deletingCoordenador, setDeletingCoordenador] = useState<any | null>(null);
+  const [deletingFicha, setDeletingFicha] = useState<FichaFiliacao | null>(null);
 
   // Load Admin databases
   const refreshAllData = async () => {
@@ -249,6 +318,30 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       // 8. Fichas de Filiação
       const savedFichas = localStorage.getItem("umesc_fichas_filiacao");
       setFichas(savedFichas ? JSON.parse(savedFichas) : []);
+
+      // 8.5. Envio de Conteúdos para Membros
+      const savedContents = localStorage.getItem("umesc_member_contents");
+      setMemberContents(savedContents ? JSON.parse(savedContents) : DEFAULT_MEMBER_CONTENTS);
+
+      // 8.6. Serviços de Capelania
+      const savedCapSrv = localStorage.getItem("umesc_capelania_services");
+      setCapelaniaServices(savedCapSrv ? JSON.parse(savedCapSrv) : DEFAULT_CAPELANIA_SERVICES);
+
+      // 8.7. Quadro de Avisos (Mural)
+      const savedAnnouncements = localStorage.getItem("umesc_announcements");
+      setAnnouncements(savedAnnouncements ? JSON.parse(savedAnnouncements) : INITIAL_ANNOUNCEMENTS);
+
+      // 8.8. Repositório de Documentos
+      const savedDocs = localStorage.getItem("umesc_documents");
+      setDocuments(savedDocs ? JSON.parse(savedDocs) : INITIAL_DOCUMENTS);
+
+      // 9. Donations (Doações)
+      const donationsList = await donationsService.getDonations();
+      setDonations(donationsList);
+
+      // 10. Capelania Volunteers
+      const vList = await capelaniaVolunteersService.getVolunteers();
+      setVolunteers(vList);
     } catch (e) {
       console.error("Error refreshing administrative databases:", e);
     }
@@ -258,6 +351,13 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     if (isAdminLoggedIn) {
       refreshAllData();
     }
+    const handleReload = () => {
+      if (isAdminLoggedIn) {
+        refreshAllData();
+      }
+    };
+    window.addEventListener("umesc_content_updated", handleReload);
+    return () => window.removeEventListener("umesc_content_updated", handleReload);
   }, [isAdminLoggedIn]);
 
   // Handle Admin Authorization Logon
@@ -326,6 +426,20 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     }
   };
 
+  const toggleMemberDirector = async (hash: string, currentStatus?: boolean) => {
+    try {
+      const field = { isDirector: !currentStatus };
+      const ok = await membersService.updateMember(hash, field);
+      if (ok) {
+        await refreshAllData();
+        notifyContentChange();
+        alert(!currentStatus ? "Membro promovido para a Diretoria! Uma vez homologado, poderá acessar este painel com suas credenciais." : "Acesso de diretoria removido com sucesso.");
+      }
+    } catch {
+      alert("Erro ao alterar o acesso de diretoria.");
+    }
+  };
+
   const toggleMemberArchive = async (hash: string, currentStatus?: boolean, isCurrentlyPaused?: boolean) => {
     if (!isCurrentlyPaused && !currentStatus) {
       alert("Operação bloqueada: Arquive somente cadastros pausados.");
@@ -363,7 +477,8 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
         rgMilitar: editingMember.rgMilitar,
         approved: editingMember.approved,
         paused: editingMember.paused,
-        archived: editingMember.archived
+        archived: editingMember.archived,
+        isDirector: editingMember.isDirector
       });
       if (ok) {
         setEditingMember(null);
@@ -640,6 +755,199 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     alert("Coordenador regional removido.");
   };
 
+  // Capelania Services CRUD Actions
+  const handleSaveCapelaniaService = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!capelaniaServiceForm) return;
+
+    let updatedList = [...capelaniaServices];
+    if (capelaniaServiceForm.id) {
+      updatedList = capelaniaServices.map((s) => s.id === capelaniaServiceForm.id ? { ...s, ...capelaniaServiceForm } as CapelaniaService : s);
+    } else {
+      const newService: CapelaniaService = {
+        id: `capsrv_${Date.now()}`,
+        title: capelaniaServiceForm.title || "",
+        description: capelaniaServiceForm.description || "",
+        buttonText: capelaniaServiceForm.buttonText || "",
+        emoji: capelaniaServiceForm.emoji || "✓",
+        tabLink: capelaniaServiceForm.tabLink as any || "registration"
+      };
+      updatedList = [...capelaniaServices, newService];
+    }
+
+    localStorage.setItem("umesc_capelania_services", JSON.stringify(updatedList));
+    setCapelaniaServices(updatedList);
+    setCapelaniaServiceForm(null);
+    notifyContentChange();
+    alert("Serviço de Capelania atualizado com sucesso!");
+  };
+
+  const handleDeleteCapelaniaService = (s: CapelaniaService) => {
+    setDeletingCapelaniaService(s);
+  };
+
+  const confirmDeleteCapelaniaService = () => {
+    if (!deletingCapelaniaService) return;
+    const updated = capelaniaServices.filter((s) => s.id !== deletingCapelaniaService.id);
+    localStorage.setItem("umesc_capelania_services", JSON.stringify(updated));
+    setCapelaniaServices(updated);
+    setDeletingCapelaniaService(null);
+    notifyContentChange();
+    alert("Serviço de Capelania removido.");
+  };
+
+  const handleDeleteVolunteer = async (v: CapelaniaVolunteer) => {
+    if (!v.id) return;
+    if (window.confirm(`Deseja realmente remover o voluntário "${v.name}" da base de dados da Capelania?`)) {
+      try {
+        await capelaniaVolunteersService.deleteVolunteer(v.id);
+        const list = await capelaniaVolunteersService.getVolunteers();
+        setVolunteers(list);
+      } catch (err) {
+        console.error("Erro deletando voluntário:", err);
+      }
+    }
+  };
+
+  const confirmDeleteFicha = () => {
+    if (!deletingFicha) return;
+    const saved = localStorage.getItem("umesc_fichas_filiacao");
+    if (saved) {
+      try {
+        const list = JSON.parse(saved) as FichaFiliacao[];
+        const filtered = list.filter(item => item.id !== deletingFicha.id);
+        localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(filtered));
+        setFichas(filtered);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    setDeletingFicha(null);
+    notifyContentChange();
+    alert("Ficha de filiação excluída com sucesso!");
+  };
+
+  // Member Contents CRUD Actions
+  const handleSaveContent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!contentForm) return;
+
+    let updatedList = [...memberContents];
+    if (contentForm.id) {
+      updatedList = memberContents.map((c) => c.id === contentForm.id ? { ...c, ...contentForm } as MemberContent : c);
+    } else {
+      const newContent: MemberContent = {
+        id: `content_${Date.now()}`,
+        title: contentForm.title || "",
+        category: contentForm.category as any || "Informativo Geral",
+        bodyText: contentForm.bodyText || "",
+        attachmentUrl: contentForm.attachmentUrl || "",
+        status: contentForm.status as any || "Pronto",
+        createdAt: new Date().toISOString().split("T")[0]
+      };
+      updatedList = [newContent, ...memberContents];
+    }
+
+    localStorage.setItem("umesc_member_contents", JSON.stringify(updatedList));
+    setMemberContents(updatedList);
+    setContentForm(null);
+    notifyContentChange();
+    alert("Informativo salvo com sucesso!");
+  };
+
+  const handleDeleteContent = (c: MemberContent) => {
+    setDeletingContent(c);
+  };
+
+  const confirmDeleteContent = () => {
+    if (!deletingContent) return;
+    const updated = memberContents.filter((c) => c.id !== deletingContent.id);
+    localStorage.setItem("umesc_member_contents", JSON.stringify(updated));
+    setMemberContents(updated);
+    setDeletingContent(null);
+    notifyContentChange();
+    alert("Informativo excluído.");
+  };
+
+  // Announcements CRUD Actions
+  const handleSaveAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!announcementForm) return;
+
+    let updatedList = [...announcements];
+    if (announcementForm.id) {
+      updatedList = announcements.map((a) => a.id === announcementForm.id ? { ...a, ...announcementForm } as Announcement : a);
+    } else {
+      const newAnn: Announcement = {
+        id: `ann_${Date.now()}`,
+        title: announcementForm.title || "",
+        category: announcementForm.category as any || "Geral",
+        content: announcementForm.content || "",
+        date: announcementForm.date || new Date().toISOString().split("T")[0],
+        isImportant: !!announcementForm.isImportant
+      };
+      updatedList = [newAnn, ...announcements];
+    }
+
+    localStorage.setItem("umesc_announcements", JSON.stringify(updatedList));
+    setAnnouncements(updatedList);
+    setAnnouncementForm(null);
+    notifyContentChange();
+    alert("Aviso salvo e publicado com sucesso no Mural!");
+  };
+
+  const handleDeleteAnnouncement = (a: Announcement) => {
+    setDeletingAnnouncement(a);
+  };
+
+  const confirmDeleteAnnouncement = () => {
+    if (!deletingAnnouncement) return;
+    const updated = announcements.filter((a) => a.id !== deletingAnnouncement.id);
+    localStorage.setItem("umesc_announcements", JSON.stringify(updated));
+    setAnnouncements(updated);
+    setDeletingAnnouncement(null);
+    notifyContentChange();
+    alert("Aviso removido do Mural.");
+  };
+
+  // Documents CRUD Actions
+  const handleSaveDocument = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!documentForm) return;
+
+    let updatedList = [...documents];
+    if (documentForm.id) {
+      updatedList = documents.map((d) => d.id === documentForm.id ? { ...d, ...documentForm } as DocumentFile : d);
+    } else {
+      const newDoc: DocumentFile = {
+        id: `doc_${Date.now()}`,
+        title: documentForm.title || "",
+        category: documentForm.category as any || "Legislação",
+        fileSize: documentForm.fileSize || "1.0 MB",
+        publishedDate: documentForm.publishedDate || new Date().toISOString().split("T")[0],
+        downloadCount: documentForm.downloadCount || 0,
+        url: documentForm.url || "documento_oficial.pdf"
+      };
+      updatedList = [newDoc, ...documents];
+    }
+
+    localStorage.setItem("umesc_documents", JSON.stringify(updatedList));
+    setDocuments(updatedList);
+    setDocumentForm(null);
+    notifyContentChange();
+    alert("Documento / Arquivo salvo com sucesso no Repositório!");
+  };
+
+  const confirmDeleteDocument = () => {
+    if (!deletingDocument) return;
+    const updated = documents.filter((d) => d.id !== deletingDocument.id);
+    localStorage.setItem("umesc_documents", JSON.stringify(updated));
+    setDocuments(updated);
+    setDeletingDocument(null);
+    notifyContentChange();
+    alert("Arquivo removido do Repositório.");
+  };
+
   // Dashboard Stats Calculations
   const totalMembros = members.length;
   const membrosAprovadosList = members.filter((m) => m.approved && !m.paused && !m.archived);
@@ -731,20 +1039,6 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                   <p className="text-[9px] text-slate-300 font-mono leading-tight bg-slate-900/40 p-1.5 rounded border border-emerald-500/10">
                     {dbStatus.details}
                   </p>
-                  {dbStatus.tablesExist ? (
-                    <span className="inline-block text-[8px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/20 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wide">
-                      Tabelas Ativas (members, admins)
-                    </span>
-                  ) : (
-                    <div className="space-y-1 bg-amber-500/5 p-1.5 rounded border border-amber-500/10">
-                      <span className="inline-block text-[8px] bg-amber-500/15 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wide">
-                        Ação Necessária
-                      </span>
-                      <p className="text-[8px] text-slate-400 font-mono leading-normal">
-                        Copie e execute o arquivo <code className="text-amber-400 underline font-black">/schema.sql</code> no "SQL Editor" do painel do seu Supabase para inicializar as tabelas perfeitamente.
-                      </p>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div className="space-y-1.5">
@@ -757,12 +1051,6 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                   </p>
                 </div>
               )}
-            </div>
-
-            <div className="p-3 bg-amber-500/5 rounded-xl border border-amber-500/10 space-y-1.5 text-[10px] text-slate-400 leading-normal font-mono text-center">
-              <div className="text-amber-500 font-bold uppercase">🔐 Credencial de Demonstração</div>
-              <div>E-mail: <span className="text-amber-400 font-bold">admin@umesc.org.br</span></div>
-              <div>Senha: <span className="text-amber-400 font-bold">adminUMESC2026</span></div>
             </div>
 
             <button
@@ -841,11 +1129,15 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
             { id: "congressos", label: "Gestão de Congressos", icon: QrCode },
             { id: "membros", label: `Membros (${members.length})`, icon: Users },
             { id: "fichas", label: `Fichas de Filiação (${fichas.length})`, icon: FileCheck },
+            { id: "doacoes", label: `Doações Recebidas (${donations.length})`, icon: Coins },
+            { id: "conteudos", label: `Quadro de Avisos (Mural)`, icon: Bell },
             { id: "projetos", label: "Projetos Missionários", icon: Briefcase },
             { id: "revistas", label: "Revista e Boletins", icon: BookOpen },
             { id: "convites", label: "Carrossel de Convites", icon: Layers },
             { id: "eventos", label: "Carrossel de Eventos", icon: Calendar },
             { id: "termos", label: "Termos & Políticas LGPD", icon: Scale },
+            { id: "servicos", label: "Serviços de Capelania", icon: Compass },
+            { id: "voluntarios", label: `Voluntários da Capelania (${volunteers.length})`, icon: Compass },
             { id: "diretoria", label: "Gestão da Diretoria", icon: Users },
             { id: "coordenadores", label: "Coordenadores Regionais", icon: MapPin }
           ].map((tab) => {
@@ -861,6 +1153,9 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                   setEventoForm(null);
                   setDiretoriaForm(null);
                   setCoordenadoresForm(null);
+                  setContentForm(null);
+                  setCapelaniaServiceForm(null);
+                  setSelectedContentForDispatch(null);
                 }}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl uppercase tracking-wider text-[10px] font-bold text-left transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                   activeTab === tab.id 
@@ -1014,6 +1309,87 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
               </div>
 
+              {/* Seção de Caixa e Doações integrado ao Dashboard */}
+              <div className="bg-[#0b1220] rounded-xl border border-white/5 p-5 text-left space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-white/5 font-display">
+                  <h3 className="font-extrabold text-[#1a2a40] text-amber-500 text-xs uppercase tracking-widest flex items-center gap-2">
+                    <Coins className="w-4 h-4 text-amber-500 animate-bounce" />
+                    Balanço de Doações e Sementes Missionárias
+                  </h3>
+                  <button 
+                    onClick={() => setActiveTab("doacoes")} 
+                    className="text-[9px] font-mono font-bold text-amber-500 hover:text-amber-400 uppercase tracking-widest hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 outline-none p-0"
+                  >
+                    Ir para Gestão de Doações <ExternalLink className="w-3 h-3" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Caixa Sócio-Religioso */}
+                  <div className="p-4 bg-[#121c2d] rounded-xl border border-white/5 space-y-2">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold font-mono">Arrecadado Projetos (PAGO)</span>
+                    <div className="text-xl font-extrabold text-amber-400 font-mono">
+                      R$ {donations.filter(d => d.paymentStatus === "pago").reduce((sum, d) => sum + d.amount, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-normal">
+                      Total líquido em caixa de semeaduras voluntárias homologadas
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-[#121c2d] rounded-xl border border-white/5 space-y-2">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold font-mono">Aguardando Auditoria</span>
+                    <div className="text-xl font-extrabold text-blue-400 font-mono">
+                      R$ {donations.filter(d => d.paymentStatus === "em_analise" || d.paymentStatus === "pendente").reduce((sum, d) => sum + d.amount, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-normal">
+                      Doações sob conferência bancária do PIX anexado
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-[#121c2d] rounded-xl border border-white/5 space-y-2">
+                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold font-mono">Ações de Destinação Ativas</span>
+                    <div className="text-xl font-extrabold text-teal-400 font-mono">
+                      {Array.from(new Set(donations.map(d => d.projectName))).length || 0} frentes
+                    </div>
+                    <div className="text-[10px] text-slate-400 leading-normal">
+                      Frentes missionárias ou avulsas que receberam suporte doador
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recent donations list */}
+                <div className="space-y-2 pt-2">
+                  <span className="text-[9px] uppercase font-bold text-slate-400 block font-mono">Últimas Semeaduras Registradas:</span>
+                  {donations.length === 0 ? (
+                    <p className="text-[10px] text-slate-500 italic pb-2">Nenhum registro de doação para exibir no balanço.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-2">
+                      {donations.slice(0, 4).map((d, index) => (
+                        <div key={index} className="p-3 rounded-lg bg-[#121c2d]/50 border border-white/5 flex items-center justify-between text-xs text-slate-300">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-slate-100">{d.donorName}</span>
+                              <span className="text-[9px] font-mono text-slate-500">{new Date(d.registrationDate).toLocaleDateString("pt-BR")}</span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 mt-1 leading-none uppercase">
+                              Projeto: <span className="font-mono text-slate-300">{d.projectName}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-mono font-bold text-amber-500 block">R$ {d.amount.toFixed(2)}</span>
+                            <span className={`text-[9px] uppercase font-bold font-mono ${
+                              d.paymentStatus === "pago" ? "text-emerald-400" : d.paymentStatus === "recusado" ? "text-rose-400" : "text-blue-400"
+                            }`}>
+                              {d.paymentStatus === "pago" ? "✓ Homologado" : d.paymentStatus === "recusado" ? "✕ Recusado" : "• Em Análise"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
           )}
 
@@ -1135,7 +1511,14 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                         <div className="p-4 hidden md:grid grid-cols-12 gap-3 items-center text-slate-300">
                           
                           <div className="col-span-3">
-                            <span className="block font-bold text-white text-[11px] font-sans leading-tight">{m.name}</span>
+                            <span className="block font-bold text-white text-[11px] font-sans leading-tight">
+                              {m.name}
+                              {m.isDirector && (
+                                <span className="ml-1.5 inline-block px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/30 text-purple-400 font-extrabold text-[7px] uppercase font-mono tracking-tight leading-none">
+                                  ★ Diretoria
+                                </span>
+                              )}
+                            </span>
                             <div className="flex items-center gap-1.5 text-[9px] font-mono text-slate-400 mt-0.5 uppercase">
                               <span className="text-amber-500 font-extrabold">{m.militaryForce}</span>
                               <span>•</span>
@@ -1209,6 +1592,22 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                               ) : null;
                             })()}
 
+                            {/* Promote to Director action */}
+                            {!m.archived && !m.paused && (
+                              <button
+                                type="button"
+                                onClick={() => toggleMemberDirector(m.securityHash, m.isDirector)}
+                                title={m.isDirector ? "Remover Privilégios de Diretoria" : "Promover à Diretoria (Acesso ao Painel)"}
+                                className={`p-1.5 rounded transition-all cursor-pointer border ${
+                                  m.isDirector
+                                    ? "bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border-purple-500/30"
+                                    : "hover:bg-purple-500/10 text-slate-400 hover:text-purple-400 border-transparent"
+                                }`}
+                              >
+                                <Shield className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
                             {/* Archive Action button (Only allowed for paused, as requested) */}
                             <button
                               type="button"
@@ -1251,7 +1650,14 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                         <div className="p-4 flex flex-col md:hidden text-slate-300 space-y-3 bg-[#0c1322] border-b border-white/5">
                           <div className="flex justify-between items-start gap-2">
                             <div>
-                              <span className="block font-bold text-white text-xs font-sans leading-tight">{m.name}</span>
+                              <span className="block font-bold text-white text-xs font-sans leading-tight">
+                                {m.name}
+                                {m.isDirector && (
+                                  <span className="ml-1.5 inline-block px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/30 text-purple-400 font-extrabold text-[7px] uppercase font-mono tracking-tight leading-none">
+                                    ★ Diretoria
+                                  </span>
+                                )}
+                              </span>
                               <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-mono text-slate-400 mt-1 uppercase">
                                 <span className="text-amber-500 font-extrabold">{m.militaryForce}</span>
                                 <span>•</span>
@@ -1294,14 +1700,14 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                             </div>
                             <div>
                               <span className="text-[7.5px] font-bold text-slate-500 block uppercase font-mono mb-0.5">IGREJA</span>
-                              <span className="text-slate-300 block font-semibold uppercase leading-tight truncate" title={m.church}>{m.church}</span>
+                              <span className="text-slate-300 block font-semibold uppercase leading-tight truncate font-sans" title={m.church}>{m.church}</span>
                             </div>
                           </div>
 
                           {/* Actions row */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                            {/* Left: Approval toggle */}
-                            <div>
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 font-sans w-full">
+                            {/* Left: Approval/Director toggles */}
+                            <div className="flex flex-wrap gap-1.5">
                               {!m.archived && !m.paused && (
                                 <button
                                   type="button"
@@ -1312,7 +1718,20 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                                       : "bg-amber-500/5 hover:bg-amber-500/15 border-amber-500/20 text-amber-500/80"
                                   }`}
                                 >
-                                  {m.approved ? "Desativar Cadastro" : "Homologar Cadastro"}
+                                  {m.approved ? "Desativar" : "Homologar"}
+                                </button>
+                              )}
+                              {!m.archived && !m.paused && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleMemberDirector(m.securityHash, m.isDirector)}
+                                  className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider transition-colors border cursor-pointer ${
+                                    m.isDirector 
+                                      ? "bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/30 text-purple-400" 
+                                      : "bg-slate-800 hover:bg-slate-700 border-white/5 text-slate-300"
+                                  }`}
+                                >
+                                  {m.isDirector ? "Remover Diretor" : "Promover Diretor"}
                                 </button>
                               )}
                             </div>
@@ -1540,21 +1959,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                                   <Download className="w-3.5 h-3.5" /> PDF
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    if (confirm(`Deseja realmente remover permanentemente a Ficha de Filiação de ${ficha.memberName}? Esta ação removerá a assinatura eletrônica dos sistemas.`)) {
-                                      const saved = localStorage.getItem("umesc_fichas_filiacao");
-                                      if (saved) {
-                                        try {
-                                          const list = JSON.parse(saved) as FichaFiliacao[];
-                                          const filtered = list.filter(item => item.id !== ficha.id);
-                                          localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(filtered));
-                                          setFichas(filtered);
-                                        } catch (e) {
-                                          console.error(e);
-                                        }
-                                      }
-                                    }
-                                  }}
+                                  onClick={() => setDeletingFicha(ficha)}
                                   className="px-2 py-1.5 bg-rose-600/10 hover:bg-rose-500/25 text-rose-455 hover:text-rose-300 rounded transition-all cursor-pointer"
                                   title="Remover Ficha"
                                 >
@@ -2089,6 +2494,432 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
             </div>
           )}
 
+          {/* TAB: DOAÇÕES RECEBIDAS */}
+          {activeTab === "doacoes" && (
+            <div className="space-y-6">
+              
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="text-left font-display">
+                  <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2">
+                    <Coins className="w-5 h-5 text-amber-500" />
+                    Registro Geral de Doações e Sementes
+                  </h2>
+                  <p className="text-slate-400 text-xs text-left">Gerencie e homologue todas as contribuições financeiras enviadas para as frentes missionárias.</p>
+                </div>
+              </div>
+
+              {/* KPI Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl bg-[#0b1220] border border-white/5 text-left">
+                  <span className="block text-[9px] uppercase font-bold tracking-widest text-slate-400">Total Arrecadado (Confirmado)</span>
+                  <div className="text-xl font-extrabold text-emerald-400 font-mono mt-1">
+                    R$ {donations.filter(d => d.paymentStatus === "pago").reduce((sum, d) => sum + d.amount, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </div>
+                  <span className="block text-[9px] text-slate-500 mt-0.5">
+                    {donations.filter(d => d.paymentStatus === "pago").length} transações homologadas
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#0b1220] border border-white/5 text-left">
+                  <span className="block text-[9px] uppercase font-bold tracking-widest text-slate-400">Aguardando Verificação</span>
+                  <div className="text-xl font-extrabold text-blue-400 font-mono mt-1">
+                    R$ {donations.filter(d => d.paymentStatus === "em_analise" || d.paymentStatus === "pendente").reduce((sum, d) => sum + d.amount, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </div>
+                  <span className="block text-[9px] text-slate-500 mt-0.5">
+                    {donations.filter(d => d.paymentStatus === "em_analise" || d.paymentStatus === "pendente").length} sob auditoria manual
+                  </span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#0b1220] border border-white/5 text-left">
+                  <span className="block text-[9px] uppercase font-bold tracking-widest text-slate-400">Maior Semeadura Única</span>
+                  <div className="text-xl font-extrabold text-amber-400 font-mono mt-1">
+                    R$ {Math.max(0, ...donations.map(d => d.amount)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  </div>
+                  <span className="block text-[9px] text-slate-500 mt-0.5">Destaque de parceria</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#0b1220] border border-white/5 text-left">
+                  <span className="block text-[9px] uppercase font-bold tracking-widest text-slate-400">Fichas com Comprovante</span>
+                  <div className="text-xl font-extrabold text-[#f97316] font-mono mt-1">
+                    {donations.filter(d => d.paymentProofUrl).length}
+                  </div>
+                  <span className="block text-[9px] text-slate-500 mt-0.5">Documentação anexada</span>
+                </div>
+              </div>
+
+              {/* Filters Box */}
+              <div className="p-4 rounded-xl bg-[#0b1220]/70 border border-white/5 flex flex-col md:flex-row gap-3">
+                <div className="flex-1 text-left">
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filtrar por Frente / Destinação</label>
+                  <select
+                    value={doacaoFilterProject}
+                    onChange={(e) => setDoacaoFilterProject(e.target.value)}
+                    className="w-full bg-slate-950 border border-white/5 rounded-lg px-2.5 py-2 text-xs text-white outline-none"
+                  >
+                    <option value="all">Todas as frentes</option>
+                    <option value="Doação Avulsa / Geral">Doação Avulsa / Geral</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.title}>{p.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="w-full md:w-56 text-left">
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filtrar por Status</label>
+                  <select
+                    value={doacaoFilterStatus}
+                    onChange={(e) => setDoacaoFilterStatus(e.target.value)}
+                    className="w-full bg-slate-950 border border-[#1a1f2c] rounded-lg px-2.5 py-2 text-xs text-white outline-none"
+                  >
+                    <option value="all">Todos os status</option>
+                    <option value="em_analise">Em Análise / Pendente</option>
+                    <option value="pago">Homologada / Conservada</option>
+                    <option value="recusado">Recusada</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Central List */}
+              <div className="bg-[#0b1220] rounded-xl border border-white/5 p-4 text-left">
+                {(() => {
+                  const filteredDonations = donations.filter(d => {
+                    const mProj = doacaoFilterProject === "all" || d.projectName === doacaoFilterProject;
+                    const mStat = doacaoFilterStatus === "all" || d.paymentStatus === doacaoFilterStatus;
+                    return mProj && mStat;
+                  });
+
+                  if (filteredDonations.length === 0) {
+                    return (
+                      <div className="py-12 text-center text-slate-500 border border-dashed border-white/5 rounded-xl flex flex-col items-center justify-center space-y-2">
+                        <Coins className="w-8 h-8 text-slate-600" />
+                        <p className="text-xs font-bold font-mono uppercase text-slate-400">Nenhum registro para estes filtros</p>
+                        <p className="text-[11px] text-slate-500">Mude as opções de busca acima para atualizar os resultados.</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Tabela para Desktop (visible on md and above) */}
+                      <div className="hidden md:block overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="border-b border-[#121c2d] text-slate-400 uppercase tracking-wider text-[9px] font-bold">
+                              <th className="py-3 px-3">Protocolo</th>
+                              <th className="py-3 px-3">Parceiro Missionário</th>
+                              <th className="py-3 px-3">Destinação</th>
+                              <th className="py-3 px-3">Data</th>
+                              <th className="py-3 px-3">Semente</th>
+                              <th className="py-3 px-3">Status Cobrança</th>
+                              <th className="py-3 px-3">Comprovante</th>
+                              <th className="py-3 px-3 text-right">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {filteredDonations.map((d) => (
+                              <tr key={d.id} className="hover:bg-white/2 transition-colors">
+                                <td className="py-3.5 px-3 font-mono text-slate-400 font-bold">{d.id}</td>
+                                <td className="py-3.5 px-3">
+                                  <div className="font-extrabold text-slate-100">{d.donorName}</div>
+                                  {d.donorWhatsapp && d.donorWhatsapp !== "Não Informado" && (
+                                    <a 
+                                      href={`https://api.whatsapp.com/send?phone=${d.donorWhatsapp.replace(/\D/g, "")}`}
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-[10px] text-teal-400 hover:underline font-mono"
+                                    >
+                                      {d.donorWhatsapp}
+                                    </a>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-3">
+                                  <span className="px-2 py-0.5 rounded text-[10px] bg-[#121c2d] text-slate-300 font-bold uppercase border border-white/5">
+                                    {d.projectName}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-3 text-slate-400 font-mono">
+                                  {new Date(d.registrationDate).toLocaleDateString("pt-BR") + " " + new Date(d.registrationDate).toLocaleTimeString("pt-BR", {hour: '2-digit', minute:'2-digit'})}
+                                </td>
+                                <td className="py-3.5 px-3 font-mono font-bold text-amber-400">R$ {d.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
+                                <td className="py-3.5 px-3">
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
+                                    d.paymentStatus === "pago" && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  } ${
+                                    d.paymentStatus === "em_analise" && "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                                  } ${
+                                    d.paymentStatus === "pendente" && "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                  } ${
+                                    d.paymentStatus === "recusado" && "bg-rose-500/10 text-rose-450 text-rose-405 text-rose-400 border border-rose-500/20"
+                                  }`}>
+                                    {d.paymentStatus === "pago" && "Homologada/Pago"}
+                                    {d.paymentStatus === "em_analise" && "Em Análise"}
+                                    {d.paymentStatus === "pendente" && "Pendente"}
+                                    {d.paymentStatus === "recusado" && "Recusado"}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-3">
+                                  {d.paymentProofUrl ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedProofView(d)}
+                                      className="text-[10px] text-amber-500 hover:text-amber-400 hover:underline uppercase font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0 inline-flex"
+                                    >
+                                      <Paperclip className="w-3.5 h-3.5 text-amber-500 mr-0.5" /> Ver Arquivo
+                                    </button>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-500 italic">Nenhum</span>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-3 text-right space-x-1 whitespace-nowrap">
+                                  {d.donorWhatsapp && d.donorWhatsapp !== "Não Informado" && (
+                                    <a 
+                                      href={`https://api.whatsapp.com/send?phone=${d.donorWhatsapp.replace(/\D/g, "")}&text=${encodeURIComponent(`Olá, ${d.donorName}! Paz do Senhor.\nA diretoria da UMESC SC recebeu a sua doação de R$ ${d.amount.toFixed(2)} e de forma mútua agradece profundamente por apoiar a capelania militar na frente missionária *${d.projectName}*.\n\nSeu apoio é fundamental para mantermos as pregações e distribuição de bíblias para as fardas estaduais!\n\nDeus abençoe ricamente!`)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title="Enviar mensagem de agradecimento"
+                                      className="inline-flex items-center justify-center p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 transition-all cursor-pointer"
+                                    >
+                                      <MessageCircle className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
+
+                                  {d.paymentStatus !== "pago" && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        await donationsService.updateDonationStatus(d.id, "pago");
+                                        const next = await donationsService.getDonations();
+                                        setDonations(next);
+                                      }}
+                                      title="Homologar pagamento"
+                                      className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-[#10b981] hover:text-white hover:bg-emerald-600 text-emerald-400 transition-all cursor-pointer border-0"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+
+                                  {d.paymentStatus !== "recusado" && (
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        await donationsService.updateDonationStatus(d.id, "recusado");
+                                        const next = await donationsService.getDonations();
+                                        setDonations(next);
+                                      }}
+                                      title="Recusar doação"
+                                      className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-[#ef4444] hover:text-white text-[#ef4444] hover:bg-rose-600 transition-all cursor-pointer border-0"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+
+                                  {deletingDonationId === d.id ? (
+                                    <div className="inline-flex items-center gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          await donationsService.deleteDonation(d.id);
+                                          const next = await donationsService.getDonations();
+                                          setDonations(next);
+                                          setDeletingDonationId(null);
+                                        }}
+                                        className="px-2 py-1 rounded text-[10px] uppercase font-black bg-red-600 text-white hover:bg-red-700 transition-colors animate-pulse cursor-pointer border-0"
+                                      >
+                                        Confirmar
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setDeletingDonationId(null)}
+                                        className="px-2 py-1 rounded text-[10px] uppercase font-bold bg-[#121c2d] text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer border-0"
+                                      >
+                                        X
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => setDeletingDonationId(d.id)}
+                                      title="Deletar Transação"
+                                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white transition-all cursor-pointer border-0"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Visualização em Cards para Dispositivos Móveis (visible only on screens smaller than md) */}
+                      <div className="grid grid-cols-1 gap-4 md:hidden">
+                        {filteredDonations.map((d) => (
+                          <div key={d.id} className="p-4 rounded-xl bg-slate-900/60 border border-white/5 space-y-3">
+                            <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                              <span className="font-mono text-[10px] text-slate-350 font-black bg-[#121c2d] px-2 py-0.5 rounded border border-white/5">
+                                #{d.id}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {new Date(d.registrationDate).toLocaleDateString("pt-BR") + " " + new Date(d.registrationDate).toLocaleTimeString("pt-BR", {hour: '2-digit', minute:'2-digit'})}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2">
+                              <div>
+                                <span className="block text-[8px] uppercase font-bold text-slate-500">Parceiro Missionário</span>
+                                <span className="text-xs font-extrabold text-slate-100">{d.donorName}</span>
+                                {d.donorWhatsapp && d.donorWhatsapp !== "Não Informado" && (
+                                  <div>
+                                    <a 
+                                      href={`https://api.whatsapp.com/send?phone=${d.donorWhatsapp.replace(/\D/g, "")}`}
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="text-[10px] text-teal-400 hover:underline font-mono inline-flex items-center gap-1 mt-0.5"
+                                    >
+                                      <MessageCircle className="w-3 h-3" /> {d.donorWhatsapp}
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                <div>
+                                  <span className="block text-[8px] uppercase font-bold text-slate-500">Frente Destinada</span>
+                                  <span className="px-2 py-0.5 rounded text-[9px] bg-[#121c2d] text-slate-300 font-bold uppercase border border-white/5 inline-block">
+                                    {d.projectName}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="block text-[8px] uppercase font-bold text-slate-500">Situação</span>
+                                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider inline-block ${
+                                    d.paymentStatus === "pago" && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  } ${
+                                    d.paymentStatus === "em_analise" && "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                                  } ${
+                                    d.paymentStatus === "pendente" && "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                  } ${
+                                    d.paymentStatus === "recusado" && "bg-rose-500/10 text-rose-450 text-rose-400 border border-rose-500/20"
+                                  }`}>
+                                    {d.paymentStatus === "pago" && "Homologada/Pago"}
+                                    {d.paymentStatus === "em_analise" && "Em Análise"}
+                                    {d.paymentStatus === "pendente" && "Pendente"}
+                                    {d.paymentStatus === "recusado" && "Recusado"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-lg border border-white/5">
+                              <div>
+                                <span className="block text-[8px] uppercase text-slate-500 font-bold tracking-wider">Semente</span>
+                                <span className="font-mono font-bold text-xs text-amber-400">
+                                  R$ {d.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                                </span>
+                              </div>
+                              <div className="text-right">
+                                <span className="block text-[8px] uppercase text-slate-500 font-bold tracking-wider mb-0.5">Comprovante</span>
+                                {d.paymentProofUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedProofView(d)}
+                                    className="text-[10px] text-amber-500 hover:text-amber-400 hover:underline uppercase font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0 inline-flex"
+                                  >
+                                    <Paperclip className="w-3.5 h-3.5 text-amber-500 mr-0.5" /> Ver Arquivo
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-slate-500 italic block">Nenhum</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-white/5">
+                              {d.donorWhatsapp && d.donorWhatsapp !== "Não Informado" && (
+                                <a 
+                                  href={`https://api.whatsapp.com/send?phone=${d.donorWhatsapp.replace(/\D/g, "")}&text=${encodeURIComponent(`Olá, ${d.donorName}! Paz do Senhor.\nA diretoria da UMESC SC recebeu a sua doação de R$ ${d.amount.toFixed(2)} e de forma mútua agradece profundamente por apoiar a capelania militar na frente missionária *${d.projectName}*.\n\nSeu apoio é fundamental para mantermos as pregações e distribuição de bíblias para as fardas estaduais!\n\nDeus abençoe ricamente!`)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="Enviar mensagem de agradecimento"
+                                  className="inline-flex items-center justify-center p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 transition-all cursor-pointer"
+                                >
+                                  <MessageCircle className="w-4 h-4" />
+                                </a>
+                              )}
+
+                              {d.paymentStatus !== "pago" && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await donationsService.updateDonationStatus(d.id, "pago");
+                                    const next = await donationsService.getDonations();
+                                    setDonations(next);
+                                  }}
+                                  title="Homologar pagamento"
+                                  className="p-2 rounded-lg bg-emerald-500/10 hover:bg-[#10b981] hover:text-white hover:bg-emerald-600 text-emerald-400 transition-all cursor-pointer border-0"
+                                >
+                                  <Check className="w-4 h-4" />
+                                </button>
+                              )}
+
+                              {d.paymentStatus !== "recusado" && (
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await donationsService.updateDonationStatus(d.id, "recusado");
+                                    const next = await donationsService.getDonations();
+                                    setDonations(next);
+                                  }}
+                                  title="Recusar doação"
+                                  className="p-2 rounded-lg bg-rose-500/10 hover:bg-[#ef4444] hover:text-white text-[#ef4444] hover:bg-rose-600 transition-all cursor-pointer border-0"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+
+                              {deletingDonationId === d.id ? (
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await donationsService.deleteDonation(d.id);
+                                      const next = await donationsService.getDonations();
+                                      setDonations(next);
+                                      setDeletingDonationId(null);
+                                    }}
+                                    className="px-2.5 py-1 rounded text-[10px] uppercase font-black bg-red-600 text-white hover:bg-red-700 transition-colors animate-pulse cursor-pointer border-0"
+                                  >
+                                    Confirmar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDeletingDonationId(null)}
+                                    className="px-2.5 py-1 rounded text-[10px] uppercase font-bold bg-[#121c2d] text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer border-0"
+                                  >
+                                    X
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingDonationId(d.id)}
+                                  title="Deletar Transação"
+                                  className="p-2 rounded-lg bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white transition-all cursor-pointer border-0"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+            </div>
+          )}
+
           {/* TAB 6: CARROSSEL EVENTOS */}
           {activeTab === "eventos" && (
             <div className="space-y-6">
@@ -2128,6 +2959,495 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                   </div>
                 ))}
               </div>
+
+            </div>
+          )}
+
+          {activeTab === "conteudos" && (
+            <div className="space-y-6 text-left">
+              
+              {/* SUB-TABS SELECTOR FOR COMUNICADOS & DOCUMENTOS */}
+              <div className="flex border-b border-white/5 pb-1 gap-1 sm:gap-4 overflow-x-auto">
+                <button
+                  type="button"
+                  id="tab-sub-notices"
+                  onClick={() => setConteudosSubTab("avisos")}
+                  className={`px-4 py-2 font-display text-xs font-bold uppercase tracking-wider transition-all border-b-2 cursor-pointer whitespace-nowrap ${
+                    conteudosSubTab === "avisos"
+                      ? "border-amber-500 text-amber-500 bg-amber-500/5 rounded-t-lg"
+                      : "border-transparent text-slate-400 hover:text-white"
+                  }`}
+                >
+                  📢 Mural de Avisos Geral
+                </button>
+                <button
+                  type="button"
+                  id="tab-sub-files"
+                  onClick={() => setConteudosSubTab("arquivos")}
+                  className={`px-4 py-2 font-display text-xs font-bold uppercase tracking-wider transition-all border-b-2 cursor-pointer whitespace-nowrap ${
+                    conteudosSubTab === "arquivos"
+                      ? "border-amber-500 text-amber-500 bg-amber-500/5 rounded-t-lg"
+                      : "border-transparent text-slate-400 hover:text-white"
+                  }`}
+                >
+                  📁 Repositório de Ficheiros & Arquivos
+                </button>
+              </div>
+
+              {conteudosSubTab === "avisos" && (
+                <div className="space-y-6">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-white/5 pb-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                        <Bell className="w-5 h-5 text-amber-500" />
+                        Gerenciamento do Quadro de Avisos (Mural Oficial)
+                      </h2>
+                      <p className="text-slate-400 text-xs">Crie, edite e remova comunicados oficiais importantes, frentes administrativas e circulares exibidas no painel de transparência dos membros.</p>
+                    </div>
+                    
+                    <button
+                      type="button"
+                      id="btn-admin-create-announcement"
+                      onClick={() => setAnnouncementForm({ title: "", category: "Geral", content: "", date: new Date().toISOString().split("T")[0], isImportant: false })}
+                      className="px-4 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center gap-1.5 transition-all shadow-md cursor-pointer self-start md:self-auto shrink-0"
+                    >
+                      <Plus className="w-4 h-4 font-black" /> Criar Novo Aviso
+                    </button>
+                  </div>
+
+                  {/* Toolbar filters and searches */}
+                  <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-[#0b1220] p-3 rounded-xl border border-white/5">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={searchContentQuery}
+                        onChange={(e) => setSearchContentQuery(e.target.value)}
+                        placeholder="Pesquisar por título, assunto ou frase de aviso..."
+                        className="w-full pl-8 pr-3 py-2 bg-[#060a12] text-white border border-white/5 rounded-lg text-xs focus:border-teal-500 outline-none transition-colors"
+                      />
+                      <span className="absolute left-2.5 top-2.5 text-slate-500 font-bold">🔍</span>
+                    </div>
+
+                    <div className="w-full sm:w-48 shrink-0">
+                      <select
+                        value={filterContentCategory}
+                        onChange={(e) => setFilterContentCategory(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#060a12] text-slate-300 border border-white/5 rounded-lg text-xs outline-none focus:border-teal-500 cursor-pointer"
+                      >
+                        <option value="all">Todas as Categorias</option>
+                        <option value="Geral">Geral</option>
+                        <option value="Eventos">Eventos</option>
+                        <option value="Instrução">Instrução</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Display list */}
+                  {(() => {
+                    const filtered = announcements.filter((ann) => {
+                      const matchSearch = ann.title.toLowerCase().includes(searchContentQuery.toLowerCase()) || 
+                                          ann.content.toLowerCase().includes(searchContentQuery.toLowerCase());
+                      const matchCat = filterContentCategory === "all" || ann.category === filterContentCategory;
+                      return matchSearch && matchCat;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="p-8 text-center bg-[#0b1220]/40 rounded-xl border border-dashed border-white/5 text-slate-400 text-xs">
+                          Nenhum comunicado, instrução ou aviso localizado com os filtros inseridos. Comece criando um novo comunicado!
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filtered.map((item) => (
+                          <div key={item.id} className="p-4 bg-[#111d2d] rounded-xl border border-white/5 hover:border-white/10 transition-all flex flex-col justify-between space-y-4">
+                            <div className="space-y-2.5">
+                              <div className="flex justify-between items-center">
+                                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  {item.category}
+                                </span>
+                                {item.isImportant && (
+                                  <span className="px-1.5 py-0.5 rounded text-[8px] font-mono leading-none bg-rose-500/10 text-rose-400 border border-rose-500/20 font-black uppercase tracking-tight animate-pulse">
+                                    Urgente / Importante ⚠️
+                                  </span>
+                                )}
+                              </div>
+
+                              <h4 className="text-xs font-bold text-white uppercase tracking-tight leading-snug line-clamp-2">{item.title}</h4>
+                              <p className="text-[11px] text-slate-300 leading-relaxed font-semibold line-clamp-4 whitespace-pre-wrap">{item.content}</p>
+                            </div>
+
+                            <div className="pt-3 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-400">
+                              <span className="font-mono text-[9px]">📅 Publicação: {new Date(item.date).toLocaleDateString('pt-BR')}</span>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setAnnouncementForm(item)}
+                                  className="text-teal-400 hover:text-teal-300 cursor-pointer font-bold uppercase text-[9px] tracking-wide"
+                                  title="Editar Aviso"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteAnnouncement(item)}
+                                  className="text-rose-400 hover:text-rose-350 cursor-pointer font-bold uppercase text-[9px] tracking-wide"
+                                  title="Excluir Aviso"
+                                >
+                                  Excluir
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* SECTION FOR MANAGING DOCUMENTS */}
+              {conteudosSubTab === "arquivos" && (
+                <div className="space-y-6">
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-white/5 pb-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                        <FileText className="w-5 h-5 text-amber-500" />
+                        Central do Repositório de Documentos & Ficheiros
+                      </h2>
+                      <p className="text-slate-400 text-xs">Insira, edite e remova estatutos sociais, formulários opcionais de filiação, relatórios tributários e portarias normativas do UMESC.</p>
+                    </div>
+                    
+                    <button
+                      type="button"
+                      id="btn-admin-create-document"
+                      onClick={() => setDocumentForm({ title: "", category: "Legislação", fileSize: "1.0 MB", publishedDate: new Date().toISOString().split("T")[0], url: "", downloadCount: 0 })}
+                      className="px-4 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center gap-1.5 transition-all shadow-md cursor-pointer self-start md:self-auto shrink-0"
+                    >
+                      <Plus className="w-4 h-4 font-black" /> Cadastrar Arquivo / PDF
+                    </button>
+                  </div>
+
+                  {/* Toolbar filters and searches for docs */}
+                  <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center bg-[#0b1220] p-3 rounded-xl border border-white/5">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={searchDocQuery}
+                        onChange={(e) => setSearchDocQuery(e.target.value)}
+                        placeholder="Pesquisar por título de documento ou nome do arquivo..."
+                        className="w-full pl-8 pr-3 py-2 bg-[#060a12] text-white border border-white/5 rounded-lg text-xs focus:border-teal-500 outline-none transition-colors"
+                      />
+                      <span className="absolute left-2.5 top-2.5 text-slate-500 font-bold">🔍</span>
+                    </div>
+
+                    <div className="w-full sm:w-48 shrink-0">
+                      <select
+                        value={filterDocCategory}
+                        onChange={(e) => setFilterDocCategory(e.target.value)}
+                        className="w-full px-3 py-2 bg-[#060a12] text-slate-300 border border-white/5 rounded-lg text-xs outline-none focus:border-teal-500 cursor-pointer"
+                      >
+                        <option value="all">Todas as Categoria de Arquivo</option>
+                        <option value="Estatutos">Estatutos</option>
+                        <option value="Formulários">Formulários</option>
+                        <option value="Relatórios">Relatórios</option>
+                        <option value="Legislação">Legislação / Portarias</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Display list of documents */}
+                  {(() => {
+                    const filteredDocs = documents.filter((doc) => {
+                      const matchSearch = doc.title.toLowerCase().includes(searchDocQuery.toLowerCase()) || 
+                                          doc.url.toLowerCase().includes(searchDocQuery.toLowerCase());
+                      const matchCat = filterDocCategory === "all" || doc.category === filterDocCategory;
+                      return matchSearch && matchCat;
+                    });
+
+                    if (filteredDocs.length === 0) {
+                      return (
+                        <div className="p-8 text-center bg-[#0b1220]/40 rounded-xl border border-dashed border-white/5 text-slate-400 text-xs">
+                          Nenhum documento ou PDF localizado no repositório com os filtros inseridos. Cadastre o primeiro arquivo utilizando o botão acima!
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredDocs.map((item) => (
+                          <div key={item.id} className="p-4 bg-[#111d2d] rounded-xl border border-white/5 hover:border-white/10 transition-all flex flex-col justify-between space-y-3">
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center text-[9px]">
+                                <span className="px-2 py-0.5 rounded font-black uppercase tracking-wider bg-teal-500/10 text-teal-400 border border-teal-500/20">
+                                  {item.category}
+                                </span>
+                                <span className="text-slate-400 font-mono">📂 {item.fileSize}</span>
+                              </div>
+
+                              <div className="flex items-start gap-2.5">
+                                <div className="p-2 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-lg shrink-0 mt-0.5">
+                                  <FileText className="w-5 h-5" />
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h4 className="text-xs font-extrabold text-white uppercase tracking-tight leading-snug line-clamp-2">{item.title}</h4>
+                                  <p className="text-[10px] text-slate-400 font-mono truncate max-w-[200px]" title={item.url}>🔗 {item.url || "sem_anexo.pdf"}</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-400">
+                              <div className="flex flex-col text-[8px] font-mono leading-tight">
+                                <span>📅 Publicado: {new Date(item.publishedDate).toLocaleDateString('pt-BR')}</span>
+                                <span>⬇️ {item.downloadCount} downloads</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setDocumentForm(item)}
+                                  className="text-teal-400 hover:text-teal-300 cursor-pointer font-bold uppercase text-[9px] tracking-wide"
+                                  title="Editar Documento"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingDocument(item)}
+                                  className="text-rose-400 hover:text-rose-350 cursor-pointer font-bold uppercase text-[9px] tracking-wide"
+                                  title="Excluir Documento"
+                                >
+                                  Excluir
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* ANNOUNCEMENT FORM DIALOG */}
+              {announcementForm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+                  <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 my-8 text-left">
+                    <div className="flex justify-between items-start border-b border-white/5 pb-3">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5 font-display">
+                        <Bell className="w-4 h-4 text-amber-500" />
+                        {announcementForm.id ? "Alterar Aviso Existente" : "Cadastrar Novo Aviso no Mural"}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setAnnouncementForm(null)}
+                        className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveAnnouncement} className="space-y-4 text-xs font-medium">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Título do Comunicado</label>
+                        <input
+                          type="text"
+                          required
+                          value={announcementForm.title || ""}
+                          onChange={(e) => setAnnouncementForm({ ...announcementForm, title: e.target.value })}
+                          placeholder="EX: EXPEDIÇÃO DE NOVAS CREDENCIAIS OFICIAIS 2026..."
+                          className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none uppercase font-bold"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase">Categoria</label>
+                          <select
+                            value={announcementForm.category || "Geral"}
+                            onChange={(e) => setAnnouncementForm({ ...announcementForm, category: e.target.value as any })}
+                            className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none cursor-pointer"
+                          >
+                            <option value="Geral">Geral</option>
+                            <option value="Eventos">Eventos</option>
+                            <option value="Instrução">Instrução</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase">Data de Publicação</label>
+                          <input
+                            type="date"
+                            required
+                            value={announcementForm.date || ""}
+                            onChange={(e) => setAnnouncementForm({ ...announcementForm, date: e.target.value })}
+                            className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none cursor-pointer text-slate-200"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Conteúdo do Aviso (Informação Completa)</label>
+                        <textarea
+                          required
+                          rows={6}
+                          value={announcementForm.content || ""}
+                          onChange={(e) => setAnnouncementForm({ ...announcementForm, content: e.target.value })}
+                          placeholder="Escreva as diretrizes detalhadas do acontecimento ou aviso administrativo para os membros..."
+                          className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none font-sans leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Urgência Flag Toggle Option */}
+                      <div className="flex items-center gap-2 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl">
+                        <input
+                          type="checkbox"
+                          id="isImportant-toggle"
+                          checked={!!announcementForm.isImportant}
+                          onChange={(e) => setAnnouncementForm({ ...announcementForm, isImportant: e.target.checked })}
+                          className="w-4 h-4 text-rose-500 border-white/10 rounded bg-[#060a12] focus:ring-0 cursor-pointer"
+                        />
+                        <label htmlFor="isImportant-toggle" className="text-[11px] text-rose-300 font-bold select-none cursor-pointer leading-none">
+                          Marcar este comunicado como URGENTE / IMPORTANTE (Aviso prioritário destacado em vermelho) ⚠️
+                        </label>
+                      </div>
+
+                      <div className="flex justify-end gap-2.5 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setAnnouncementForm(null)}
+                          className="px-4 py-2 bg-[#121c2d] hover:bg-[#1a2a40] border border-white/10 text-slate-300 rounded font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-black text-[10px] uppercase tracking-wider cursor-pointer shadow-lg shadow-amber-500/15 transition-colors"
+                        >
+                          Publicar Aviso
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+
+              {/* DOCUMENT DIALOG / MODAL */}
+              {documentForm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+                  <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 my-8 text-left">
+                    <div className="flex justify-between items-start border-b border-white/5 pb-3">
+                      <h3 className="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-1.5 font-display">
+                        <FileText className="w-4 h-4 text-amber-500" />
+                        {documentForm.id ? "Alterar Dados do Arquivo" : "Cadastrar Novo PDF/Ficheiro"}
+                      </h3>
+                      <button
+                        type="button"
+                        onClick={() => setDocumentForm(null)}
+                        className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <form onSubmit={handleSaveDocument} className="space-y-4 text-xs font-medium">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Nome / Título Publicado do Documento</label>
+                        <input
+                          type="text"
+                          required
+                          value={documentForm.title || ""}
+                          onChange={(e) => setDocumentForm({ ...documentForm, title: e.target.value })}
+                          placeholder="EX: REGULAMENTO DO PROGRAMA DE CAPELANIA MILITAR 2026"
+                          className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none uppercase font-bold"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase">Categoria</label>
+                          <select
+                            value={documentForm.category || "Legislação"}
+                            onChange={(e) => setDocumentForm({ ...documentForm, category: e.target.value as any })}
+                            className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none cursor-pointer"
+                          >
+                            <option value="Estatutos">Estatutos</option>
+                            <option value="Formulários">Formulários</option>
+                            <option value="Relatórios">Relatórios</option>
+                            <option value="Legislação">Legislação / Portarias</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase">Tamanho do Arquivo</label>
+                          <input
+                            type="text"
+                            required
+                            value={documentForm.fileSize || "1.2 MB"}
+                            onChange={(e) => setDocumentForm({ ...documentForm, fileSize: e.target.value })}
+                            placeholder="Ex: 850 KB ou 2.4 MB"
+                            className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase">Data de Publicação</label>
+                          <input
+                            type="date"
+                            required
+                            value={documentForm.publishedDate || ""}
+                            onChange={(e) => setDocumentForm({ ...documentForm, publishedDate: e.target.value })}
+                            className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none cursor-pointer text-slate-200"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase">Visualizações / Downloads Iniciais</label>
+                          <input
+                            type="number"
+                            required
+                            value={documentForm.downloadCount ?? 0}
+                            onChange={(e) => setDocumentForm({ ...documentForm, downloadCount: parseInt(e.target.value, 10) || 0 })}
+                            className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none font-mono text-slate-200"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Link de Download / Nome do Ficheiro PDF</label>
+                        <input
+                          type="text"
+                          required
+                          value={documentForm.url || ""}
+                          onChange={(e) => setDocumentForm({ ...documentForm, url: e.target.value })}
+                          placeholder="EX: manual_de_capelania_oficial.pdf ou link do drive"
+                          className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none"
+                        />
+                        <p className="text-[10px] text-slate-500">Pode preencher com o nome do arquivo fictício ou um link completo para o Google Drive ou OneDrive.</p>
+                      </div>
+
+                      <div className="flex justify-end gap-2.5 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => setDocumentForm(null)}
+                          className="px-4 py-2 bg-[#121c2d] hover:bg-[#1a2a40] border border-white/10 text-slate-300 rounded font-bold text-[10px] uppercase tracking-wider cursor-pointer transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded font-black text-[10px] uppercase tracking-wider cursor-pointer shadow-lg shadow-amber-500/15 transition-colors"
+                        >
+                          Salvar Arquivo
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
 
             </div>
           )}
@@ -2588,6 +3908,291 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
             </div>
           )}
 
+          {/* TAB: GESTÃO DE SERVIÇOS DE CAPELANIA */}
+          {activeTab === "servicos" && (
+            <div className="space-y-6 text-left">
+              
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-white/5 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                    <Compass className="w-5 h-5 text-amber-500 animate-pulse" />
+                    Gerenciamento dos Serviços de Capelania
+                  </h2>
+                  <p className="text-slate-400 text-xs">Utilizado para alterar dinamicamente os três cartões principais de Capelania Voluntária na página inicial.</p>
+                </div>
+                
+                <button
+                  onClick={() => setCapelaniaServiceForm({ title: "", description: "", buttonText: "", emoji: "✓", tabLink: "registration" })}
+                  className="px-4 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center gap-1.5 transition-all shadow-md cursor-pointer self-start md:self-auto"
+                >
+                  <Plus className="w-4 h-4" /> Novo Serviço
+                </button>
+              </div>
+
+              {/* Form panel */}
+              {capelaniaServiceForm && (
+                <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 shadow-xl text-white">
+                  <div className="flex justify-between items-center mb-4 pb-2 border-b border-white/5">
+                    <h3 className="font-bold text-sm text-amber-400 uppercase tracking-wider">
+                      {capelaniaServiceForm.id ? "Editar Serviço de Capelania" : "Novo Serviço de Capelania"}
+                    </h3>
+                    <button 
+                      onClick={() => setCapelaniaServiceForm(null)}
+                      className="p-1 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSaveCapelaniaService} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Título do Serviço:</label>
+                        <input
+                          type="text"
+                          required
+                          value={capelaniaServiceForm.title || ""}
+                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, title: e.target.value })}
+                          placeholder="Ex: Guarnição e Auxílio"
+                          className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Emoji / Ícone:</label>
+                        <input
+                          type="text"
+                          required
+                          value={capelaniaServiceForm.emoji || ""}
+                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, emoji: e.target.value })}
+                          placeholder="Ex: ✓ ou 📖 ou 🛡️"
+                          className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Texto do Botão (CTA):</label>
+                        <input
+                          type="text"
+                          required
+                          value={capelaniaServiceForm.buttonText || ""}
+                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, buttonText: e.target.value })}
+                          placeholder="Ex: Fazer Inscrição / Solicitar Ajuda →"
+                          className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Aba de Redirecionamento (No Painel de Membros):</label>
+                        <select
+                          value={capelaniaServiceForm.tabLink || "registration"}
+                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, tabLink: e.target.value as any })}
+                          className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
+                        >
+                          <option value="registration">Inscrição de Membros</option>
+                          <option value="notices">Quadro de Avisos / Circulares</option>
+                          <option value="agenda">Agenda / Eventos</option>
+                          <option value="structure">Corporações / Estatutos</option>
+                          <option value="congressos">Congressos</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Breve Descrição do Serviço:</label>
+                      <textarea
+                        required
+                        value={capelaniaServiceForm.description || ""}
+                        onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, description: e.target.value })}
+                        placeholder="Descreva succinctamente a assistência voluntária..."
+                        rows={3}
+                        className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500 resize-none animate-none"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setCapelaniaServiceForm(null)}
+                        className="px-4 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-white/5 hover:bg-white/10 text-white transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-5 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors"
+                      >
+                        {capelaniaServiceForm.id ? "Atualizar" : "Salvar"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              {/* Grid listing of Services */}
+              <div className="bg-[#0b1220]/40 rounded-2xl border border-white/5 overflow-hidden">
+                <div className="p-4 bg-[#0b1220]/60 border-b border-white/5 flex justify-between items-center">
+                  <span className="text-[10px] font-mono uppercase text-slate-400 font-bold">Serviços Cadastrados ({capelaniaServices.length})</span>
+                  <p className="text-[10px] text-slate-500 font-mono">Gerencie os serviços para alterar a visualização no Portal.</p>
+                </div>
+
+                <div className="divide-y divide-white/5">
+                  {capelaniaServices.map((srv, index) => (
+                    <div 
+                      key={srv.id || index} 
+                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0d1723]/30 hover:bg-[#0d1723]/70 transition-colors text-left"
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold text-lg shrink-0 border border-amber-500/20">
+                          {srv.emoji}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-sm font-bold text-slate-100 font-sans tracking-tight">{srv.title}</h4>
+                            <span className="px-2 py-0.5 rounded text-[8px] font-mono font-bold text-teal-400 uppercase tracking-wider bg-teal-500/10 border border-teal-500/20">
+                              Redireciona para: {srv.tabLink.toUpperCase()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed font-sans">{srv.description}</p>
+                          <p className="text-[10px] text-slate-450 font-mono italic">Botão CTA: "{srv.buttonText}"</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                        <button
+                          onClick={() => setCapelaniaServiceForm({ ...srv })}
+                          className="p-2 rounded-xl bg-[#132031]/55 border border-white/5 hover:border-amber-450 hover:bg-amber-500 hover:text-slate-950 text-slate-300 transition-all cursor-pointer"
+                          title="Editar serviço"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCapelaniaService(srv)}
+                          className="p-2 rounded-xl bg-[#132031]/55 border border-white/5 hover:bg-rose-500/15 hover:text-rose-450 text-rose-400 transition-all cursor-pointer"
+                          title="Excluir serviço"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {capelaniaServices.length === 0 && (
+                    <div className="p-8 text-center text-xs text-slate-400 font-mono">
+                      Nenhum serviço de capelania cadastrado. Clique em "Novo Serviço" para começar.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB: LISTAGEM DE VOLUNTÁRIOS DA REPARTIÇÃO DA CAPELANIA */}
+          {activeTab === "voluntarios" && (
+            <div className="space-y-6 text-left animate-fadeIn">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-white/5 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                    <Compass className="w-5 h-5 text-amber-500 animate-pulse" />
+                    Voluntários Inscritos - Capelania Voluntária
+                  </h2>
+                  <p className="text-slate-400 text-xs">Candidatos que preencheram o formulário de engajamento do voluntariado regional da Capelania.</p>
+                </div>
+                
+                <div className="text-[10px] font-mono font-bold bg-[#132031] px-3.5 py-2 rounded-xl text-slate-300 border border-white/5 self-start md:self-auto uppercase tracking-wider">
+                  Total de Voluntários: <span className="text-amber-400">{volunteers.length}</span>
+                </div>
+              </div>
+
+              {/* Filters & Statistics Rows */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-4 bg-[#0d1723]/60 rounded-xl border border-white/5">
+                  <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest block mb-1">Capacidade Total</span>
+                  <div className="text-xl font-bold text-white">{volunteers.length} Inscritos</div>
+                  <div className="text-[9px] text-slate-400 mt-0.5 uppercase tracking-wider">Base Geral de Apoio</div>
+                </div>
+
+                <div className="p-4 bg-[#0d1723]/60 rounded-xl border border-white/5">
+                  <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest block mb-1">Disponíveis Pelo WhatsApp</span>
+                  <div className="text-xl font-bold text-emerald-400">{volunteers.filter(v => v.whatsapp).length} Contatos</div>
+                  <div className="text-[9px] text-slate-400 mt-0.5 uppercase tracking-wider font-sans">Sincronizados e Ativos</div>
+                </div>
+
+                <div className="p-4 bg-[#0d1723]/60 rounded-xl border border-white/5">
+                  <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest block mb-1">Cidades Atendidas</span>
+                  <div className="text-xl font-bold text-amber-400">
+                    {Array.from(new Set(volunteers.map(v => (v.city || "").toLowerCase().trim()))).length} Regiões
+                  </div>
+                  <div className="text-[9px] text-slate-400 mt-0.5 uppercase tracking-wider">Distribuição Regional SC</div>
+                </div>
+              </div>
+
+              {/* Volunteers list inside search frame */}
+              <div className="bg-[#0b1220]/40 rounded-2xl border border-white/5 overflow-hidden">
+                <div className="p-4 bg-[#0b1220]/60 border-b border-white/5 flex flex-col sm:flex-row gap-3 justify-between items-center">
+                  <span className="text-[10px] font-mono uppercase text-slate-400 font-bold">Tabela Base de Voluntários ({volunteers.length})</span>
+                  <p className="text-[10px] text-slate-500 font-mono">Controle interno dos cidadãos voluntários engajados na Capelania Militar.</p>
+                </div>
+
+                <div className="overflow-x-auto font-sans">
+                  <table className="w-full text-left text-xs text-slate-200">
+                    <thead className="bg-[#0b1220]/65 text-slate-400 border-b border-white/5 uppercase text-[9px] tracking-wider font-mono">
+                      <tr>
+                        <th className="py-3 px-4">Nome do Voluntário</th>
+                        <th className="py-3 px-4">WhatsApp / Contato</th>
+                        <th className="py-3 px-4">Cidade de Concentração</th>
+                        <th className="py-3 px-4 text-center">Data e Hora de Registro</th>
+                        <th className="py-3 px-3 text-center">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 bg-[#0a101b]/20">
+                      {volunteers.map((vol, index) => (
+                        <tr key={vol.id || index} className="hover:bg-white/[0.02] transition-colors">
+                          <td className="py-3.5 px-4 font-bold text-white">{vol.name}</td>
+                          <td className="py-3.5 px-4 font-mono">
+                            <div className="flex items-center gap-2">
+                              <span>{vol.whatsapp}</span>
+                              <a
+                                href={`https://wa.me/${vol.whatsapp.replace(/\D/g, "")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-2 py-1 text-[9px] rounded bg-emerald-500/10 text-emerald-400 border border-emerald-550/20 hover:bg-emerald-500 hover:text-slate-950 transition-all uppercase font-mono font-bold cursor-pointer"
+                              >
+                                Chamar
+                              </a>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 uppercase font-bold text-amber-500">{vol.city}</td>
+                          <td className="py-3.5 px-4 text-center font-mono opacity-80 text-slate-350">
+                            {vol.createdAt ? new Date(vol.createdAt).toLocaleString("pt-BR") : "N/A"}
+                          </td>
+                          <td className="py-3.5 px-3 text-center">
+                            <button
+                              onClick={() => handleDeleteVolunteer(vol)}
+                              className="p-1.5 rounded-lg bg-rose-950/10 border border-rose-900 text-rose-450 hover:bg-rose-600 hover:text-white transition-all cursor-pointer inline-flex items-center"
+                              title="Remover voluntário"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+
+                      {volunteers.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="py-12 text-center text-slate-400 font-mono text-xs">
+                            Nenhum voluntário da Capelania cadastrado no momento.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
         </main>
       </div>
 
@@ -2643,7 +4248,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
               </div>
 
               <div className="bg-[#121c2d] p-3 rounded border border-white/5 flex justify-between items-center">
-                <span className="text-[10px] text-[#334155] text-slate-300 font-bold uppercase">Status de Homologação:</span>
+                <span className="text-[10px] text-slate-300 font-bold uppercase">Status de Homologação:</span>
                 <button
                   type="button"
                   onClick={() => setEditingMember({ ...editingMember, approved: !editingMember.approved })}
@@ -2654,6 +4259,21 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                   }`}
                 >
                   {editingMember.approved ? "✓ APROVADO / HOMOLOGADO" : "🔒 PENDENTE / BLOQUEADO"}
+                </button>
+              </div>
+
+              <div className="bg-[#121c2d] p-3 rounded border border-white/5 flex justify-between items-center">
+                <span className="text-[10px] text-slate-300 font-bold uppercase">Membro da Diretoria:</span>
+                <button
+                  type="button"
+                  onClick={() => setEditingMember({ ...editingMember, isDirector: !editingMember.isDirector })}
+                  className={`px-3 py-1.5 rounded font-black text-[10px] uppercase tracking-wider border ${
+                    editingMember.isDirector 
+                      ? "bg-purple-500/10 border-purple-555 text-purple-400" 
+                      : "bg-[#0b1220] border-white/5 text-slate-400"
+                  }`}
+                >
+                  {editingMember.isDirector ? "★ SIM / DIRETORIA" : "NÃO"}
                 </button>
               </div>
 
@@ -3050,6 +4670,312 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
         </div>
       )}
 
+      {/* MEMBER CONTENTS DISPATCHER & CRUD MODALS */}
+      {contentForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4 text-left my-8">
+            <h3 className="text-sm font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+              <MessageCircle className="w-5 h-5 text-amber-500" />
+              {contentForm.id ? "Editar Informativo" : "Novo Informativo para Envio"}
+            </h3>
+            
+            <form onSubmit={handleSaveContent} className="space-y-4">
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase">Assunto / Título do Informativo</label>
+                <input
+                  type="text"
+                  required
+                  value={contentForm.title || ""}
+                  onChange={(e) => setContentForm({ ...contentForm, title: e.target.value })}
+                  placeholder="Ex: Mensagem devocional de incentivo aos militares"
+                  className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase">Categoria</label>
+                  <select
+                    value={contentForm.category || "Informativo Geral"}
+                    onChange={(e) => setContentForm({ ...contentForm, category: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none cursor-pointer"
+                  >
+                    <option value="Informativo Geral">Informativo Geral</option>
+                    <option value="Devocional Diário">Devocional Diário</option>
+                    <option value="Aviso de Farda">Aviso de Farda</option>
+                    <option value="Convocação de Assembléia">Convocação de Assembléia</option>
+                    <option value="Boletim Extraordinário">Boletim Extraordinário</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase">Status</label>
+                  <select
+                    value={contentForm.status || "Pronto"}
+                    onChange={(e) => setContentForm({ ...contentForm, status: e.target.value as any })}
+                    className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none cursor-pointer"
+                  >
+                    <option value="Pronto">Pronto para Enviar</option>
+                    <option value="Rascunho">Rascunho</option>
+                    <option value="Arquivado">Arquivado</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase">Texto da Mensagem (Copiar / WhatsApp)</label>
+                <textarea
+                  required
+                  rows={6}
+                  value={contentForm.bodyText || ""}
+                  onChange={(e) => setContentForm({ ...contentForm, bodyText: e.target.value })}
+                  placeholder="Digite a mensagem que deseja enviar... Use formatação do WhatsApp como asterisco para negrito, ex: *Atenção!*"
+                  className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none font-sans"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-[10px] font-bold text-slate-400 uppercase">Link ou Link de Anexo (Opcional)</label>
+                <input
+                  type="text"
+                  value={contentForm.attachmentUrl || ""}
+                  onChange={(e) => setContentForm({ ...contentForm, attachmentUrl: e.target.value })}
+                  placeholder="Ex: https://drive.google.com/file/d/... ou link de imagem"
+                  className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setContentForm(null)}
+                  className="px-4 py-2 bg-slate-900 border border-white/5 text-slate-400 hover:text-white rounded-lg text-xs font-bold uppercase cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-black uppercase tracking-wider cursor-pointer shadow-lg shadow-amber-500/15"
+                >
+                  Salvar Informativo
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {deletingContent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm shadow-2xl">
+          <div className="bg-[#0b1220] border border-rose-500/30 rounded-2xl p-6 sm:p-8 w-full max-w-md text-center space-y-4">
+            <span className="text-3xl text-rose-500 select-none">⚠️</span>
+            <div className="space-y-2">
+              <h4 className="font-bold text-white uppercase tracking-tight font-display">Confirmar Exclusão de Informativo</h4>
+              <p className="text-xs text-slate-300">
+                Tem certeza de que deseja remover o informativo <span className="text-white font-bold">"{deletingContent.title}"</span>? Esta ação não pode ser desfeita.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                type="button"
+                onClick={confirmDeleteContent}
+                className="px-5 py-2 rounded bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase cursor-pointer"
+              >
+                Sim, Excluir
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeletingContent(null)}
+                className="px-5 py-2 rounded bg-[#121c2d] hover:bg-[#1a2a40] border border-white/5 text-slate-300 text-xs font-bold uppercase cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingAnnouncement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm shadow-2xl">
+          <div className="bg-[#0b1220] border border-rose-500/30 rounded-2xl p-6 sm:p-8 w-full max-w-md text-center space-y-4 shadow-2xl">
+            <div className="mx-auto w-12 h-12 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="space-y-2">
+              <h4 className="font-bold text-white uppercase tracking-tight font-display text-rose-400">Excluir Aviso do Mural</h4>
+              <p className="text-xs text-slate-300">
+                Deseja realmente remover o aviso <span className="text-white font-bold">"{deletingAnnouncement.title}"</span>? Esta ação removerá a publicação e não poderá ser desfeita.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                type="button"
+                onClick={confirmDeleteAnnouncement}
+                className="px-5 py-2 rounded bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase cursor-pointer transition-colors"
+              >
+                Confirmar Exclusão
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeletingAnnouncement(null)}
+                className="px-5 py-2 rounded bg-[#121c2d] hover:bg-[#1a2a40] border border-white/10 rounded text-slate-300 text-xs font-bold uppercase cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingDocument && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm shadow-2xl">
+          <div className="bg-[#0b1220] border border-rose-500/30 rounded-2xl p-6 sm:p-8 w-full max-w-md text-center space-y-4 shadow-2xl">
+            <div className="mx-auto w-12 h-12 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="space-y-2">
+              <h4 className="font-bold text-white uppercase tracking-tight font-display text-rose-400">Excluir Documento do Repositório</h4>
+              <p className="text-xs text-slate-300">
+                Deseja realmente remover o documento <span className="text-white font-bold">"{deletingDocument.title}"</span> do repositório público de arquivos? Esta ação removerá o arquivo de todos os painéis e não poderá ser desfeita.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-center pt-2">
+              <button
+                type="button"
+                onClick={confirmDeleteDocument}
+                className="px-5 py-2 rounded bg-rose-600 hover:bg-rose-500 text-white font-black text-xs uppercase cursor-pointer transition-colors"
+              >
+                Confirmar Exclusão
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeletingDocument(null)}
+                className="px-5 py-2 rounded bg-[#121c2d] hover:bg-[#1a2a40] border border-white/10 rounded text-slate-300 text-xs font-bold uppercase cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedContentForDispatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
+          <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 w-full max-w-2xl shadow-2xl space-y-5 text-left my-8 flex flex-col max-h-[90vh]">
+            
+            <div className="flex justify-between items-start border-b border-white/5 pb-3">
+              <div>
+                <h3 className="text-sm font-black text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                  <MessageCircle className="w-5 h-5 text-teal-400 shrink-0" />
+                  Encaminhar Conteúdo aos Associados
+                </h3>
+                <p className="text-[10px] text-slate-400">Selecione os destinatários abaixo para abrir a janela direta de disparo com a mensagem pré-formatada.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedContentForDispatch(null)}
+                className="p-1 rounded hover:bg-white/5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Message preview area */}
+            <div className="p-3 bg-[#060a12] border border-teal-500/20 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-[9px] font-mono font-bold text-teal-400">
+                <span>CONTEÚDO PRÉ-FORMATADO</span>
+                <span>{selectedContentForDispatch.category}</span>
+              </div>
+              <h4 className="text-xs font-bold text-white uppercase">{selectedContentForDispatch.title}</h4>
+              <p className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed line-clamp-3 font-medium">{selectedContentForDispatch.bodyText}</p>
+              {selectedContentForDispatch.attachmentUrl && (
+                <div className="text-[9px] font-mono text-amber-400 font-bold font-semibold mt-1">
+                  🔗 Link Anexo: {selectedContentForDispatch.attachmentUrl}
+                </div>
+              )}
+            </div>
+
+            {/* Member search list */}
+            <div className="flex-1 flex flex-col min-h-[300px] space-y-3 overflow-hidden">
+              <div className="text-[10px] uppercase font-mono font-bold text-slate-400 flex justify-between items-center bg-[#111d2d]/35 px-2 py-1 rounded">
+                <span>Filtre e envie por farda / cidade</span>
+                <span>{members.length} Associados Registrados</span>
+              </div>
+
+              <div className="overflow-y-auto flex-1 space-y-2 pr-1 custom-scrollbar">
+                {members.length === 0 ? (
+                  <p className="text-center text-slate-500 text-xs py-8">Nenhum membro cadastrado localizado para envio de convocações.</p>
+                ) : (
+                  members.map((m) => {
+                    const formattedMsg = `Olá, ${m.name}! 🌟 \n\n*${selectedContentForDispatch.title}*\n\n${selectedContentForDispatch.bodyText}${selectedContentForDispatch.attachmentUrl ? `\n\n🔗 Link Complementar: ${selectedContentForDispatch.attachmentUrl}` : ""}\n\n_Enviado por: Capelania UMESC_`;
+                    const waLink = `https://api.whatsapp.com/send?phone=${m.phone.replace(/\D/g, "")}&text=${encodeURIComponent(formattedMsg)}`;
+                    const mailtoLink = `mailto:${m.email}?subject=${encodeURIComponent(selectedContentForDispatch.title)}&body=${encodeURIComponent(formattedMsg)}`;
+
+                    return (
+                      <div key={m.cpf} className="p-3 bg-[#111d2d] rounded-xl border border-white/5 flex items-center justify-between gap-4">
+                        <div className="truncate space-y-0.5">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-[10px] font-black uppercase text-amber-500 font-mono shrink-0">{m.rank}</span>
+                            <h5 className="text-[11px] font-bold text-white truncate">{m.name}</h5>
+                          </div>
+                          <div className="flex items-center gap-3 text-[10px] text-slate-400 font-mono">
+                            <span>📱 {m.phone}</span>
+                            <span className="truncate">📧 {m.email}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(formattedMsg);
+                              alert(`Mensagem para ${m.name} copiada!`);
+                            }}
+                            className="bg-slate-800 hover:bg-slate-700 text-white p-1.5 rounded transition-all cursor-pointer text-[10px] uppercase font-bold px-2 py-1 shrink-0 font-mono"
+                            title="Copiar texto formatado"
+                          >
+                            Copiar
+                          </button>
+
+                          <a
+                            href={mailtoLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-sky-600/10 hover:bg-sky-600 border border-sky-500/20 hover:border-sky-500 p-1.5 rounded text-sky-400 hover:text-white transition-all shrink-0 cursor-pointer"
+                            title="Enviar por E-mail"
+                          >
+                            📧
+                          </a>
+
+                          <a
+                            href={waLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-emerald-600/15 hover:bg-emerald-600 border border-emerald-500/20 hover:border-emerald-500 p-1.5 rounded text-emerald-400 hover:text-white font-bold transition-all shrink-0 cursor-pointer text-xs"
+                            title="Abrir Disparo Direto no WhatsApp"
+                          >
+                            💬 Direct WA
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-white/5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedContentForDispatch(null)}
+                className="px-5 py-2 bg-slate-900 border border-white/10 text-slate-300 hover:text-white rounded-lg text-xs font-bold uppercase cursor-pointer"
+              >
+                Fechar Painel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* F. GENERAL MEMBER DELETION CONFIRMATION DIALOG (LGPD) */}
       {deletingMemberHash && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md shadow-2xl animate-fadeIn">
@@ -3244,6 +5170,151 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                 Cancelar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CAPELANIA SERVICE MODAL */}
+      {deletingCapelaniaService && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
+            <div className="mx-auto w-12 h-12 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            
+            <div className="space-y-1.5">
+              <h3 className="font-extrabold text-xs uppercase tracking-widest text-rose-400 font-display">
+                Remover Serviço de Capelania
+              </h3>
+              <p className="text-[11px] text-slate-300 leading-normal">
+                Deseja realmente remover o serviço <span className="text-white font-bold font-mono">"{deletingCapelaniaService.title}"</span>?
+              </p>
+              <p className="text-[9px] text-[#94a3b8] leading-normal">
+                Esta ação apagará este botão de assistência voluntária da página inicial do portal.
+              </p>
+            </div>
+            
+            <div className="flex gap-2.5 justify-center pt-2">
+              <button
+                type="button"
+                onClick={confirmDeleteCapelaniaService}
+                className="px-4 py-2 hover:bg-rose-500 bg-rose-600 rounded text-white font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+              >
+                Confirmar Remoção
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeletingCapelaniaService(null)}
+                className="px-4 py-2 bg-[#121c2d] hover:bg-[#1a2a40] border border-white/10 rounded text-slate-300 font-bold text-[10px] uppercase cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE FICHA DE FILIAÇÃO MODAL */}
+      {deletingFicha && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
+            <div className="mx-auto w-12 h-12 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            
+            <div className="space-y-1.5">
+              <h3 className="font-extrabold text-xs uppercase tracking-widest text-rose-400 font-display">
+                Excluir Ficha de Filiação
+              </h3>
+              <p className="text-[11px] text-slate-300 leading-normal">
+                Deseja realmente remover permanentemente o formulário assinado eletronicamente de <span className="text-white font-bold font-mono">"{deletingFicha.memberName}"</span>?
+              </p>
+              <p className="text-[9px] text-rose-300 font-bold bg-rose-500/10 border border-rose-500/10 p-2 rounded leading-normal">
+                ⚠️ ATENÇÃO: Esta ação é irreversível e removerá todos os dados e assinaturas eletrônicas desta ficha nos registros permanentes!
+              </p>
+            </div>
+            
+            <div className="flex gap-2.5 justify-center pt-2">
+              <button
+                type="button"
+                onClick={confirmDeleteFicha}
+                className="px-4 py-2 hover:bg-rose-500 bg-rose-600 rounded text-white font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+              >
+                Confirmar Exclusão
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeletingFicha(null)}
+                className="px-4 py-2 bg-[#121c2d] hover:bg-[#1a2a40] border border-white/10 rounded text-slate-300 font-bold text-[10px] uppercase cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMPROVANTE DE DOAÇÃO MODAL OVERLAY */}
+      {selectedProofView && (
+        <div id="proof-viewer-modal" className="fixed inset-0 bg-[#020617]/90 backdrop-blur-sm z-[9999] p-4 flex items-center justify-center">
+          <div className="bg-[#0b1220] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden text-left relative shadow-2xl">
+            
+            <div className="flex items-center justify-between p-4 border-b border-white/5 font-display text-white">
+              <div>
+                <span className="block text-[10px] text-amber-500 uppercase font-mono font-bold">Doc de Comprovação de Semeadura</span>
+                <h3 className="text-sm font-bold uppercase">
+                  Portfólio / Comprovante - Ref #{selectedProofView.id}
+                </h3>
+              </div>
+              <button
+                onClick={() => setSelectedProofView(null)}
+                className="p-1.5 rounded-lg bg-slate-900 border border-white/5 text-slate-400 hover:text-white text-xs uppercase cursor-pointer transition-colors"
+              >
+                Fechar [X]
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center bg-slate-950/40">
+              {selectedProofView.paymentProofUrl ? (
+                selectedProofView.paymentProofUrl.startsWith("data:application/pdf") ? (
+                  <div className="text-center space-y-4 py-8">
+                    <div className="w-16 h-16 rounded-full bg-red-910 bg-red-950 text-red-500 border border-red-500/20 flex items-center justify-center text-2xl font-black mx-auto">
+                      PDF
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-200">Comprovante em formato PDF</h4>
+                      <p className="text-xs text-slate-400 mt-1">Este arquivo de comprovante foi enviado em formato PDF.</p>
+                    </div>
+                    <a 
+                      href={selectedProofView.paymentProofUrl}
+                      download={`comprovante_umesc_${selectedProofView.id}.pdf`}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase rounded-xl transition-all cursor-pointer"
+                    >
+                      <Download className="w-4 h-4" /> Baixar Documento PDF
+                    </a>
+                  </div>
+                ) : (
+                  <div className="max-w-full max-h-[60vh] rounded-lg border border-slate-850 overflow-hidden bg-slate-950 flex items-center justify-center p-2">
+                    <img 
+                      src={selectedProofView.paymentProofUrl} 
+                      alt={`Comprovante de ${selectedProofView.donorName}`}
+                      className="max-w-full max-h-[55vh] object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                )
+              ) : (
+                <p className="text-slate-400 italic font-mono text-center">Nenhum anexo disponível.</p>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-white/5 bg-[#0b1220]/80 text-xs font-mono text-slate-400 space-y-1">
+              <div><strong>Doador(a):</strong> {selectedProofView.donorName || "Anônimo"}</div>
+              <div><strong>Frente Destinada:</strong> {selectedProofView.projectName}</div>
+              <div><strong>Valor Homologado:</strong> R$ {selectedProofView.amount.toFixed(2)}</div>
+              {selectedProofView.donorWhatsapp && <div><strong>WhatsApp:</strong> {selectedProofView.donorWhatsapp}</div>}
+            </div>
+
           </div>
         </div>
       )}

@@ -3,16 +3,40 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { INITIAL_ANNOUNCEMENTS, INITIAL_EVENTS, INITIAL_DOCUMENTS } from "../data";
 import { ScheduleEvent, DocumentFile } from "../types";
-import { ListCollapse, Calendar, Download, HelpCircle, Bell, Clock, FileCheck, CheckCircle2, ChevronRight, LayoutList } from "lucide-react";
+import { ListCollapse, Calendar, Download, HelpCircle, Bell, Clock, FileCheck, CheckCircle2, ChevronRight, LayoutList, ExternalLink } from "lucide-react";
 
 export default function ResourceCenter() {
   const [activeEventFilter, setActiveEventFilter] = useState<string>("TODOS");
-  const [announcements, setAnnouncements] = useState(INITIAL_ANNOUNCEMENTS);
-  const [documents, setDocuments] = useState(INITIAL_DOCUMENTS);
+  const [announcements, setAnnouncements] = useState(() => {
+    const saved = localStorage.getItem("umesc_announcements");
+    return saved ? JSON.parse(saved) : INITIAL_ANNOUNCEMENTS;
+  });
+  const [documents, setDocuments] = useState<DocumentFile[]>(() => {
+    const saved = localStorage.getItem("umesc_documents");
+    return saved ? JSON.parse(saved) : INITIAL_DOCUMENTS;
+  });
   const [downloadedDocId, setDownloadedDocId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleReload = () => {
+      const saved = localStorage.getItem("umesc_announcements");
+      setAnnouncements(saved ? JSON.parse(saved) : INITIAL_ANNOUNCEMENTS);
+
+      const savedDocs = localStorage.getItem("umesc_documents");
+      setDocuments(savedDocs ? JSON.parse(savedDocs) : INITIAL_DOCUMENTS);
+    };
+
+    window.addEventListener("umesc_content_updated", handleReload);
+    window.addEventListener("storage", handleReload);
+
+    return () => {
+      window.removeEventListener("umesc_content_updated", handleReload);
+      window.removeEventListener("storage", handleReload);
+    };
+  }, []);
 
   const eventFilters = ["TODOS", "Estadual", "Regional", "Oração", "Reunião"];
 
@@ -22,12 +46,15 @@ export default function ResourceCenter() {
   };
 
   const handleSimulateDownload = (docId: string, docTitle: string) => {
-    // Increase download counter in local memory state
-    setDocuments((prevDocs) =>
-      prevDocs.map((doc) =>
+    // Increase download counter in local memory state and persist
+    setDocuments((prevDocs) => {
+      const updated = prevDocs.map((doc) =>
         doc.id === docId ? { ...doc, downloadCount: doc.downloadCount + 1 } : doc
-      )
-    );
+      );
+      localStorage.setItem("umesc_documents", JSON.stringify(updated));
+      window.dispatchEvent(new Event("umesc_content_updated"));
+      return updated;
+    });
 
     // Set interactive visual success badge
     setDownloadedDocId(docId);
@@ -126,29 +153,44 @@ export default function ResourceCenter() {
                       </div>
                     </div>
 
-                    {/* Direct clickable TXT simulator to mock PDF files */}
-                    <a
-                      href={`data:text/plain;charset=utf-8,${encodeURIComponent(`DOCUMENTO OFICIAL DA AGENCIA MISSIONARIA UMESC (SC)\n=========================================\n\nTitulo do Documento: ${doc.title}\nCategoria: ${doc.category}\nData de Publicacao: ${doc.publishedDate}\n\n[SIMULACAO] Este arquivo representa o download oficial direto do seletor da UMESC de Santa Catarina. Todo o processamento e download e auditado sob a LGPD brasileira, garantindo privacidade de dados do portador de acesso.`)}`}
-                      download={`${doc.url}`}
-                      onClick={() => handleSimulateDownload(doc.id, doc.title)}
-                      className={`px-4 py-3 rounded text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transform active:scale-95 transition-all text-center cursor-pointer ${
-                        downloadedDocId === doc.id
-                          ? "bg-emerald-600 text-white"
-                          : "bg-[#1a2a40] hover:bg-[#131f2e] text-amber-400"
-                      }`}
-                    >
-                      {downloadedDocId === doc.id ? (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 animate-scale" />
-                          <span>Pronto</span>
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-4 h-4" />
-                          <span>Baixar Ficheiro</span>
-                        </>
-                      )}
-                    </a>
+                    {(() => {
+                      const isDrive = doc.url && (doc.url.includes("drive.google.com") || doc.url.includes("docs.google.com"));
+                      const isLink = doc.url && (doc.url.startsWith("http://") || doc.url.startsWith("https://") || isDrive);
+                      const downloadHref = isLink
+                        ? doc.url
+                        : `data:text/plain;charset=utf-8,${encodeURIComponent(`DOCUMENTO OFICIAL DA AGENCIA MISSIONARIA UMESC (SC)\n=========================================\n\nTitulo do Documento: ${doc.title}\nCategoria: ${doc.category}\nData de Publicacao: ${doc.publishedDate}\n\n[SIMULACAO] Este arquivo representa o download oficial direto do seletor da UMESC de Santa Catarina. Todo o processamento e download e auditado sob a LGPD brasileira, garantindo privacidade de dados do portador de acesso.`)}`;
+
+                      return (
+                        <a
+                          href={downloadHref}
+                          download={isLink ? undefined : `${doc.url}`}
+                          target={isLink ? "_blank" : undefined}
+                          rel={isLink ? "noopener noreferrer" : undefined}
+                          onClick={() => handleSimulateDownload(doc.id, doc.title)}
+                          className={`px-4 py-3 rounded text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transform active:scale-95 transition-all text-center cursor-pointer ${
+                            downloadedDocId === doc.id
+                              ? "bg-emerald-600 text-white"
+                              : "bg-[#1a2a40] hover:bg-[#131f2e] text-amber-400"
+                          }`}
+                        >
+                          {downloadedDocId === doc.id ? (
+                            <>
+                              <CheckCircle2 className="w-4 h-4 animate-scale" />
+                              <span>Pronto</span>
+                            </>
+                          ) : (
+                            <>
+                              {isDrive ? (
+                                <ExternalLink className="w-4 h-4" />
+                              ) : (
+                                <Download className="w-4 h-4" />
+                              )}
+                              <span>{isDrive ? "Visualizar no Drive" : isLink ? "Visualizar Arquivo" : "Baixar Ficheiro"}</span>
+                            </>
+                          )}
+                        </a>
+                      );
+                    })()}
 
                   </div>
                 ))}

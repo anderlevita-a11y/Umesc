@@ -50,8 +50,22 @@ CREATE TABLE public.members (
     security_hash VARCHAR(255) UNIQUE NOT NULL, -- Assinatura hash para acesso individual
     password VARCHAR(255) DEFAULT 'umesc123'::character varying NOT NULL, 
     approved BOOLEAN DEFAULT FALSE NOT NULL, -- Status de moderação pela diretoria
+    paused BOOLEAN DEFAULT FALSE NOT NULL, -- Status de pausa das atividades
+    archived BOOLEAN DEFAULT FALSE NOT NULL, -- Cadastro arquivado / histórico
+    photo_url TEXT DEFAULT ''::text, -- Foto credential 3x4 do associado
+    is_director BOOLEAN DEFAULT FALSE NOT NULL, -- Novo: Permite login administrativo de membros da diretoria
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- ====================================================================
+-- CASO SUA TABELA 'members' JÁ EXISTA E VOCÊ PRECISE APENAS ATUALIZAR:
+-- Execute os comandos abaixo no SQL Editor do seu Supabase:
+--
+-- ALTER TABLE public.members ADD COLUMN IF NOT EXISTS paused BOOLEAN DEFAULT FALSE NOT NULL;
+-- ALTER TABLE public.members ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE NOT NULL;
+-- ALTER TABLE public.members ADD COLUMN IF NOT EXISTS photo_url TEXT DEFAULT ''::text;
+-- ALTER TABLE public.members ADD COLUMN IF NOT EXISTS is_director BOOLEAN DEFAULT FALSE NOT NULL;
+-- ====================================================================
 
 -- Comentários descritivos da tabela members
 COMMENT ON TABLE public.members IS 'Ficha de inscrição de filiados e termos sob as regras da LGPD';
@@ -231,3 +245,72 @@ CREATE POLICY "Deleção livre para todos de inscriptions" ON public.inscription
 
 -- 17. NOTIFICAÇÃO COMPLEMENTAR DO CACHE DO ESQUEMA DO PORTGREST NO SUPABASE
 NOTIFY pgrst, 'reload schema';
+
+-- ====================================================================
+-- 18. TABELA DE DOAÇÕES E CONTROLE FINANCEIRO (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.donations (
+    id VARCHAR(55) PRIMARY KEY, -- DON-XXXXXX ou UUID
+    project_id VARCHAR(255) DEFAULT 'avulsa' NOT NULL,
+    project_name VARCHAR(255) DEFAULT 'Doação Avulsa' NOT NULL,
+    donor_name VARCHAR(255) DEFAULT 'Anônimo' NOT NULL,
+    donor_whatsapp VARCHAR(50) DEFAULT 'Não Informado' NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    payment_status VARCHAR(30) DEFAULT 'pendente' NOT NULL, -- pendente, pago, em_analise, recusado
+    payment_proof_url TEXT, -- Arquivo anexado Base64 do comprovante de transferência
+    payment_proof_name VARCHAR(255),
+    registration_date TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+COMMENT ON TABLE public.donations IS 'Gerenciamento estruturado de doações vinculadas a ações missionárias e avulsas';
+
+-- Permissões explicitadas no canal REST
+GRANT ALL ON TABLE public.donations TO anon, authenticated, service_role;
+
+-- Configurar RLS (Row Level Security)
+ALTER TABLE public.donations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de donations" ON public.donations;
+DROP POLICY IF EXISTS "Inserção livre para todos de donations" ON public.donations;
+DROP POLICY IF EXISTS "Atualização livre para todos de donations" ON public.donations;
+DROP POLICY IF EXISTS "Deleção livre para todos de donations" ON public.donations;
+
+CREATE POLICY "Leitura livre para todos de donations" ON public.donations FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de donations" ON public.donations FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de donations" ON public.donations FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de donations" ON public.donations FOR DELETE USING (true);
+
+NOTIFY pgrst, 'reload schema';
+
+
+-- ====================================================================
+-- 19. TABELA DE VOLUNTÁRIOS DA CAPELANIA (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.capelania_volunteers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    whatsapp VARCHAR(50) NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+COMMENT ON TABLE public.capelania_volunteers IS 'Gerenciamento estruturado de inscritos para o voluntariado regional da Capelania';
+
+-- Permissões explicitadas no canal REST
+GRANT ALL ON TABLE public.capelania_volunteers TO anon, authenticated, service_role;
+
+-- Configurar RLS (Row Level Security)
+ALTER TABLE public.capelania_volunteers ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de capelania_volunteers" ON public.capelania_volunteers;
+DROP POLICY IF EXISTS "Inserção livre para todos de capelania_volunteers" ON public.capelania_volunteers;
+DROP POLICY IF EXISTS "Atualização livre para todos de capelania_volunteers" ON public.capelania_volunteers;
+DROP POLICY IF EXISTS "Deleção livre para todos de capelania_volunteers" ON public.capelania_volunteers;
+
+CREATE POLICY "Leitura livre para todos de capelania_volunteers" ON public.capelania_volunteers FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de capelania_volunteers" ON public.capelania_volunteers FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de capelania_volunteers" ON public.capelania_volunteers FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de capelania_volunteers" ON public.capelania_volunteers FOR DELETE USING (true);
+
+NOTIFY pgrst, 'reload schema';
+

@@ -17,12 +17,20 @@ import LgpdPolicyBanner from "./components/LgpdPolicyBanner";
 import Footer from "./components/Footer";
 
 import { ShieldCheck, Calendar, Users, Scale, UserPlus, Info, Compass, Star } from "lucide-react";
+import { DEFAULT_CAPELANIA_SERVICES } from "./data";
+import { CapelaniaService } from "./types";
 
 export default function App() {
   const [view, setView] = useState<"public" | "dashboard" | "admin">("public");
-  const [memberDashboardInitialTab, setMemberDashboardInitialTab] = useState<"notices" | "agenda" | "structure" | "registration" | "congressos">("notices");
-  const [activeTab, setActiveTab] = useState("about");
+  const [memberDashboardInitialTab, setMemberDashboardInitialTab] = useState<"notices" | "structure" | "registration" | "congressos">("notices");
+  const [activeTab, setActiveTab ] = useState("about");
   const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
+
+  // Dynamic capelania services editable in admin portal
+  const [capelaniaServices, setCapelaniaServices] = useState<CapelaniaService[]>(() => {
+    const saved = localStorage.getItem("umesc_capelania_services");
+    return saved ? JSON.parse(saved) : DEFAULT_CAPELANIA_SERVICES;
+  });
 
   // Smooth scroll helper for public elements
   const handleScrollToSection = (elementId: string) => {
@@ -36,7 +44,7 @@ export default function App() {
     setIsDonateModalOpen(true);
   };
 
-  const handleEnterMemberDashboard = (tab: "notices" | "agenda" | "structure" | "registration" | "congressos" = "notices") => {
+  const handleEnterMemberDashboard = (tab: "notices" | "structure" | "registration" | "congressos" = "notices") => {
     setMemberDashboardInitialTab(tab);
     setView("dashboard");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -48,7 +56,7 @@ export default function App() {
     } else if (elementId === "resources") {
       handleEnterMemberDashboard("notices");
     } else if (elementId === "agenda") {
-      handleEnterMemberDashboard("agenda");
+      handleEnterMemberDashboard("notices");
     } else if (elementId === "register") {
       handleEnterMemberDashboard("registration");
     } else {
@@ -205,16 +213,16 @@ export default function App() {
 
               <div className="bg-[#121c2d] p-5 rounded-lg border border-white/5 flex items-start gap-3.5 hover:border-white/10 transition-all">
                 <div className="w-8 h-8 rounded bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold shrink-0">
-                  <Calendar className="w-4 h-4" />
+                  <Star className="w-4 h-4 text-amber-400" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs text-white uppercase tracking-wider">Agenda de Atividades</h4>
-                  <p className="text-[11px] text-slate-300 mt-1">Datas de devocionais regionais e cultos em SC.</p>
+                  <h4 className="font-bold text-xs text-white uppercase tracking-wider">Congressos Estaduais</h4>
+                  <p className="text-[11px] text-slate-300 mt-1">Inscrição em Simpósios e Encontros Oficiais.</p>
                   <button 
-                    onClick={() => handleEnterMemberDashboard("agenda")}
+                    onClick={() => handleEnterMemberDashboard("congressos")}
                     className="text-[10px] text-amber-400 font-bold hover:text-amber-500 transition-colors mt-2 uppercase tracking-wider block text-left underline decoration-amber-400/40"
                   >
-                    Consultar Agenda →
+                    Ver Congressos →
                   </button>
                 </div>
               </div>
@@ -237,64 +245,56 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                
-                {/* 1. Guarnição e Auxílio */}
-                <button
-                  onClick={() => handleEnterMemberDashboard("registration")}
-                  className="bg-[#121c2d]/20 backdrop-blur-xl p-5 rounded-lg border border-white/5 hover:border-emerald-500/35 hover:bg-[#121c2d]/35 text-left transition-all active:scale-[0.98] group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3 mb-2.5">
-                    <div className="w-8 h-8 rounded bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold text-xs group-hover:bg-emerald-500/20 transition-all">
-                      ✓
-                    </div>
-                    <h5 className="text-xs font-bold text-slate-100 uppercase tracking-wider group-hover:text-emerald-400 transition-colors">Guarnição e Auxílio</h5>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Acolhimento imediato a militares em face de estresse severo ou crises emocionais.
-                  </p>
-                  <span className="text-[10px] text-emerald-400 font-bold block mt-3 uppercase tracking-wider group-hover:underline">
-                    Fazer Inscrição / Solicitar Ajuda →
-                  </span>
-                </button>
+                {capelaniaServices.map((srv, idx) => {
+                  const borderHoverColors = [
+                    "hover:border-emerald-500/35",
+                    "hover:border-amber-500/35",
+                    "hover:border-rose-500/35"
+                  ];
+                  const badgeColors = [
+                    "bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20",
+                    "bg-amber-500/10 text-amber-400 group-hover:bg-amber-500/20",
+                    "bg-rose-500/10 text-rose-400 group-hover:bg-rose-500/20"
+                  ];
+                  const titleHoverColors = [
+                    "group-hover:text-emerald-400",
+                    "group-hover:text-amber-400",
+                    "group-hover:text-rose-400"
+                  ];
+                  const btnTextColors = [
+                    "text-emerald-400",
+                    "text-amber-400",
+                    "text-rose-400"
+                  ];
 
-                {/* 2. Literaturas de Uniforme */}
-                <button
-                  onClick={() => handleEnterMemberDashboard("notices")}
-                  className="bg-[#121c2d]/20 backdrop-blur-xl p-5 rounded-lg border border-white/7 hover:border-amber-500/35 hover:bg-[#121c2d]/35 text-left transition-all active:scale-[0.98] group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3 mb-2.5">
-                    <div className="w-8 h-8 rounded bg-amber-500/10 text-amber-400 flex items-center justify-center text-xs group-hover:bg-amber-500/20 transition-all">
-                      📖
-                    </div>
-                    <h5 className="text-xs font-bold text-slate-100 uppercase tracking-wider group-hover:text-amber-400 transition-colors">Literaturas de Uniforme</h5>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Entrega gratuita de Bíblias compactas de bolso para leitura em postos e patidas.
-                  </p>
-                  <span className="text-[10px] text-amber-400 font-bold block mt-3 uppercase tracking-wider group-hover:underline">
-                    Quadro de Avisos / Livros →
-                  </span>
-                </button>
+                  const bColor = borderHoverColors[idx % borderHoverColors.length];
+                  const bgCol = badgeColors[idx % badgeColors.length];
+                  const tColor = titleHoverColors[idx % titleHoverColors.length];
+                  const btnCol = btnTextColors[idx % btnTextColors.length];
 
-                {/* 3. Resgate e Ação Social */}
-                <button
-                  onClick={() => handleEnterMemberDashboard("agenda")}
-                  className="bg-[#121c2d]/20 backdrop-blur-xl p-5 rounded-lg border border-white/5 hover:border-rose-500/35 hover:bg-[#121c2d]/35 text-left transition-all active:scale-[0.98] group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3 mb-2.5">
-                    <div className="w-8 h-8 rounded bg-rose-500/10 text-rose-400 flex items-center justify-center text-xs group-hover:bg-rose-500/20 transition-all">
-                      ♥
-                    </div>
-                    <h5 className="text-xs font-bold text-slate-100 uppercase tracking-wider group-hover:text-rose-400 transition-colors">Resgate e Ação Social</h5>
-                  </div>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Sopões e agasalhos na serra e planalto em parcerias voluntárias catarinenses.
-                  </p>
-                  <span className="text-[10px] text-rose-400 font-bold block mt-3 uppercase tracking-wider group-hover:underline">
-                    Ver Eventos / Agenda de Cultos →
-                  </span>
-                </button>
-
+                  return (
+                    <button
+                      key={srv.id}
+                      onClick={() => handleEnterMemberDashboard(srv.tabLink)}
+                      className={`bg-[#121c2d]/20 backdrop-blur-xl p-5 rounded-lg border border-white/5 ${bColor} hover:bg-[#121c2d]/35 text-left transition-all active:scale-[0.98] group cursor-pointer`}
+                    >
+                      <div className="flex items-center gap-3 mb-2.5">
+                        <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-xs transition-all ${bgCol}`}>
+                          {srv.emoji}
+                        </div>
+                        <h5 className={`text-xs font-bold text-slate-100 uppercase tracking-wider ${tColor} transition-colors`}>
+                          {srv.title}
+                        </h5>
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed min-h-[32px]">
+                        {srv.description}
+                      </p>
+                      <span className={`text-[10px] ${btnCol} font-bold block mt-3 uppercase tracking-wider group-hover:underline`}>
+                        {srv.buttonText}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

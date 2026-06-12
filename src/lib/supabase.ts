@@ -75,6 +75,7 @@ export interface SupabaseMember {
   paused?: boolean;
   archived?: boolean;
   photo_url?: string;
+  is_director?: boolean;
 }
 
 // Convert from local model to DB model
@@ -98,7 +99,8 @@ function toSupabase(member: MemberRegistration): SupabaseMember {
     approved: member.approved ?? false,
     paused: member.paused ?? false,
     archived: member.archived ?? false,
-    photo_url: member.photoUrl
+    photo_url: member.photoUrl,
+    is_director: member.isDirector ?? false
   };
 }
 
@@ -123,7 +125,8 @@ function fromSupabase(dbMember: any): MemberRegistration {
     approved: dbMember.approved ?? false,
     paused: dbMember.paused ?? false,
     archived: dbMember.archived ?? false,
-    photoUrl: dbMember.photo_url || dbMember.photoUrl || ""
+    photoUrl: dbMember.photo_url || dbMember.photoUrl || "",
+    isDirector: dbMember.is_director ?? false
   };
 }
 
@@ -176,7 +179,8 @@ export const membersService = {
       ...member,
       approved: member.approved ?? false, // Default all new members to unapproved / locked
       paused: member.paused ?? false,
-      archived: member.archived ?? false
+      archived: member.archived ?? false,
+      isDirector: member.isDirector ?? false
     };
     if (isSupabaseConfigured && supabase) {
       try {
@@ -186,12 +190,13 @@ export const membersService = {
           .insert([dbRecord])
           .select();
 
-        if (error && (error.code === "PGRST204" || (error.message && (error.message.includes("paused") || error.message.includes("archived") || error.message.includes("photo_url"))))) {
+        if (error && (error.code === "PGRST204" || (error.message && (error.message.includes("is_director") || error.message.includes("paused") || error.message.includes("archived") || error.message.includes("photo_url"))))) {
           console.warn("Colunas específicas não encontradas no Supabase. Retentando inserção...");
           const cleanedRecord = { ...dbRecord };
           delete (cleanedRecord as any).paused;
           delete (cleanedRecord as any).archived;
           delete (cleanedRecord as any).photo_url;
+          delete (cleanedRecord as any).is_director;
           const retryRes = await supabase
             .from("members")
             .insert([cleanedRecord])
@@ -358,21 +363,23 @@ export const membersService = {
         if (updatedFields.password !== undefined) dbFields.password = updatedFields.password;
         if (updatedFields.approved !== undefined) dbFields.approved = updatedFields.approved;
         if (updatedFields.rgMilitar !== undefined) dbFields.rg_militar = updatedFields.rgMilitar;
-         if (updatedFields.paused !== undefined) dbFields.paused = updatedFields.paused;
+        if (updatedFields.paused !== undefined) dbFields.paused = updatedFields.paused;
         if (updatedFields.archived !== undefined) dbFields.archived = updatedFields.archived;
         if (updatedFields.photoUrl !== undefined) dbFields.photo_url = updatedFields.photoUrl;
+        if (updatedFields.isDirector !== undefined) dbFields.is_director = updatedFields.isDirector;
 
         let { error } = await supabase
           .from("members")
           .update(dbFields)
           .eq("security_hash", securityHash);
 
-        if (error && (error.code === "PGRST204" || (error.message && (error.message.includes("paused") || error.message.includes("archived") || error.message.includes("photo_url"))))) {
+        if (error && (error.code === "PGRST204" || (error.message && (error.message.includes("is_director") || error.message.includes("paused") || error.message.includes("archived") || error.message.includes("photo_url"))))) {
           console.warn("Colunas específicas não encontradas no Supabase. Retentando atualização...");
           const cleanedDbFields = { ...dbFields };
           delete cleanedDbFields.paused;
           delete cleanedDbFields.archived;
           delete cleanedDbFields.photo_url;
+          delete cleanedDbFields.is_director;
           
           const retryRes = await supabase
             .from("members")
@@ -417,27 +424,59 @@ export const adminService = {
     
     if (isSupabaseConfigured && supabase) {
       try {
-        const { data, error } = await supabase
+        // A. Primeiro tentar login de Administrador
+        const { data: adminData, error: adminError } = await supabase
           .from("admins")
           .select("*")
           .eq("email", cleanMail)
           .eq("password", passwordPlain)
           .limit(1);
 
-        if (error) {
-          console.error("Erro ao autenticar administrador no Supabase:", error.message);
-          throw error;
+        if (!adminError && adminData && adminData.length > 0) {
+          return true;
         }
 
-        if (data && data.length > 0) {
+        // B. Segundo tentar login de Membros com nível de diretoria e devidamente aprovados
+        const { data: memberData, error: memberError } = await supabase
+          .from("members")
+          .select("*")
+          .eq("email", cleanMail)
+          .eq("password", passwordPlain)
+          .eq("is_director", true)
+          .eq("approved", true)
+          .eq("paused", false)
+          .limit(1);
+
+        if (!memberError && memberData && memberData.length > 0) {
           return true;
         }
       } catch (err) {
-        console.warn("Falha de autenticação contra o Supabase. Utilizando credencial local contingencial.", err);
+        console.warn("Falha de autenticação contra o Supabase. Verificando contingência...", err);
       }
     }
 
-    // Default Contingency Fallback
+    // C. Contingência de backup local para o login mestre e membros locais promovidos
+    const saved = localStorage.getItem("umesc_sim_members");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed)) {
+          const matched = parsed.find((m) => 
+            m.email.toLowerCase().trim() === cleanMail && 
+            m.password === passwordPlain && 
+            m.isDirector === true && 
+            m.approved === true &&
+            !m.paused
+          );
+          if (matched) {
+            return true;
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
     return cleanMail === "admin@umesc.org.br" && passwordPlain === "adminUMESC2026";
   },
 
@@ -487,9 +526,22 @@ export const adminService = {
         }
       }
 
+      // 3. Check schema for donations
+      const { error: donationsError } = await supabase.from("donations").select("id").limit(1);
+      if (donationsError) {
+        const dberr = donationsError.message.toLowerCase();
+        if (donationsError.code === "PGRST116" || dberr.includes("relation") && dberr.includes("does not exist") || dberr.includes("não existe")) {
+          return {
+            active: true,
+            details: "Conectado com sucesso! As tabelas de membros estão ativas, mas a tabela 'donations' está ausente no seu banco de dados Supabase.",
+            tablesExist: false
+          };
+        }
+      }
+
       return { 
         active: true, 
-        details: "Conexão estabelecida com sucesso! Todas as tabelas ('members' e 'admins') estão operando plenamente no Supabase.", 
+        details: "Conexão estabelecida com sucesso! Todas as tabelas ('members', 'admins' e 'donations') estão operando plenamente no Supabase.", 
         tablesExist: true 
       };
     } catch (err: any) {
@@ -501,4 +553,123 @@ export const adminService = {
     }
   }
 };
+
+export interface CapelaniaVolunteer {
+  id?: string;
+  name: string;
+  whatsapp: string;
+  city: string;
+  createdAt?: string;
+}
+
+export const capelaniaVolunteersService = {
+  async getVolunteers(): Promise<CapelaniaVolunteer[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("capelania_volunteers")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Erro ao carregar voluntários do Supabase:", error.message);
+          throw error;
+        }
+
+        if (data) {
+          return data.map((v: any) => ({
+            id: v.id?.toString(),
+            name: v.name,
+            whatsapp: v.whatsapp,
+            city: v.city,
+            createdAt: v.created_at || v.createdAt
+          }));
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para voluntários da capelania. Usando localStorage de contingência.", err);
+      }
+    }
+
+    const saved = localStorage.getItem("umesc_capelania_volunteers");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  },
+
+  async createVolunteer(volunteer: CapelaniaVolunteer): Promise<CapelaniaVolunteer> {
+    const newVol = {
+      ...volunteer,
+      id: volunteer.id || `VOL-${Math.floor(Math.random() * 900000 + 100000)}`,
+      createdAt: volunteer.createdAt || new Date().toISOString()
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          name: newVol.name,
+          whatsapp: newVol.whatsapp,
+          city: newVol.city,
+          created_at: newVol.createdAt
+        };
+
+        const { data, error } = await supabase
+          .from("capelania_volunteers")
+          .insert([dbRecord])
+          .select();
+
+        if (error) {
+          console.error("Erro ao criar voluntário no Supabase:", error.message);
+          throw error;
+        }
+
+        if (data && data.length > 0) {
+          return {
+            id: data[0].id?.toString(),
+            name: data[0].name,
+            whatsapp: data[0].whatsapp,
+            city: data[0].city,
+            createdAt: data[0].created_at
+          };
+        }
+      } catch (err) {
+        console.warn("Falha de gravação no Supabase para voluntário. Gravando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getVolunteers();
+    const updated = [newVol, ...list];
+    localStorage.setItem("umesc_capelania_volunteers", JSON.stringify(updated));
+    return newVol;
+  },
+
+  async deleteVolunteer(id: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from("capelania_volunteers")
+          .delete()
+          .eq("id", id);
+
+        if (error) {
+          console.error("Erro ao deletar voluntário no Supabase:", error.message);
+          throw error;
+        }
+        return true;
+      } catch (err) {
+        console.warn("Falha de deleção no Supabase para voluntário. Deletando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getVolunteers();
+    const filtered = list.filter((v) => v.id !== id && v.id?.toString() !== id);
+    localStorage.setItem("umesc_capelania_volunteers", JSON.stringify(filtered));
+    return true;
+  }
+};
+
 

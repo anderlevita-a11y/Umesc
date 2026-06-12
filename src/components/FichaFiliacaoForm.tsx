@@ -551,6 +551,64 @@ export default function FichaFiliacaoForm({
         {/* Left Side: Inputs Form */}
         <div className="lg:col-span-5 space-y-5">
           
+          {/* Dynamic Pending/Incomplete Fields Tracker */}
+          {(() => {
+            const missing = [];
+            if (!lotacaoMunicipio.trim()) missing.push("Lotação Município");
+            if (!matricula.trim()) missing.push("Matrícula Militar");
+            if (!addressRua.trim()) missing.push("Rua / Avenida / Número");
+            if (!addressBairro.trim()) missing.push("Bairro (Residência)");
+            if (!addressCep.trim()) missing.push("CEP (Residência)");
+            if (!addressCidade.trim()) missing.push("Cidade (Residência)");
+            if (!contactCidade.trim()) missing.push("Cidade de Contatos");
+            if (!contactFones.trim()) missing.push("Telefones / Fones");
+            if (!contactEmail.trim()) missing.push("E-mail de Contato");
+            if (!birthDate.trim()) missing.push("Data de Nascimento");
+            if (assinaturaType === "type" && !assinaturaNome.trim()) missing.push("Nome Assinatura Eletrônica");
+            if (assinaturaType === "draw" && !hasDrawn) missing.push("Desenho da Assinatura");
+            if (!consent) missing.push("Aceitar Termos e Consentimento");
+
+            if (missing.length > 0) {
+              return (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert className="w-4.5 h-4.5 text-amber-500 shrink-0" />
+                    <span className="text-xs font-extrabold text-amber-400 uppercase tracking-wide font-mono">
+                      Campos Pendentes para Filiação ({missing.length})
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 leading-normal">
+                    Faltam preencher as seguintes informações obrigatórias para poder assinar e enviar o contrato digital UMESC:
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 px-1 py-1">
+                    {missing.map((field, index) => (
+                      <div key={index} className="flex items-center gap-1.5 text-[11px] text-amber-200/85 font-semibold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 shadow-md animate-pulse"></span>
+                        <span className="truncate">{field}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            } else {
+              return (
+                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/15 shrink-0">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block text-[11px] font-black uppercase text-emerald-400 tracking-wider">
+                      Tudo Pronto para Assinar!
+                    </span>
+                    <span className="block text-[10px] text-slate-400 mt-0.5 font-semibold">
+                      Todos os dados obrigatórios foram inseridos. Marque o termo de declaração abaixo e envie a ficha.
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+          })()}
+
           {/* Section: Organ e Categoria */}
           <div className="p-4 bg-[#111d2d] rounded-xl border border-white/5 space-y-4">
             <h5 className="text-[10px] font-black text-amber-400 uppercase tracking-widest font-display">1. Corporação & Categoria</h5>
@@ -591,61 +649,90 @@ export default function FichaFiliacaoForm({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Lotação Município</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 flex justify-between items-center">
+                    <span>Lotação Município</span>
+                    {!lotacaoMunicipio.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
                   <input
                     type="text"
                     value={lotacaoMunicipio}
                     onChange={(e) => setLotacaoMunicipio(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b1320] text-white border border-white/10 rounded-lg text-xs"
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !lotacaoMunicipio.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
                     placeholder="Ex: Florianópolis"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Matrícula Militar</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 flex justify-between items-center">
+                    <span>Matrícula Militar</span>
+                    {!matricula.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
                   <input
                     type="text"
                     value={matricula}
                     onChange={(e) => setMatricula(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b1320] text-white border border-white/10 rounded-lg text-xs"
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !matricula.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
                     placeholder="Matrícula"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Vínculo</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 flex justify-between items-center">
+                    <span>Vínculo</span>
+                    {!vinculo.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">*</span>}
+                  </label>
                   <input
                     type="text"
                     value={vinculo}
                     onChange={(e) => setVinculo(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b1320] text-white border border-white/10 rounded-lg text-xs"
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !vinculo.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5 flex justify-between items-center">
+                    <span>Nascimento</span>
+                    {!birthDate.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
+                  <input
+                    type="date"
+                    value={birthDate}
+                    onChange={(e) => setBirthDate(e.target.value)}
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !birthDate.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
                   />
                 </div>
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1.5">Gênero</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <button
                       type="button"
                       onClick={() => setGenero("M")}
-                      className={`py-1.5 text-xs font-bold rounded border text-center transition-all cursor-pointer ${
+                      className={`py-2 text-[10px] font-bold rounded border text-center transition-all cursor-pointer ${
                         genero === "M"
                           ? "bg-teal-500 text-slate-950 border-transparent font-black"
                           : "bg-[#0b1320] text-slate-300 border-white/5"
                       }`}
                     >
-                      Masculino (M)
+                      M
                     </button>
                     <button
                       type="button"
                       onClick={() => setGenero("F")}
-                      className={`py-1.5 text-xs font-bold rounded border text-center transition-all cursor-pointer ${
+                      className={`py-2 text-[10px] font-bold rounded border text-center transition-all cursor-pointer ${
                         genero === "F"
                           ? "bg-teal-500 text-slate-950 border-transparent font-black"
                           : "bg-[#0b1320] text-slate-300 border-white/5"
                       }`}
                     >
-                      Feminino (F)
+                      F
                     </button>
                   </div>
                 </div>
@@ -681,38 +768,53 @@ export default function FichaFiliacaoForm({
 
           {/* Section: Residence Address */}
           <div className="p-4 bg-[#111d2d] rounded-xl border border-white/5 space-y-4">
-            <h5 className="text-[10px] font-black text-amber-400 uppercase tracking-widest font-display">2. Endereço Residencial</h5>
+            <h5 className="text-[10px] font-black text-amber-400 uppercase tracking-widest font-display">2. Endereço & Contatos</h5>
             
             <div className="space-y-3.5">
               <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rua / Avenida / Número</label>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex justify-between items-center">
+                  <span>Rua / Avenida / Número</span>
+                  {!addressRua.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                </label>
                 <input
                   type="text"
                   value={addressRua}
                   onChange={(e) => setAddressRua(e.target.value)}
-                  className="w-full px-3 py-2 bg-[#0b1320] text-white border border-white/10 rounded-lg text-xs"
+                  className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                    !addressRua.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                  }`}
                   placeholder="Ex: Av. Beira Mar, 1000, Apto 302"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Bairro</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex justify-between items-center">
+                    <span>Bairro</span>
+                    {!addressBairro.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
                   <input
                     type="text"
                     value={addressBairro}
                     onChange={(e) => setAddressBairro(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b1320] text-white border border-white/10 rounded-lg text-xs"
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !addressBairro.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
                     placeholder="Ex: Centro"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">CEP</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex justify-between items-center">
+                    <span>CEP</span>
+                    {!addressCep.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
                   <input
                     type="text"
                     value={addressCep}
                     onChange={(e) => setAddressCep(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b1320] text-white border border-white/10 rounded-lg text-xs"
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !addressCep.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
                     placeholder="Ex: 88000-000"
                   />
                 </div>
@@ -720,21 +822,64 @@ export default function FichaFiliacaoForm({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cidade</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex justify-between items-center">
+                    <span>Cidade (Residência)</span>
+                    {!addressCidade.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
                   <input
                     type="text"
                     value={addressCidade}
                     onChange={(e) => setAddressCidade(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b1320] text-white border border-white/10 rounded-lg text-xs"
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !addressCidade.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Cidade Contatos</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex justify-between items-center">
+                    <span>Cidade Contatos</span>
+                    {!contactCidade.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
                   <input
                     type="text"
                     value={contactCidade}
                     onChange={(e) => setContactCidade(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0b1320] text-white border border-white/10 rounded-lg text-xs"
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !contactCidade.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex justify-between items-center">
+                    <span>Telefone / Fone</span>
+                    {!contactFones.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={contactFones}
+                    onChange={(e) => setContactFones(e.target.value)}
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !contactFones.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
+                    placeholder="Ex: (48) 99999-9999"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex justify-between items-center">
+                    <span>E-mail</span>
+                    {!contactEmail.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
+                  <input
+                    type="email"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    className={`w-full px-3 py-2 bg-[#0b1320] text-white border rounded-lg text-xs transition-all ${
+                      !contactEmail.trim() ? "border-amber-500/30 focus:border-amber-500" : "border-white/10 focus:border-teal-500"
+                    }`}
+                    placeholder="Ex: militar@example.com"
                   />
                 </div>
               </div>
@@ -877,7 +1022,10 @@ export default function FichaFiliacaoForm({
 
               {assinaturaType === "type" ? (
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Nome Completo para Assinatura</label>
+                  <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1 flex justify-between items-center">
+                    <span>Nome Completo para Assinatura</span>
+                    {!assinaturaNome.trim() && <span className="text-amber-500 font-extrabold font-mono text-[9px] animate-pulse">* PENDENTE</span>}
+                  </label>
                   <input
                     type="text"
                     value={assinaturaNome}

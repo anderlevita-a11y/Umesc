@@ -5,9 +5,82 @@
 
 import React, { useState, useEffect } from "react";
 import { INITIAL_PROJECTS } from "../data";
-import { Project } from "../types";
-import { Heart, Coins, ArrowRight, X, Copy, Check, ShieldCheck, Mail, ArrowUpRight, HelpCircle, UserCheck } from "lucide-react";
+import { Project, Donation } from "../types";
+import { Heart, Coins, ArrowRight, X, Copy, Check, ShieldCheck, Mail, ArrowUpRight, HelpCircle, UserCheck, Paperclip } from "lucide-react";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
+import { donationsService } from "../lib/donationService.ts";
+
+// Helper to generate a compliant BR Code / Copy-Pastable PIX String with CRC16
+function generatePixString(pixKey: string, amount: number, receiverName: string): string {
+  if (!pixKey) return "";
+  if (pixKey.startsWith("000201")) {
+    return pixKey;
+  }
+
+  const formatParam = (id: string, value: string): string => {
+    const len = value.length.toString().padStart(2, "0");
+    return `${id}${len}${value}`;
+  };
+
+  const cleanKey = pixKey.trim();
+  const cleanName = (receiverName || "UMESC")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // remove accents
+    .replace(/[^a-zA-Z0-9 ]/g, "") // alphanumeric only
+    .slice(0, 25) // limits length
+    .trim()
+    .toUpperCase();
+
+  // 1. Payload Format Indicator (ID 00)
+  let payload = formatParam("00", "01");
+
+  // 2. Merchant Account Information (ID 26)
+  const merchantAccInfo_GUI = formatParam("00", "br.gov.bcb.pix");
+  const merchantAccInfo_key = formatParam("01", cleanKey);
+  const merchantAccountInfo = formatParam("26", merchantAccInfo_GUI + merchantAccInfo_key);
+  payload += merchantAccountInfo;
+
+  // 3. Merchant Category Code (ID 52)
+  payload += formatParam("52", "0000");
+
+  // 4. Transaction Currency (ID 53) - 986 for BRL
+  payload += formatParam("53", "986");
+
+  // 5. Transaction Amount (ID 54)
+  payload += formatParam("54", amount.toFixed(2));
+
+  // 6. Country Code (ID 58)
+  payload += formatParam("58", "BR");
+
+  // 7. Merchant Name (ID 59)
+  payload += formatParam("59", cleanName || "UMESC");
+
+  // 8. Merchant City (ID 60)
+  payload += formatParam("60", "FLORIANOPOLIS");
+
+  // 9. Additional Data Field (ID 62)
+  const txid = formatParam("05", "***");
+  payload += formatParam("62", txid);
+
+  // 10. CRC16 Flag (ID 63)
+  payload += "6304";
+
+  // Cyclic Redundancy Check (CRC16 CCITT)
+  let crc = 0xFFFF;
+  for (let i = 0; i < payload.length; i++) {
+    crc ^= payload.charCodeAt(i) << 8;
+    for (let j = 0; j < 8; j++) {
+      if ((crc & 0x8000) !== 0) {
+        crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+      } else {
+        crc = (crc << 1) & 0xFFFF;
+      }
+    }
+  }
+
+  const crcString = crc.toString(16).toUpperCase().padStart(4, "0");
+  return `${payload}${crcString}`;
+}
 
 interface ProjectsListProps {
   isDonateModalOpen: boolean;
@@ -53,8 +126,26 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
   const [donateAmount, setDonateAmount] = useState<number>(50);
   const [customAmount, setCustomAmount] = useState<string>("");
   const [donorName, setDonorName] = useState<string>("");
-  const [donorEmail, setDonorEmail] = useState<string>("");
+  const [donorWhatsapp, setDonorWhatsapp] = useState<string>("");
+  const [selectedProofFile, setSelectedProofFile] = useState<File | null>(null);
+  const [proofFileName, setProofFileName] = useState<string>("");
+  const [proofFileBase64, setProofFileBase64] = useState<string>("");
+  const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
   const [lgpdDonateConsent, setLgpdDonateConsent] = useState(false);
+
+  const handleProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedProofFile(file);
+      setProofFileName(file.name);
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setProofFileBase64(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Volunteering active triggers
   const [volunteeringProject, setVolunteeringProject] = useState<Project | null>(null);
@@ -86,6 +177,10 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
     setActiveProject(project);
     setDonationSuccess(false);
     setSimulationSummary(null);
+    setDonorWhatsapp("");
+    setSelectedProofFile(null);
+    setProofFileName("");
+    setProofFileBase64("");
     setLgpdDonateConsent(false);
     setIsDonateModalOpen(true);
   };
@@ -98,33 +193,61 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
     setLgpdVolConsent(false);
   };
 
-  const handleCopyPixString = () => {
+  const getDynamicPixString = () => {
     const finalAmount = customAmount ? parseFloat(customAmount) : donateAmount;
-    const pixString = `00020126580014BR.GOV.BCB.PIX0114umesc@corpmil.org5204000053039865405${finalAmount.toFixed(2)}5802BR5905UMESC6009FLORIANO62070503***`;
-    navigator.clipboard.writeText(pixString);
+    const amountVal = isNaN(finalAmount) || finalAmount <= 0 ? 50.00 : finalAmount;
+    return generatePixString("umesc@corpmil.org", amountVal, "UMESC SC");
+  };
+
+  const handleCopyPixString = () => {
+    const pixStr = getDynamicPixString();
+    navigator.clipboard.writeText(pixStr);
     setCopiedKey(true);
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
-  const handleConfirmDonate = (e: React.FormEvent) => {
+  const handleConfirmDonate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!lgpdDonateConsent) return;
 
     const finalAmount = customAmount ? parseFloat(customAmount) : donateAmount;
     if (!finalAmount || finalAmount <= 0) return;
 
-    // Simulate record encryption
+    setIsSubmittingDonation(true);
+    const mockRefId = `DON-2026-${Math.floor(1000 + Math.random() * 9000)}`;
     const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-    const mockRefId = `DOA-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    setSimulationSummary({
+    const newDonation: Omit<Donation, "registrationDate"> = {
       id: mockRefId,
+      projectId: activeProject?.id || "avulsa",
+      projectName: activeProject?.title || "Doação Avulsa",
+      donorName: donorName.trim() || "Anônimo",
+      donorWhatsapp: donorWhatsapp.trim() || "Não Informado",
       amount: finalAmount,
-      projectTitle: activeProject?.title || "Missão Geral",
-      date: new Date().toLocaleDateString("pt-BR"),
-      authCode: `SHA256-${code}`
-    });
-    setDonationSuccess(true);
+      paymentStatus: "em_analise",
+      paymentProofUrl: proofFileBase64 || "",
+      paymentProofName: proofFileName || ""
+    };
+
+    try {
+      await donationsService.createDonation(newDonation);
+
+      setSimulationSummary({
+        id: mockRefId,
+        amount: finalAmount,
+        projectTitle: activeProject?.title || "Doação Avulsa",
+        date: new Date().toLocaleDateString("pt-BR"),
+        authCode: `SHA256-${code}`
+      });
+
+      // Dispara o evento de sincronização que atualiza os outros blocos na tela
+      window.dispatchEvent(new Event("umesc_content_updated"));
+      setDonationSuccess(true);
+    } catch (err) {
+      console.error("Erro ao registrar doação:", err);
+    } finally {
+      setIsSubmittingDonation(false);
+    }
   };
 
   const handleConfirmVolunteer = (e: React.FormEvent) => {
@@ -391,8 +514,8 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
 
       {/* Renders Donation Modal Popup */}
       {isDonateModalOpen && activeProject && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm shadow-2xl overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 w-full max-w-lg shadow-2xl text-white my-8">
+        <div className="fixed inset-0 z-50 flex justify-center items-start p-4 bg-slate-950/90 backdrop-blur-sm shadow-2xl overflow-y-auto py-6 sm:py-12">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 w-full max-w-lg shadow-2xl text-white my-auto">
             
             {/* Modal header */}
             <div className="flex justify-between items-center pb-4 border-b border-slate-850 mb-5">
@@ -467,15 +590,40 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
                   </div>
 
                   <div>
-                    <label className="block text-xs text-slate-400 uppercase font-bold mb-1">Seu E-mail:</label>
+                    <label className="block text-xs text-slate-400 uppercase font-bold mb-1">Seu WhatsApp de Contato:</label>
                     <input 
-                      type="email"
+                      type="tel"
                       required
-                      value={donorEmail}
-                      onChange={(e) => setDonorEmail(e.target.value)}
-                      placeholder="Para confirmação e recibo" 
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-lg px-3 py-2 text-sm outline-none"
+                      value={donorWhatsapp}
+                      onChange={(e) => setDonorWhatsapp(e.target.value)}
+                      placeholder="Ex: (48) 99999-9999" 
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-lg px-3 py-2 text-sm outline-none font-mono text-white"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-slate-400 uppercase font-bold mb-1 flex items-center gap-1">
+                      <Paperclip className="w-3.5 h-3.5 text-amber-500" /> Anexar Comprovante PIX/Transferência (Opcional):
+                    </label>
+                    <div className="relative border border-dashed border-slate-800 rounded-lg p-3 bg-slate-950/40 hover:bg-slate-950 transition-colors flex flex-col items-center justify-center text-center">
+                      <input 
+                        type="file" 
+                        accept="image/*,application/pdf"
+                        onChange={handleProofFileChange}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                      {proofFileName ? (
+                        <div className="space-y-1">
+                          <p className="text-xs text-emerald-400 font-semibold truncate max-w-[280px]">✓ {proofFileName}</p>
+                          <p className="text-[10px] text-slate-500">Clique ou arraste outro para alterar</p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="text-xs text-slate-350 font-medium	">Toque para selecionar imagem ou PDF</p>
+                          <p className="text-[10px] text-slate-500 font-mono mt-0.5">Formatos aceitos: JPG, PNG, PDF</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <label className="flex items-center gap-2 cursor-pointer pt-1">
@@ -489,7 +637,7 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
                       }}
                       className="accent-amber-500"
                     />
-                    <span className="text-xs text-slate-400">Desejo doar de forma 100% Anônima para o público</span>
+                    <span className="text-xs text-slate-450 text-slate-400">Desejo doar de forma 100% Anônima para o público</span>
                   </label>
                 </div>
 
@@ -498,7 +646,7 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
                   
                   <div className="flex gap-4 items-center mb-3">
                     {/* QR Code de Doação oficial via Supabase */}
-                    <div className="w-16 h-16 bg-white rounded border border-slate-800 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                    <div className="w-32 h-32 bg-white rounded border border-slate-800 p-1 flex items-center justify-center shrink-0 overflow-hidden">
                       <img 
                         src="https://qndjkphfsejuqopmfgas.supabase.co/storage/v1/object/public/qr%20code%20pix%20entidade/PIX_UMESC_2023.jpeg" 
                         alt="QR Code PIX UMESC" 
@@ -518,7 +666,7 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
                     onClick={handleCopyPixString}
                     className="w-full flex items-center justify-between px-3 py-2 rounded bg-slate-905 border border-slate-800 text-xs font-mono text-slate-350 hover:bg-slate-800 cursor-pointer"
                   >
-                    <span className="truncate max-w-[300px]">copiar_chave_copia_e_cola_pix_umesc_sc_projeto</span>
+                    <span className="truncate max-w-[300px] text-left opacity-90 select-all" title={getDynamicPixString()}>{getDynamicPixString()}</span>
                     {copiedKey ? (
                       <span className="text-emerald-400 font-bold text-[10px] flex items-center gap-1"><Check className="w-3 h-3" /> Copiado!</span>
                     ) : (
@@ -539,7 +687,7 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
                       className="mt-1 accent-amber-500 rounded"
                     />
                     <span className="text-[11px] text-slate-400 leading-normal">
-                      <strong>Termo do Doador (LGPD):</strong> Dou consentimento livre e inequívoco para tratamento e guarda estritamente confidencial dos dados de e-mail e identificação unicamente para conferência de caixa missionária externa, em total conformidade estatutária e conforme a LGPD brasileira.
+                      <strong>Termo do Doador (LGPD):</strong> Dou consentimento livre e inequívoco para tratamento e guarda estritamente confidencial dos dados de WhatsApp, identificação e arquivo de comprovante unicamente para conferência de caixa missionária externa, em total conformidade estatutária e conforme a LGPD brasileira.
                     </span>
                   </label>
                 </div>
@@ -556,38 +704,46 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
                     <button 
                       type="submit"
                       id="submit-modal-btn-donate"
-                      disabled={!lgpdDonateConsent}
-                      className="w-full sm:w-2/3 py-3.5 font-bold uppercase tracking-wider text-xs rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:opacity-40 transition-all cursor-pointer text-center"
+                      disabled={!lgpdDonateConsent || isSubmittingDonation}
+                      className="w-full sm:w-2/3 py-3.5 font-bold uppercase tracking-wider text-xs rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:opacity-40 transition-all cursor-pointer text-center font-bold flex items-center justify-center gap-2"
                     >
-                      Simular Confirmação de Transferência / PIX
+                      {isSubmittingDonation ? (
+                        <>
+                          <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
+                          Registrando...
+                        </>
+                      ) : (
+                        "Registrar e Enviar Comprovante"
+                      )}
                     </button>
                   </div>
-                  <p className="text-[10px] text-slate-505 text-center font-mono">Simulador protegido com blindagem criptográfica</p>
+                  <p className="text-[10px] text-slate-500 text-center font-mono">Registro oficial enviado para o painel administrativo</p>
                 </div>
 
               </form>
             ) : (
               <div className="text-center py-6 space-y-4">
-                <div className="w-16 h-16 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-550/30 flex items-center justify-center text-3xl mx-auto">
+                <div className="w-16 h-16 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-3xl mx-auto">
                   ✓
                 </div>
                 
                 <div className="space-y-1">
-                  <h4 className="text-xl font-black">Obrigado por sua Semente!</h4>
-                  <p className="text-xs text-slate-400">Sua contribuição simulação foi guardada com conformidade e segurança fiscal.</p>
+                  <h4 className="text-xl font-black text-amber-500">Agradecemos, sua doação foi registrada com sucesso!</h4>
                 </div>
 
                 {/* Printable receipt */}
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 font-mono text-xs text-left text-slate-350 space-y-2 max-w-sm mx-auto">
                   <div className="text-[9px] text-amber-500 font-bold uppercase pb-1 border-b border-slate-800 flex justify-between">
                     <span>DOC. COMERCIAL INTERNO</span>
-                    <span className="text-emerald-400">PROTEÇÃO LGPD ATIVA</span>
+                    <span className="text-emerald-400">DOAÇÃO REGISTRADA</span>
                   </div>
                   <div>ID Transação: {simulationSummary?.id}</div>
                   <div>Destinação: {simulationSummary?.projectTitle}</div>
                   <div>Doador: {donorName || "Anônimo"}</div>
-                  <div>Valor Semado: R$ {simulationSummary?.amount.toFixed(2)}</div>
+                  <div>WhatsApp: {donorWhatsapp || "Não Informado"}</div>
+                  <div>Valor Semeado: R$ {simulationSummary?.amount.toFixed(2)}</div>
                   <div>Data Registro: {simulationSummary?.date}</div>
+                  {proofFileName && <div className="text-emerald-400">Comprovante: {proofFileName}</div>}
                   <div className="truncate">Integridade: {simulationSummary?.authCode}</div>
                   <div className="text-[10px] text-slate-500 mt-2 italic text-center text-slate-400 uppercase">Agradecemos de coração a sua parceria missionária!</div>
                 </div>

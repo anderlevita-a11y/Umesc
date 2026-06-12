@@ -28,13 +28,16 @@ import {
   ChevronRight, 
   AlertCircle,
   BookOpen,
-  UploadCloud
+  UploadCloud,
+  ExternalLink,
+  Compass
 } from "lucide-react";
 import { MemberRegistration, Coordinator, Announcement, ScheduleEvent, DocumentFile, FichaFiliacao } from "../types";
 import { generateFichaPdf } from "../lib/fichaPdfHelper.ts";
 import FichaFiliacaoForm from "./FichaFiliacaoForm.tsx";
 import PlanoLeituraBiblica from "./PlanoLeituraBiblica.tsx";
 import CongressoInscricaoMembro from "./CongressoInscricaoMembro.tsx";
+import CapelaniaVolunteeringForm from "./CapelaniaVolunteeringForm.tsx";
 import { membersService, isSupabaseConfigured } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { 
@@ -82,7 +85,7 @@ const MONTHS_LABELS = [
 
 interface MemberDashboardProps {
   onBackToHome?: () => void;
-  initialTab?: "notices" | "agenda" | "structure" | "registration" | "filiacao" | "leitura" | "congressos";
+  initialTab?: "notices" | "structure" | "registration" | "filiacao" | "leitura" | "congressos" | "voluntariado";
   onEnterAdminMode?: () => void;
 }
 
@@ -187,7 +190,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   const [forgotSuccess, setForgotSuccess] = useState(false);
 
   // Active dashboard view selection
-  const [activeTab, setActiveTab ] = useState<"notices" | "agenda" | "structure" | "registration" | "profile" | "filiacao" | "leitura" | "congressos">(initialTab || "notices");
+  const [activeTab, setActiveTab ] = useState<"notices" | "structure" | "registration" | "profile" | "filiacao" | "leitura" | "congressos" | "voluntariado">(initialTab || "notices");
 
   // Sync tab choice
   useEffect(() => {
@@ -303,8 +306,14 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   const [calendarMonth, setCalendarMonth] = useState<number>(new Date().getMonth());
   const [selectedCalendarDay, setSelectedCalendarDay] = useState<string | null>(null);
   const [calendarViewMode, setCalendarViewMode] = useState<"calendar" | "list">("calendar");
-  const [announcements, setAnnouncements] = useState<Announcement[]>(INITIAL_ANNOUNCEMENTS);
-  const [documents, setDocuments] = useState<DocumentFile[]>(INITIAL_DOCUMENTS);
+  const [announcements, setAnnouncements] = useState<Announcement[]>(() => {
+    const saved = localStorage.getItem("umesc_announcements");
+    return saved ? JSON.parse(saved) : INITIAL_ANNOUNCEMENTS;
+  });
+  const [documents, setDocuments] = useState<DocumentFile[]>(() => {
+    const saved = localStorage.getItem("umesc_documents");
+    return saved ? JSON.parse(saved) : INITIAL_DOCUMENTS;
+  });
   const [downloadedDocId, setDownloadedDocId] = useState<string | null>(null);
   const [board, setBoard] = useState<any[]>(() => {
     const saved = localStorage.getItem("umesc_diretoria");
@@ -333,21 +342,51 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
         setCoordenadores(COORDINATORS_DATA);
       }
     };
+    const loadAnnouncements = () => {
+      const saved = localStorage.getItem("umesc_announcements");
+      if (saved) {
+        setAnnouncements(JSON.parse(saved));
+      } else {
+        setAnnouncements(INITIAL_ANNOUNCEMENTS);
+      }
+    };
+    const loadDocuments = () => {
+      const saved = localStorage.getItem("umesc_documents");
+      if (saved) {
+        setDocuments(JSON.parse(saved));
+      } else {
+        setDocuments(INITIAL_DOCUMENTS);
+      }
+    };
     loadBoard();
     loadCoordenadores();
+    loadAnnouncements();
+    loadDocuments();
     window.addEventListener("storage_content_change", loadBoard);
     window.addEventListener("storage_content_change", loadCoordenadores);
+    window.addEventListener("storage_content_change", loadAnnouncements);
+    window.addEventListener("storage_content_change", loadDocuments);
     window.addEventListener("umesc_content_updated", loadBoard);
     window.addEventListener("umesc_content_updated", loadCoordenadores);
+    window.addEventListener("umesc_content_updated", loadAnnouncements);
+    window.addEventListener("umesc_content_updated", loadDocuments);
     window.addEventListener("storage", loadBoard);
     window.addEventListener("storage", loadCoordenadores);
+    window.addEventListener("storage", loadAnnouncements);
+    window.addEventListener("storage", loadDocuments);
     return () => {
       window.removeEventListener("storage_content_change", loadBoard);
       window.removeEventListener("storage_content_change", loadCoordenadores);
+      window.removeEventListener("storage_content_change", loadAnnouncements);
+      window.removeEventListener("storage_content_change", loadDocuments);
       window.removeEventListener("umesc_content_updated", loadBoard);
       window.removeEventListener("umesc_content_updated", loadCoordenadores);
+      window.removeEventListener("umesc_content_updated", loadAnnouncements);
+      window.removeEventListener("umesc_content_updated", loadDocuments);
       window.removeEventListener("storage", loadBoard);
       window.removeEventListener("storage", loadCoordenadores);
+      window.removeEventListener("storage", loadAnnouncements);
+      window.removeEventListener("storage", loadDocuments);
     };
   }, []);
 
@@ -451,6 +490,8 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
     // Event listener for administrative or external data updates (homologation)
     const handleContentUpdated = () => {
       loadMembers();
+      const savedAnn = localStorage.getItem("umesc_announcements");
+      setAnnouncements(savedAnn ? JSON.parse(savedAnn) : INITIAL_ANNOUNCEMENTS);
     };
 
     window.addEventListener("umesc_content_updated", handleContentUpdated);
@@ -824,11 +865,14 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
 
   // Simulate downloads of fiscal sheets
   const handleSimulateDownload = (docId: string, docTitle: string) => {
-    setDocuments((prevDocs) =>
-      prevDocs.map((doc) =>
+    setDocuments((prevDocs) => {
+      const updated = prevDocs.map((doc) =>
         doc.id === docId ? { ...doc, downloadCount: doc.downloadCount + 1 } : doc
-      )
-    );
+      );
+      localStorage.setItem("umesc_documents", JSON.stringify(updated));
+      window.dispatchEvent(new Event("umesc_content_updated"));
+      return updated;
+    });
     setDownloadedDocId(docId);
     setTimeout(() => setDownloadedDocId(null), 3500);
   };
@@ -875,9 +919,39 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
         </div>
       </div>
 
-      {/* 1. LOGIN SCREEN CARD (GATE) */}
+      {/* 1. PUBLIC GUEST VOLUNTEERING PAGE OR LOGIN SCREEN CARD (GATE) */}
       {!isLoggedIn ? (
-        <div className="flex-1 flex items-center justify-center px-4 py-16 bg-[radial-gradient(circle_at_center,#15223c,transparent_75%)] relative">
+        activeTab === "voluntariado" ? (
+          <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 bg-[radial-gradient(circle_at_center,#15223c,transparent_75%)] relative">
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
+            
+            <div className="w-full max-w-xl space-y-6 z-10 animate-fadeIn">
+              <div className="flex justify-between items-center bg-[#131f2e] border border-white/5 px-5 py-3.5 rounded-xl text-xs">
+                <button 
+                  onClick={onBackToHome}
+                  className="text-slate-300 hover:text-white transition-colors flex items-center gap-1 cursor-pointer font-bold bg-transparent border-none"
+                >
+                  ← Retornar ao Início
+                </button>
+                <div className="text-slate-400 font-mono text-[10px] uppercase font-bold tracking-wider text-amber-500">
+                  Inscrição Exclusiva de Voluntários
+                </div>
+                <button 
+                  onClick={() => {
+                    setActiveTab("notices");
+                    setLoginMode("standard");
+                  }}
+                  className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded font-bold cursor-pointer transition-colors"
+                >
+                  Login de Associado
+                </button>
+              </div>
+
+              <CapelaniaVolunteeringForm loggedInUser={null} />
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center px-4 py-16 bg-[radial-gradient(circle_at_center,#15223c,transparent_75%)] relative">
           
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
 
@@ -1249,7 +1323,8 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
             </div>
           )}
 
-        </div>
+          </div>
+        )
       ) : (
         /* 2. LOGGED IN DASHBOARD WORKSPACE */
         <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
@@ -1355,38 +1430,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                 <ChevronRight className="w-4 h-4" />
               </button>
 
-              <button
-                onClick={() => {
-                  if (isRestrictedAccess) {
-                    if (isSuspended) {
-                      alert("Acesso Suspenso: Seu cadastro está pausado pela administração da UMESC. Por favor, entre em contato com a diretoria para verificação de dados e liberação de acesso.");
-                    } else {
-                      alert("Acesso Limitado: Seu cadastro ainda não foi homologado pela Diretoria Geral da UMESC. Por favor, retifique seus dados cadastrais na seção 'Meu Cadastro'.");
-                    }
-                    return;
-                  }
-                  setActiveTab("agenda");
-                }}
-                className={`w-full flex items-center justify-between p-4 rounded text-left border transition-all ${
-                  isRestrictedAccess ? "opacity-50 cursor-not-allowed bg-[#0d141e]/50 border-white/5" : ""
-                } ${
-                  activeTab === "agenda"
-                    ? "bg-amber-500 text-[#0b1329] font-black border-transparent shadow"
-                    : "bg-[#131f2e] text-slate-100 hover:text-white border-white/5 hover:bg-[#1a2a40]"
-                }`}
-                disabled={isRestrictedAccess}
-              >
-                <div className="flex items-center gap-3">
-                  <Calendar className="w-5 h-5 shrink-0" />
-                  <div>
-                    <span className="block text-sm flex items-center gap-1">
-                      Agenda Oficial {isRestrictedAccess && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
-                    </span>
-                    <span className="block text-[9px] font-normal uppercase tracking-wider opacity-85">Cultos e Reuniões Estaduais</span>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4" />
-              </button>
+
 
               <button
                 onClick={() => {
@@ -1482,6 +1526,28 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                       Estrutura & Legislação {isRestrictedAccess && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
                     </span>
                     <span className="block text-[9px] font-normal uppercase tracking-wider opacity-85">Governança & Coordenadores</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveTab("voluntariado");
+                }}
+                className={`w-full flex items-center justify-between p-4 rounded text-left border transition-all ${
+                  activeTab === "voluntariado"
+                    ? "bg-amber-500 text-[#0b1329] font-black border-transparent shadow"
+                    : "bg-[#131f2e] text-slate-100 hover:text-white border-white/5 hover:bg-[#1a2a40]"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <Compass className="w-5 h-5 shrink-0 text-amber-500 animate-pulse" />
+                  <div>
+                    <span className="block text-sm flex items-center gap-1">
+                      Voluntariado Capelania
+                    </span>
+                    <span className="block text-[9px] font-normal uppercase tracking-wider opacity-85 text-slate-350">Inscrição de Voluntários</span>
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4" />
@@ -1648,401 +1714,48 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                             </div>
                           </div>
 
-                          <a
-                            href={`data:text/plain;charset=utf-8,${encodeURIComponent(`DOCUMENTO OFICIAL DA AGENCIA MISSIONARIA UMESC (SC)\n=========================================\n\nTitulo do Documento: ${doc.title}\nCategoria: ${doc.category}\nData de Publicacao: ${doc.publishedDate}\n\n[SIMULACAO] Este arquivo representa o download oficial direto do seletor da UMESC de Santa Catarina. Todo o processamento e download e auditado sob a LGPD brasileira.`)}`}
-                            download={`${doc.url}`}
-                            onClick={() => handleSimulateDownload(doc.id, doc.title)}
-                            className={`px-3.5 py-2.5 rounded text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transform active:scale-95 transition-all text-center cursor-pointer ${
-                              downloadedDocId === doc.id
-                                ? "bg-emerald-600 text-white"
-                                : "bg-amber-500 text-slate-900 hover:bg-amber-400"
-                            }`}
-                          >
-                            {downloadedDocId === doc.id ? (
-                              <>
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>Pronto</span>
-                              </>
-                            ) : (
-                              <>
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Baixar Ficheiro</span>
-                              </>
-                            )}
-                          </a>
+                          {(() => {
+                            const isDrive = doc.url && (doc.url.includes("drive.google.com") || doc.url.includes("docs.google.com"));
+                            const isLink = doc.url && (doc.url.startsWith("http://") || doc.url.startsWith("https://") || isDrive);
+                            const downloadHref = isLink
+                              ? doc.url
+                              : `data:text/plain;charset=utf-8,${encodeURIComponent(`DOCUMENTO OFICIAL DA AGENCIA MISSIONARIA UMESC (SC)\n=========================================\n\nTitulo do Documento: ${doc.title}\nCategoria: ${doc.category}\nData de Publicacao: ${doc.publishedDate}\n\n[SIMULACAO] Este arquivo representa o download oficial direto do seletor da UMESC de Santa Catarina. Todo o processamento e download e auditado sob a LGPD brasileira.`)}`;
+
+                            return (
+                              <a
+                                href={downloadHref}
+                                download={isLink ? undefined : `${doc.url}`}
+                                target={isLink ? "_blank" : undefined}
+                                rel={isLink ? "noopener noreferrer" : undefined}
+                                onClick={() => handleSimulateDownload(doc.id, doc.title)}
+                                className={`px-3.5 py-2.5 rounded text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-2 transform active:scale-95 transition-all text-center cursor-pointer ${
+                                  downloadedDocId === doc.id
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-amber-500 text-slate-900 hover:bg-amber-400"
+                                }`}
+                              >
+                                {downloadedDocId === doc.id ? (
+                                  <>
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>Pronto</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    {isDrive ? (
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <Download className="w-3.5 h-3.5" />
+                                    )}
+                                    <span>{isDrive ? "Visualizar no Drive" : isLink ? "Visualizar Arquivo" : "Baixar Ficheiro"}</span>
+                                  </>
+                                )}
+                              </a>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>
                   </div>
-
-                </div>
-              )}
-
-              {/* TAB 2: EVENTS AGENDA */}
-              {activeTab === "agenda" && (
-                <div id="tab-dashboard-agenda" className="space-y-6">
-                  <div className="border-b border-white/10 pb-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4 text-left">
-                    <div>
-                      <h3 className="text-xl font-bold text-white flex items-center gap-2 font-display uppercase">
-                        <Calendar className="w-5 h-5 text-amber-500" />
-                        Agenda e Calendário Cívico-Militar de Santa Catarina
-                      </h3>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Acompanhe feriados nacionais, eventos da UMESC e datas comemorativas cruciais da PMSC e Bombeiros de SC.
-                      </p>
-                    </div>
-
-                    {/* View mode toggle with high contrast options */}
-                    <div className="flex bg-[#142337] rounded-lg p-0.5 border border-white/5 shrink-0 self-start sm:self-center">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCalendarViewMode("calendar");
-                          setSelectedCalendarDay(null);
-                        }}
-                        className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded transition-all cursor-pointer ${
-                          calendarViewMode === "calendar"
-                            ? "bg-amber-500 text-slate-950 font-black shadow"
-                            : "text-slate-400 hover:text-white"
-                        }`}
-                      >
-                        Grade do Mês
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCalendarViewMode("list")}
-                        className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded transition-all cursor-pointer ${
-                          calendarViewMode === "list"
-                            ? "bg-amber-500 text-slate-950 font-black shadow"
-                            : "text-slate-400 hover:text-white pointer-events-auto"
-                        }`}
-                      >
-                        Modo Lista
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* CALENDAR VIEW MODE */}
-                  {calendarViewMode === "calendar" ? (
-                    <div className="space-y-6 text-left">
-                      
-                      {/* Month Picker Header */}
-                      <div className="flex flex-col sm:flex-row justify-between items-center bg-[#0d1724] border border-white/5 rounded-xl p-4 gap-4">
-                        <div className="flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCalendarMonth((prev) => (prev === 0 ? 11 : prev - 1));
-                              setSelectedCalendarDay(null);
-                            }}
-                            className="w-8 h-8 rounded-lg bg-[#142337] hover:bg-[#1f3450] text-slate-350 hover:text-white flex items-center justify-center border border-white/5 cursor-pointer text-xs font-black transition-colors"
-                          >
-                            ◀
-                          </button>
-                          
-                          <div className="text-center min-w-[140px]">
-                            <h4 className="text-base font-black text-white uppercase tracking-wider font-display font-mono">
-                              {MONTHS_LABELS[calendarMonth]} <span className="text-amber-500">2026</span>
-                            </h4>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCalendarMonth((prev) => (prev === 11 ? 0 : prev + 1));
-                              setSelectedCalendarDay(null);
-                            }}
-                            className="w-8 h-8 rounded-lg bg-[#142337] hover:bg-[#1f3450] text-slate-350 hover:text-white flex items-center justify-center border border-white/5 cursor-pointer text-xs font-black transition-colors"
-                          >
-                            ▶
-                          </button>
-                        </div>
-
-                        {/* Calendar Legends */}
-                        <div className="flex flex-wrap gap-2.5 text-[9px] font-black uppercase tracking-wide text-slate-300">
-                          <span className="flex items-center gap-1.5 bg-[#450a12]/30 px-2 py-1 rounded border border-red-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 block"></span>
-                            Feriados Nacionais
-                          </span>
-                          <span className="flex items-center gap-1.5 bg-[#0a2342]/40 px-2 py-1 rounded border border-blue-500/25">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 block"></span>
-                            Militares SC
-                          </span>
-                          <span className="flex items-center gap-1.5 bg-[#3d2c0b]/40 px-2 py-1 rounded border border-amber-500/25">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 block"></span>
-                            Eventos UMESC
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Grade Calendar Grid */}
-                      <div className="bg-[#111d2e] rounded-xl border border-white/5 p-4 overflow-hidden">
-                        
-                        {/* Weekday Labels */}
-                        <div className="grid grid-cols-7 gap-1.5 sm:gap-3 text-center text-[10px] font-black uppercase text-slate-400 font-mono tracking-widest border-b border-white/5 pb-3">
-                          <span>Dom</span>
-                          <span>Seg</span>
-                          <span>Ter</span>
-                          <span>Qua</span>
-                          <span>Qui</span>
-                          <span>Sex</span>
-                          <span>Sáb</span>
-                        </div>
-
-                        {/* Days Grid */}
-                        <div className="grid grid-cols-7 gap-1.5 sm:gap-3 mt-3">
-                          
-                          {/* Starting Week Padding */}
-                          {Array.from({ length: new Date(2026, calendarMonth, 1).getDay() }).map((_, i) => (
-                            <div key={`pad-${i}`} className="aspect-[4/3] sm:aspect-square bg-slate-900/25 rounded-xl border border-transparent opacity-10"></div>
-                          ))}
-
-                          {/* Month Day cells */}
-                          {Array.from({ length: new Date(2026, calendarMonth + 1, 0).getDate() }).map((_, i) => {
-                            const dayNum = i + 1;
-                            const dateStr = `2026-${String(calendarMonth + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
-                            
-                            // Check match on holidays and events
-                            const holidays = SPECIAL_DATES.filter(d => d.date === dateStr);
-                            const umescEvs = INITIAL_EVENTS.filter(e => e.date === dateStr);
-                            const allDayEvents = [...holidays, ...umescEvs.map(e => ({ ...e, type: "umesc" as const }))];
-                            
-                            const hasHoliday = holidays.some(h => h.type === "feriado");
-                            const hasPmscBmsc = holidays.some(h => h.type === "pmsc_bmsc");
-                            const hasUmesc = umescEvs.length > 0;
-                            const isSelected = selectedCalendarDay === dateStr;
-
-                            // Highlight styles of active boxes
-                            let boxBorder = "border-[#142337] hover:border-slate-500";
-                            let boxBackground = "bg-[#09101a] text-slate-300 hover:bg-[#142337]";
-
-                            if (isSelected) {
-                              boxBorder = "border-amber-500 ring-2 ring-amber-500/20";
-                              boxBackground = "bg-[#182a40]";
-                            } else if (hasHoliday) {
-                              boxBorder = "border-red-500/20 hover:border-red-500/40";
-                              boxBackground = "bg-[#1c080d] text-red-200 hover:bg-[#2c1017]";
-                            } else if (hasPmscBmsc) {
-                              boxBorder = "border-blue-500/20 hover:border-blue-500/40";
-                              boxBackground = "bg-[#051326] text-blue-200 hover:bg-[#0b1f3c]";
-                            } else if (hasUmesc) {
-                              boxBorder = "border-amber-500/25 hover:border-amber-500/40";
-                              boxBackground = "bg-[#1e1c07] text-amber-200 hover:bg-[#2c2b0e]";
-                            }
-
-                            return (
-                              <div
-                                key={`day-${dayNum}`}
-                                onClick={() => setSelectedCalendarDay(dateStr)}
-                                className={`aspect-[4/3] sm:aspect-square rounded-xl p-1.5 sm:p-2.5 flex flex-col justify-between items-start transition-all cursor-pointer border ${boxBorder} ${boxBackground}`}
-                              >
-                                <span className="text-xs sm:text-sm font-black font-mono leading-none">{dayNum}</span>
-                                
-                                {/* Indicators Dots Container */}
-                                {allDayEvents.length > 0 && (
-                                  <div className="flex gap-1 mt-auto overflow-hidden self-end sm:self-start">
-                                    {hasHoliday && <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" title="Feriado Nacional"></span>}
-                                    {hasPmscBmsc && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" title="Militares SC"></span>}
-                                    {hasUmesc && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" title="UMESC Evento"></span>}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-
-                        </div>
-
-                      </div>
-
-                      {/* Calendar Detail Side Panel / Bottom Panel */}
-                      <div className="bg-[#0b1320] border border-white/5 rounded-xl p-5 space-y-4">
-                        <h4 className="text-xs font-black text-amber-400 uppercase tracking-widest font-mono">
-                          Detalhamento do Dia Selecionado
-                        </h4>
-
-                        {selectedCalendarDay ? (
-                          <div className="space-y-3.5 animate-fadeIn">
-                            <p className="text-xs font-bold text-slate-300 font-mono">
-                              📅 {new Date(selectedCalendarDay + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}:
-                            </p>
-                            
-                            {/* Merge and render holidays & events for selected day */}
-                            {(() => {
-                              const holidays = SPECIAL_DATES.filter(d => d.date === selectedCalendarDay);
-                              const umescEvs = INITIAL_EVENTS.filter(e => e.date === selectedCalendarDay);
-
-                              if (holidays.length === 0 && umescEvs.length === 0) {
-                                return (
-                                  <div className="py-4 border-l-2 border-slate-700 pl-3">
-                                    <p className="text-xs text-slate-400 italic">Sem comemorações registradas ou devocionais públicos para esta data.</p>
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div className="space-y-3">
-                                  {holidays.map((h, hIdx) => (
-                                    <div 
-                                      key={`det-h-${hIdx}`}
-                                      className={`p-4 rounded-lg border text-left space-y-2 ${
-                                        h.type === "feriado" 
-                                          ? "bg-[#1c080d] border-red-500/20" 
-                                          : "bg-[#051326] border-blue-500/20"
-                                      }`}
-                                    >
-                                      <div className="flex gap-2 items-center">
-                                        <span className={`text-[8.5px] font-black uppercase px-2 py-0.5 rounded ${
-                                          h.type === "feriado" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"
-                                        }`}>
-                                          {h.type === "feriado" ? "Feriado Nacional" : "Solenidade PMSC/CBMSC"}
-                                        </span>
-                                        <h5 className="font-bold text-sm text-white font-display leading-tight">{h.title}</h5>
-                                      </div>
-                                      <p className="text-xs text-slate-300 font-semibold leading-relaxed">{h.description}</p>
-                                    </div>
-                                  ))}
-
-                                  {umescEvs.map((e, eIdx) => (
-                                    <div 
-                                      key={`det-e-${eIdx}`}
-                                      className="p-4 bg-[#1e1c07] border border-amber-500/20 rounded-lg text-left space-y-2"
-                                    >
-                                      <div className="flex gap-2 items-center">
-                                        <span className="text-[8.5px] font-black uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-500">
-                                          Evento Missionário Oficial
-                                        </span>
-                                        <h5 className="font-bold text-sm text-white font-display leading-tight">{e.title}</h5>
-                                      </div>
-                                      <p className="text-xs text-slate-350 font-semibold leading-relaxed">{e.description}</p>
-                                      <div className="text-[10px] bg-slate-900/60 p-2 rounded text-slate-400 font-mono flex flex-wrap gap-x-4">
-                                        <span>🕒 Horário: <strong>{e.time}h</strong></span>
-                                        <span>📍 Local: <strong>{e.location}</strong></span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        ) : (
-                          <div className="py-6 text-center text-slate-500 text-xs italic">
-                            💡 Clique em um dia de 2026 no calendário acima para exibir as programações oficiais e efemérides militares correspondentes.
-                          </div>
-                        )}
-                        
-                        {/* Summary of entire active month’s milestones */}
-                        <div className="pt-4 border-t border-white/5 text-left">
-                          <h5 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono mb-3">
-                            Resumo de Comemorações em {MONTHS_LABELS[calendarMonth]} de 2026
-                          </h5>
-                          
-                          <div className="space-y-2">
-                            {(() => {
-                              const monthHolidays = SPECIAL_DATES.filter(d => {
-                                const parts = d.date.split("-");
-                                return parseInt(parts[1], 10) - 1 === calendarMonth;
-                              });
-                              const monthUmesc = INITIAL_EVENTS.filter(e => {
-                                const parts = e.date.split("-");
-                                return parseInt(parts[1], 10) - 1 === calendarMonth;
-                              });
-
-                              if (monthHolidays.length === 0 && monthUmesc.length === 0) {
-                                return <p className="text-[10px] text-slate-500 italic">Nenhum evento registrado para este mês.</p>;
-                              }
-
-                              return (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                                  {monthHolidays.map((h, idx) => (
-                                    <div key={`m-h-${idx}`} className="p-3 rounded bg-slate-900/45 border border-white/5 flex gap-2.5">
-                                      <span className="text-[11px] font-black font-mono text-amber-550 shrink-0">
-                                        {parseInt(h.date.split("-")[2], 10).toString().padStart(2, "0")}
-                                      </span>
-                                      <div>
-                                        <b className="text-white text-xs block leading-tight">{h.title}</b>
-                                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest font-mono">
-                                          {h.type === "feriado" ? "Feriado Nacional" : "Militar SC"}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                  {monthUmesc.map((e, idx) => (
-                                    <div key={`m-u-${idx}`} className="p-3 rounded bg-[#1d1c07] border border-amber-550/10 flex gap-2.5">
-                                      <span className="text-[11px] font-black font-mono text-amber-450 shrink-0">
-                                        {parseInt(e.date.split("-")[2], 10).toString().padStart(2, "0")}
-                                      </span>
-                                      <div>
-                                        <b className="text-white text-xs block leading-tight">{e.title}</b>
-                                        <span className="text-[9px] text-[#cca043] font-mono font-black uppercase tracking-widest block leading-tight mt-0.5">
-                                          CULTO UMESC às {e.time}h
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        </div>
-
-                      </div>
-
-                    </div>
-                  ) : (
-                    /* ORIGINAL LIST VIEW (PRESERVING COMPATIBILITY EXPLICITLY) */
-                    <div>
-                      {/* Filter tabs inside the events portal dashboard block */}
-                      <div className="flex flex-wrap gap-2 mb-4 bg-[#142337] p-1.5 rounded border border-white/5">
-                        {eventFilters.map((filter) => (
-                          <button
-                            key={filter}
-                            onClick={() => setActiveEventFilter(filter)}
-                            className={`px-3 py-1 text-[9px] font-black uppercase tracking-wider rounded transition-all cursor-pointer ${
-                              activeEventFilter === filter
-                                ? "bg-amber-500 text-slate-950 font-black shadow"
-                                : "bg-[#182638] text-slate-350 hover:text-white border border-white/5"
-                            }`}
-                          >
-                            {filter}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="space-y-4">
-                        {getFilteredEvents().map((ev) => (
-                          <div 
-                            key={ev.id}
-                            className="p-4 rounded bg-[#132031] border border-white/5 hover:border-amber-500/20 transition-all space-y-3 font-semibold text-left pointer-events-auto"
-                          >
-                            <div className="flex justify-between items-center text-[10px] font-mono">
-                              <span className="flex items-center gap-1.5 text-amber-400 font-bold bg-[#1e2f42] px-2 py-0.5 border border-white/5 rounded-full uppercase tracking-wider">
-                                {ev.type}
-                              </span>
-                              <span className="text-slate-300 font-bold flex items-center gap-1 font-mono">
-                                <Clock className="w-3.5 h-3.5 text-slate-450" />
-                                {new Date(ev.date).toLocaleDateString("pt-BR")} às {ev.time}h
-                              </span>
-                            </div>
-
-                            <div>
-                              <h4 className="font-bold text-sm sm:text-base text-white font-display">{ev.title}</h4>
-                              <p className="text-xs text-slate-350 leading-relaxed font-semibold mt-1">{ev.description}</p>
-                            </div>
-
-                            <div className="text-[10px] bg-[#0c1421] border border-white/5 px-2.5 py-1.5 rounded text-slate-300 flex items-center gap-1 font-mono">
-                              <span>📍 Local: <strong className="text-white">{ev.location}</strong></span>
-                            </div>
-                          </div>
-                        ))}
-
-                        {getFilteredEvents().length === 0 && (
-                          <div className="py-12 text-center bg-[#132031] border border-white/5 rounded-xl select-none">
-                            <p className="text-xs text-slate-400 font-mono">Nenhum evento agendado para esta categoria de policiamento.</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
 
                 </div>
               )}
@@ -2629,6 +2342,29 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
               {activeTab === "congressos" && loggedInUser && (
                 <div id="tab-dashboard-congressos" className="animate-fadeIn bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6">
                   <CongressoInscricaoMembro loggedInUser={loggedInUser} />
+                </div>
+              )}
+
+              {/* TAB 10: INSCRIÇÃO DE VOLUNTARIADO DE CAPELANIA */}
+              {activeTab === "voluntariado" && (
+                <div id="tab-dashboard-voluntariado" className="animate-fadeIn bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6 text-left">
+                  <div className="border-b border-white/10 pb-3">
+                    <div className="text-[10px] font-mono tracking-widest text-[#f59e0b] font-black uppercase mb-1.5 flex items-center gap-1.5">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                      </span>
+                      PMSC & CBMSC Integrados
+                    </div>
+                    <h3 className="text-xl font-bold text-white flex items-center gap-2 font-display uppercase">
+                      <Compass className="w-5 h-5 text-amber-500 animate-pulse" />
+                      Inscrição de Voluntário da Capelania Voluntária
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Participe do braço forte de apoio espiritual, ético-social e humanitário da UMESC em hospitais, quartéis, rodovias e comunidades catarinenses.
+                    </p>
+                  </div>
+                  <CapelaniaVolunteeringForm loggedInUser={loggedInUser} />
                 </div>
               )}
 
