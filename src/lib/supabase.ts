@@ -672,4 +672,152 @@ export const capelaniaVolunteersService = {
   }
 };
 
+/**
+ * Service to manage prayer requests (Pedidos de Oração) in Supabase (or local fallback)
+ */
+export const prayerRequestsService = {
+  async getRequests(): Promise<any[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("prayer_requests")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Erro ao carregar pedidos de oração do Supabase:", error.message);
+          throw error;
+        }
+
+        if (data) {
+          return data.map((pr: any) => ({
+            id: pr.id?.toString(),
+            name: pr.name,
+            whatsapp: pr.whatsapp,
+            request: pr.request,
+            status: pr.status || "pending",
+            createdAt: pr.created_at || pr.createdAt
+          }));
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para pedidos de oração. Usando localStorage de contingência.", err);
+      }
+    }
+
+    const saved = localStorage.getItem("umesc_prayer_requests");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  },
+
+  async createRequest(req: { name: string; whatsapp: string; request: string; status?: "pending" | "prayed" }): Promise<any> {
+    const newReq = {
+      id: "pr_" + Math.random().toString(36).substring(2, 9),
+      name: req.name,
+      whatsapp: req.whatsapp,
+      request: req.request,
+      status: req.status || "pending",
+      createdAt: new Date().toISOString()
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          name: newReq.name,
+          whatsapp: newReq.whatsapp,
+          request: newReq.request,
+          status: newReq.status,
+          created_at: newReq.createdAt
+        };
+
+        const { data, error } = await supabase
+          .from("prayer_requests")
+          .insert([dbRecord])
+          .select();
+
+        if (error) {
+          console.error("Erro ao criar pedido de oração no Supabase:", error.message);
+          throw error;
+        }
+
+        if (data && data.length > 0) {
+          return {
+            id: data[0].id?.toString(),
+            name: data[0].name,
+            whatsapp: data[0].whatsapp,
+            request: data[0].request,
+            status: data[0].status || "pending",
+            createdAt: data[0].created_at
+          };
+        }
+      } catch (err) {
+        console.warn("Falha de gravação no Supabase para pedido de oração. Gravando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getRequests();
+    const updated = [newReq, ...list];
+    localStorage.setItem("umesc_prayer_requests", JSON.stringify(updated));
+    return newReq;
+  },
+
+  async updateRequestStatus(id: string, status: "pending" | "prayed"): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const numericId = parseInt(id, 10);
+        const queryId = isNaN(numericId) ? id : numericId;
+
+        const { error } = await supabase
+          .from("prayer_requests")
+          .update({ status })
+          .eq("id", queryId);
+
+        if (error) {
+          console.error("Erro ao atualizar status do pedido no Supabase:", error.message);
+          throw error;
+        }
+      } catch (err) {
+        console.warn("Falha de atualização no Supabase para pedido de oração. Atualizando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getRequests();
+    const updated = list.map((r) => r.id === id ? { ...r, status } : r);
+    localStorage.setItem("umesc_prayer_requests", JSON.stringify(updated));
+    return true;
+  },
+
+  async deleteRequest(id: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const numericId = parseInt(id, 10);
+        const queryId = isNaN(numericId) ? id : numericId;
+
+        const { error } = await supabase
+          .from("prayer_requests")
+          .delete()
+          .eq("id", queryId);
+
+        if (error) {
+          console.error("Erro ao deletar pedido no Supabase:", error.message);
+          throw error;
+        }
+        return true;
+      } catch (err) {
+        console.warn("Falha de deleção no Supabase para pedido de oração. Deletando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getRequests();
+    const filtered = list.filter((r) => r.id !== id && r.id?.toString() !== id);
+    localStorage.setItem("umesc_prayer_requests", JSON.stringify(filtered));
+    return true;
+  }
+};
+
 

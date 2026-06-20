@@ -314,3 +314,36 @@ CREATE POLICY "Deleção livre para todos de capelania_volunteers" ON public.cap
 
 NOTIFY pgrst, 'reload schema';
 
+
+-- ====================================================================
+-- 20. TABELA DE PEDIDOS DE ORAÇÃO (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.prayer_requests (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    whatsapp VARCHAR(50) NOT NULL,
+    request TEXT NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending' NOT NULL, -- 'pending' ou 'prayed'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+COMMENT ON TABLE public.prayer_requests IS 'Gerenciamento estruturado de pedidos de oração públicos/privados';
+
+-- Permissões explicitadas no canal REST
+GRANT ALL ON TABLE public.prayer_requests TO anon, authenticated, service_role;
+
+-- Configurar RLS (Row Level Security)
+ALTER TABLE public.prayer_requests ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de prayer_requests" ON public.prayer_requests;
+DROP POLICY IF EXISTS "Inserção livre para todos de prayer_requests" ON public.prayer_requests;
+DROP POLICY IF EXISTS "Atualização livre para todos de prayer_requests" ON public.prayer_requests;
+DROP POLICY IF EXISTS "Deleção livre para todos de prayer_requests" ON public.prayer_requests;
+
+CREATE POLICY "Leitura livre para todos de prayer_requests" ON public.prayer_requests FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de prayer_requests" ON public.prayer_requests FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de prayer_requests" ON public.prayer_requests FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de prayer_requests" ON public.prayer_requests FOR DELETE USING (true);
+
+NOTIFY pgrst, 'reload schema';
+

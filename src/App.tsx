@@ -13,6 +13,7 @@ import RevistasSection from "./components/RevistasSection";
 import ProjectsList from "./components/ProjectsList";
 import MemberDashboard from "./components/MemberDashboard";
 import AdminPortal from "./components/AdminPortal";
+import PrayerRequestsSection from "./components/PrayerRequestsSection";
 import LgpdPolicyBanner from "./components/LgpdPolicyBanner";
 import Footer from "./components/Footer";
 
@@ -24,7 +25,7 @@ export default function App() {
   const [view, setView] = useState<"public" | "dashboard" | "admin">("public");
   const [memberDashboardInitialTab, setMemberDashboardInitialTab] = useState<"notices" | "structure" | "registration" | "congressos">("notices");
   const [activeTab, setActiveTab ] = useState("about");
-  const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
+  const [isDonateModalOpen, setIsDonateModalOpen] = useState(true);
 
   // Dynamic capelania services editable in admin portal
   const [capelaniaServices, setCapelaniaServices] = useState<CapelaniaService[]>(() => {
@@ -306,6 +307,9 @@ export default function App() {
 
         {/* Dynamic magazines and bulletin catalogs layout */}
         <RevistasSection />
+
+        {/* Global Prayer Requests Platform */}
+        <PrayerRequestsSection />
 
         {/* 4. About component details */}
         <div className="bg-[#0e1627] border-b border-white/5 py-12">

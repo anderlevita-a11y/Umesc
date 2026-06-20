@@ -657,14 +657,20 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
 
                     <div className="space-y-1">
                       <span className="block text-[11px] text-slate-400 font-semibold leading-relaxed">Escanei o QR Code ao lado ou utilize a chave PIX abaixo no seu banco corporativo para concluir:</span>
-                      <span className="block text-[10px] text-amber-500 font-mono font-bold">CNPJ PIX: 18.232.091/0001-90</span>
+                      <span 
+                        className="block text-[11.5px] text-amber-500 font-bold tracking-wider"
+                        style={{ fontFamily: "Arial, sans-serif" }}
+                      >
+                        CNPJ PIX: 18.232.091/0001-90
+                      </span>
                     </div>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleCopyPixString}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded bg-slate-905 border border-slate-800 text-xs font-mono text-slate-350 hover:bg-slate-800 cursor-pointer"
+                    className="w-full flex items-center justify-between px-3 py-2 rounded bg-slate-905 border border-slate-800 text-xs font-mono text-slate-350 hover:bg-slate-800 cursor-pointer slashed-zero"
+                    style={{ fontVariantNumeric: "slashed-zero", fontFeatureSettings: '"zero" 1' }}
                   >
                     <span className="truncate max-w-[300px] text-left opacity-90 select-all" title={getDynamicPixString()}>{getDynamicPixString()}</span>
                     {copiedKey ? (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { BookOpen, Search, Download, HelpCircle, Eye, ShieldCheck, Check } from "lucide-react";
+import { BookOpen, Search, Download, HelpCircle, Eye, ShieldCheck, Check, Cloud, ExternalLink } from "lucide-react";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
 
 export interface RevistaEdition {
@@ -11,6 +11,20 @@ export interface RevistaEdition {
   coverImage: string;
   downloads: number;
   downloadUrl?: string;
+  googleDriveUrl?: string;
+}
+
+export function getRealDocumentUrl(url: string | undefined | null): string {
+  if (!url) return "";
+  const trimmed = url.trim();
+  
+  // If it's a cleaned googleusercontent link, convert it back to a full viewable Google Drive file URL so they can see/download the full document:
+  const lh3Pattern = /lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/i;
+  const match = trimmed.match(lh3Pattern);
+  if (match && match[1]) {
+    return `https://drive.google.com/file/d/${match[1]}/view?usp=sharing`;
+  }
+  return trimmed;
 }
 
 // Gerador de arquivos PDF reais gerados dinamicamente no navegador
@@ -161,8 +175,9 @@ export default function RevistasSection() {
   });
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [readingRevista, setReadingRevista] = useState<RevistaEdition | null>(null);
+  const [readingRevista, setReadingRevTarget] = useState<RevistaEdition | null>(null);
   const [downloadTracker, setDownloadTracker] = useState<Record<string, boolean>>({});
+  const [activeDownloadId, setActiveDownloadId] = useState<string | null>(null);
 
   // Listen to admin additions/deletions/edits
   useEffect(() => {
@@ -204,26 +219,28 @@ export default function RevistasSection() {
     const date = matchedRev?.publishedDate || new Date().toISOString().split("T")[0];
     const coverImage = matchedRev?.coverImage || "";
 
-    const isImageLink = downloadUrl && (
-      downloadUrl === coverImage ||
-      downloadUrl.toLowerCase().endsWith(".png") ||
-      downloadUrl.toLowerCase().endsWith(".jpg") ||
-      downloadUrl.toLowerCase().endsWith(".jpeg") ||
-      downloadUrl.toLowerCase().endsWith(".gif") ||
-      downloadUrl.toLowerCase().endsWith(".webp") ||
-      downloadUrl.includes("images.unsplash.com")
+    const healedUrl = getRealDocumentUrl(downloadUrl);
+
+    const isImageLink = healedUrl && (
+      healedUrl === coverImage ||
+      healedUrl.toLowerCase().endsWith(".png") ||
+      healedUrl.toLowerCase().endsWith(".jpg") ||
+      healedUrl.toLowerCase().endsWith(".jpeg") ||
+      healedUrl.toLowerCase().endsWith(".gif") ||
+      healedUrl.toLowerCase().endsWith(".webp") ||
+      healedUrl.includes("images.unsplash.com")
     );
 
-    if (downloadUrl && !isImageLink) {
+    if (healedUrl && !isImageLink) {
       // Dynamic real download
       const element = document.createElement("a");
-      element.href = downloadUrl;
+      element.href = healedUrl;
       element.target = "_blank";
       element.rel = "noopener noreferrer";
       
       // If it's a data URL, we give it a beautiful descriptive name
-      if (downloadUrl.startsWith("data:")) {
-        const match = downloadUrl.match(/data:([^;]+);/);
+      if (healedUrl.startsWith("data:")) {
+        const match = healedUrl.match(/data:([^;]+);/);
         let ext = "pdf";
         if (match && match[1]) {
           const mime = match[1];
@@ -347,25 +364,49 @@ export default function RevistasSection() {
                 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setReadingRevista(rev)}
+                    onClick={() => setReadingRevTarget(rev)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-900 border border-white/10 hover:bg-slate-800 text-[10px] uppercase font-black tracking-wider text-slate-300 cursor-pointer"
                   >
                     <Eye className="w-3.5 h-3.5" /> Ler Online
                   </button>
-                  <button
-                    onClick={() => handleDownload(rev.id, rev.title, rev.downloadUrl)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] uppercase font-black tracking-wider transition-colors cursor-pointer"
-                  >
-                    {downloadTracker[rev.id] ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 animate-bounce" /> Pronto
-                      </>
-                    ) : (
-                      <>
-                        <Download className="w-3.5 h-3.5" /> Baixar PDF
-                      </>
-                    )}
-                  </button>
+                  
+                  {(() => {
+                    const availableUrl = getRealDocumentUrl(rev.downloadUrl || rev.googleDriveUrl);
+                    const isDrive = availableUrl && (availableUrl.includes("drive.google.com") || availableUrl.includes("docs.google.com") || availableUrl.includes("lh3.googleusercontent.com"));
+                    const isLink = availableUrl && (availableUrl.startsWith("http://") || availableUrl.startsWith("https://") || isDrive);
+
+                    return (
+                      <button
+                        onClick={() => {
+                          if (isLink) {
+                            window.open(availableUrl, "_blank", "noopener,noreferrer");
+                            setDownloadTracker((prev) => ({ ...prev, [rev.id]: true }));
+                            setTimeout(() => {
+                              setDownloadTracker((prev) => ({ ...prev, [rev.id]: false }));
+                            }, 2500);
+                          } else {
+                            handleDownload(rev.id, rev.title, rev.downloadUrl);
+                          }
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 text-[10px] uppercase font-black tracking-wider transition-colors cursor-pointer"
+                      >
+                        {downloadTracker[rev.id] ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 animate-bounce" /> Pronto
+                          </>
+                        ) : (
+                          <>
+                            {isDrive ? (
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                            <span>{isDrive ? "Visualizar no Drive" : isLink ? "Visualizar Arquivo" : "Baixar Edição"}</span>
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -395,7 +436,7 @@ export default function RevistasSection() {
                   <p className="text-xs text-slate-400 mt-0.5">{readingRevista.volume} / Publicação: {new Date(readingRevista.publishedDate).toLocaleDateString("pt-BR")}</p>
                 </div>
                 <button
-                  onClick={() => setReadingRevista(null)}
+                  onClick={() => setReadingRevTarget(null)}
                   className="px-2.5 py-1 text-xs font-bold font-mono rounded bg-slate-900 border border-white/5 text-slate-400 hover:text-white"
                 >
                   FECHAR X
@@ -449,19 +490,36 @@ export default function RevistasSection() {
               <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold font-mono">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" /> Blindagem de Acesso sob Prerrogativa LGPD
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2 justify-end">
+                {(() => {
+                  const availableUrl = getRealDocumentUrl(readingRevista.downloadUrl || readingRevista.googleDriveUrl);
+                  const isDrive = availableUrl && (availableUrl.includes("drive.google.com") || availableUrl.includes("docs.google.com") || availableUrl.includes("lh3.googleusercontent.com"));
+                  const isLink = availableUrl && (availableUrl.startsWith("http://") || availableUrl.startsWith("https://") || isDrive);
+
+                  return (
+                    <button
+                      onClick={() => {
+                        if (isLink) {
+                          window.open(availableUrl, "_blank", "noopener,noreferrer");
+                        } else {
+                          handleDownload(readingRevista.id, readingRevista.title, readingRevista.downloadUrl);
+                        }
+                        setReadingRevTarget(null);
+                      }}
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold uppercase rounded-xl tracking-wider flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {isDrive ? (
+                        <ExternalLink className="w-4 h-4" />
+                      ) : (
+                        <Download className="w-4 h-4" />
+                      )}
+                      <span>{isDrive ? "Visualizar no Drive" : isLink ? "Visualizar Arquivo" : "Baixar Edição"}</span>
+                    </button>
+                  );
+                })()}
                 <button
-                  onClick={() => {
-                    handleDownload(readingRevista.id, readingRevista.title, readingRevista.downloadUrl);
-                    setReadingRevista(null);
-                  }}
-                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold uppercase rounded-xl tracking-wider flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Download className="w-4 h-4" /> Baixar Edição Completa (PDF)
-                </button>
-                <button
-                  onClick={() => setReadingRevista(null)}
-                  className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-300 text-xs font-bold uppercase rounded-xl cursor-pointer"
+                  onClick={() => setReadingRevTarget(null)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-white/10 text-slate-300 text-xs font-bold uppercase rounded-xl cursor-pointer"
                 >
                   Concluir Leitura
                 </button>

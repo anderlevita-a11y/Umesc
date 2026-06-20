@@ -209,14 +209,6 @@ export default function PublicCongressBanner({ onEnterMemberDashboard }: PublicC
             {/* Quick benefits info lines */}
             <div className="flex flex-wrap gap-x-5 gap-y-2 text-[11px] text-slate-400 font-medium">
               <span className="flex items-center gap-1">
-                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                Certificado Digital Integrado
-              </span>
-              <span className="flex items-center gap-1">
-                <Users className="w-4 h-4 text-emerald-400 shrink-0" />
-                {featured.workshops.length} Oficinas Temáticas Práticas
-              </span>
-              <span className="flex items-center gap-1">
                 <Ticket className="w-4 h-4 text-emerald-400 shrink-0" />
                 Ingresso Digital com QR Code no Celular
               </span>
@@ -290,9 +282,6 @@ export default function PublicCongressBanner({ onEnterMemberDashboard }: PublicC
                 <div>
                   <span className="block text-[9px] text-slate-400 uppercase font-bold font-mono tracking-widest">VALOR DA INCRIÇÃO</span>
                   <span className="text-lg font-black text-white hover:text-amber-400 transition-colors">R$ {featured.price.toFixed(2)}</span>
-                </div>
-                <div className="text-right text-[10px] text-slate-400 font-medium">
-                  Até 2 oficinas inclusas
                 </div>
               </div>
 

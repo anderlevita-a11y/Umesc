@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { ShieldCheck, Menu, X, Landmark, Heart, FileText, UserPlus, Calendar } from "lucide-react";
+import { ShieldCheck, Menu, X, Landmark, Heart, FileText, UserPlus, Calendar, Compass } from "lucide-react";
 import logoImg from "../assets/images/umesc_logo_official_1780591542921.png";
 
 interface HeaderProps {
@@ -23,6 +23,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDonateModal, onS
     { label: "Estrutura & Leis", id: "structure", icon: ShieldCheck },
     { label: "Projetos", id: "projects", icon: Heart },
     { label: "Documentos & Avisos", id: "resources", icon: FileText },
+    { label: "Pedidos de Oração", id: "prayer-requests", icon: Compass },
   ];
 
   const handleNavClick = (id: string) => {
@@ -86,7 +87,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDonateModal, onS
                   </svg>
                 </a>
                 <a 
-                  href="https://www.tiktok.com/@umesc_oficial" 
+                  href="https://www.tiktok.com/@escutaessacristao?_r=1&_t=ZS-97E5HqUJjBi" 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   className="hover:text-cyan-400 transition-colors p-0.5 rounded hover:bg-white/5"
@@ -254,7 +255,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDonateModal, onS
                 <span>YouTube</span>
               </a>
               <a 
-                href="https://www.tiktok.com/@umesc_oficial" 
+                href="https://www.tiktok.com/@escutaessacristao?_r=1&_t=ZS-97E5HqUJjBi" 
                 target="_blank" 
                 rel="noopener noreferrer" 
                 className="flex flex-col items-center justify-center py-2 rounded bg-white/5 hover:bg-white/10 text-cyan-400 text-[9px] font-bold uppercase transition-colors"

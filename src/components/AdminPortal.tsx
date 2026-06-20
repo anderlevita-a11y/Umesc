@@ -5,12 +5,13 @@ import {
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
   Coins, ExternalLink, Paperclip, Compass, Bell
 } from "lucide-react";
-import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer } from "../lib/supabase.ts";
+import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { donationsService } from "../lib/donationService.ts";
 import { MemberRegistration, Project, FichaFiliacao, Donation, MemberContent, CapelaniaService, Announcement, DocumentFile } from "../types";
 import { generateFichaPdf } from "../lib/fichaPdfHelper.ts";
 import { RevistaEdition } from "./RevistasSection.tsx";
+import { PrayerRequest } from "./PrayerRequestsSection.tsx";
 import { DEFAULT_DIRETORIA, COORDINATORS_DATA, INITIAL_PROJECTS, DEFAULT_CAPELANIA_SERVICES, INITIAL_ANNOUNCEMENTS, INITIAL_DOCUMENTS } from "../data.ts";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
 import CongressoManager from "./CongressoManager.tsx";
@@ -122,7 +123,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas" | "conteudos" | "servicos" | "voluntarios" | "doacoes">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas" | "conteudos" | "servicos" | "voluntarios" | "doacoes" | "oracoes">("dashboard");
 
   // Supabase Connection State Diagnostics
   const [dbStatus, setDbStatus] = useState<{
@@ -220,6 +221,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [eventos, setEventos] = useState<any[]>([]);
   const [volunteers, setVolunteers] = useState<CapelaniaVolunteer[]>([]);
   const [loadingVolunteers, setLoadingVolunteers] = useState(false);
+  const [prayerRequests, setPrayerRequests] = useState<PrayerRequest[]>([]);
 
   // Search members state
   const [searchMember, setSearchMember] = useState("");
@@ -283,6 +285,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [deletingDiretoria, setDeletingDiretoria] = useState<any | null>(null);
   const [deletingCoordenador, setDeletingCoordenador] = useState<any | null>(null);
   const [deletingFicha, setDeletingFicha] = useState<FichaFiliacao | null>(null);
+  const [deletingPrayerId, setDeletingPrayerId] = useState<string | null>(null);
 
   // Load Admin databases
   const refreshAllData = async () => {
@@ -342,6 +345,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       // 10. Capelania Volunteers
       const vList = await capelaniaVolunteersService.getVolunteers();
       setVolunteers(vList);
+
+      // 11. Prayer Requests (Pedidos de Oração)
+      const prayersList = await prayerRequestsService.getRequests();
+      setPrayerRequests(prayersList);
     } catch (e) {
       console.error("Error refreshing administrative databases:", e);
     }
@@ -357,7 +364,11 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       }
     };
     window.addEventListener("umesc_content_updated", handleReload);
-    return () => window.removeEventListener("umesc_content_updated", handleReload);
+    window.addEventListener("umesc_prayer_requests_updated", handleReload);
+    return () => {
+      window.removeEventListener("umesc_content_updated", handleReload);
+      window.removeEventListener("umesc_prayer_requests_updated", handleReload);
+    };
   }, [isAdminLoggedIn]);
 
   // Handle Admin Authorization Logon
@@ -562,7 +573,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
     let updatedList = [...revistas];
     const cleanedCover = getCleanImageUrl(revistaForm.coverImage);
-    const cleanedDownload = getCleanImageUrl(revistaForm.downloadUrl);
+    const cleanedDownload = revistaForm.downloadUrl || "";
     if (revistaForm.id) {
       updatedList = revistas.map((r) => r.id === revistaForm.id ? { ...r, ...revistaForm, coverImage: cleanedCover, downloadUrl: cleanedDownload } as RevistaEdition : r);
     } else {
@@ -574,7 +585,8 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
         description: revistaForm.description || "",
         coverImage: cleanedCover || "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=400",
         downloads: revistaForm.downloads || 0,
-        downloadUrl: cleanedDownload || ""
+        downloadUrl: cleanedDownload || "",
+        googleDriveUrl: revistaForm.googleDriveUrl || ""
       };
       updatedList = [newRev, ...revistas];
     }
@@ -1136,6 +1148,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
             { id: "convites", label: "Carrossel de Convites", icon: Layers },
             { id: "eventos", label: "Carrossel de Eventos", icon: Calendar },
             { id: "termos", label: "Termos & Políticas LGPD", icon: Scale },
+            { id: "oracoes", label: `Pedidos de Oração (${prayerRequests.length})`, icon: MessageCircle },
             { id: "servicos", label: "Serviços de Capelania", icon: Compass },
             { id: "voluntarios", label: `Voluntários da Capelania (${volunteers.length})`, icon: Compass },
             { id: "diretoria", label: "Gestão da Diretoria", icon: Users },
@@ -3566,6 +3579,160 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
             </div>
           )}
 
+          {/* TAB: PEDIDOS DE ORAÇÃO */}
+          {activeTab === "oracoes" && (
+            <div className="space-y-6 text-left animate-fadeIn">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-white/5 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                    <MessageCircle className="w-5 h-5 text-amber-500" />
+                    Pedidos de Oração Recebidos
+                  </h2>
+                  <p className="text-slate-400 text-xs">Acompanhamento e suporte espiritual de conformidade com a LGPD. Responda fraterno aos clamores.</p>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="text-[10px] font-mono font-bold bg-[#132031] px-3 py-1.5 rounded-lg text-slate-300 border border-white/5 uppercase tracking-wider">
+                    Total: <span className="text-amber-400">{prayerRequests.length}</span>
+                  </div>
+                  <div className="text-[10px] font-mono font-bold bg-[#102a1e] px-3 py-1.5 rounded-lg text-emerald-300 border border-emerald-500/10 uppercase tracking-wider">
+                    Orados: <span className="text-emerald-400">{prayerRequests.filter(r => r.status === "prayed").length}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Prayer Requests list wrapper */}
+              {prayerRequests.length === 0 ? (
+                <div className="p-12 text-center bg-[#0b1220]/40 rounded-2xl border border-white/5 space-y-3">
+                  <div className="w-12 h-12 bg-amber-500/5 text-amber-500 rounded-full flex items-center justify-center mx-auto border border-amber-500/10">
+                    <MessageCircle className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Nenhum Pedido de Oração</h3>
+                    <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                      Até o momento, não foram registrados novos pedidos de oração pelo canal público do portal UMESC.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {prayerRequests.map((req) => {
+                    const cleanPhone = req.whatsapp.replace(/\D/g, "");
+                    const waUrl = `https://api.whatsapp.com/send?phone=55${cleanPhone}&text=${encodeURIComponent(
+                      `Graça e Paz ${req.name}, sou Capelão voluntário credenciado da UMESC (União de Militares Evangélicos de SC). Recebi seu pedido de oração e gostaria de dizer que estamos intercedendo agora mesmo por você e por seu motivo. Estaremos juntos em oração!`
+                    )}`;
+
+                    return (
+                      <div 
+                        key={req.id} 
+                        className={`p-5 rounded-2xl border transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-6 ${
+                          req.status === "prayed" 
+                            ? "bg-[#0b1220]/25 border-emerald-500/10 opacity-75" 
+                            : "bg-[#0c1626]/80 border-white/5 hover:border-white/10"
+                        }`}
+                      >
+                        <div className="space-y-2 flex-1">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <span className="font-extrabold text-xs text-white uppercase tracking-wider">{req.name}</span>
+                            
+                            <span className="text-[9px] font-mono text-slate-500">
+                              {new Date(req.createdAt).toLocaleString("pt-BR")}
+                            </span>
+
+                            {req.status === "prayed" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[9px] text-emerald-400 font-black uppercase tracking-wider font-mono">
+                                <Check className="w-2.5 h-2.5" /> Clamor Efetuado / Orado
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-[9px] text-amber-500 font-black uppercase tracking-wider font-mono animate-pulse">
+                                Aguardando Intercessão
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="p-3 bg-[#121c2d]/50 rounded-xl border border-white/5 text-xs text-slate-205 text-slate-300 leading-relaxed font-sans">
+                            {req.request}
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                            <span className="font-bold text-slate-300">WhatsApp de Contato:</span>
+                            <span className="text-amber-400">{req.whatsapp}</span>
+                          </div>
+                        </div>
+
+                        {/* Interactive Options list */}
+                        <div className="flex items-center gap-2 self-stretch md:self-auto justify-end border-t md:border-t-0 border-white/5 pt-3 md:pt-0 shrink-0">
+                          {deletingPrayerId === req.id ? (
+                            <div className="flex items-center gap-1.5 animate-pulse bg-rose-500/5 p-1 rounded-lg border border-rose-500/10">
+                              <span className="text-[9px] text-rose-400 font-bold uppercase tracking-wider px-1">Excluir?</span>
+                              <button
+                                onClick={async () => {
+                                  await prayerRequestsService.deleteRequest(req.id);
+                                  const updated = await prayerRequestsService.getRequests();
+                                  setPrayerRequests(updated);
+                                  setDeletingPrayerId(null);
+                                }}
+                                className="px-2 py-1 rounded bg-rose-500 hover:bg-rose-400 text-[#09111e] text-[9px] font-extrabold uppercase transition-colors cursor-pointer"
+                              >
+                                Sim
+                              </button>
+                              <button
+                                onClick={() => setDeletingPrayerId(null)}
+                                className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[9px] font-extrabold uppercase transition-colors cursor-pointer"
+                              >
+                                Não
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              {/* Toggle status prayed button */}
+                              <button
+                                onClick={async () => {
+                                  const newStatus = req.status === "prayed" ? "pending" : "prayed";
+                                  await prayerRequestsService.updateRequestStatus(req.id, newStatus);
+                                  const updated = await prayerRequestsService.getRequests();
+                                  setPrayerRequests(updated);
+                                }}
+                                className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-colors cursor-pointer ${
+                                  req.status === "prayed"
+                                    ? "bg-slate-900 border-white/10 text-slate-400 hover:text-white"
+                                    : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-400 hover:text-slate-950"
+                                }`}
+                                title={req.status === "prayed" ? "Marcar como pendente de clamor" : "Marcar como orado"}
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>{req.status === "prayed" ? "Reabrir Clamor" : "Marcar como Orado"}</span>
+                              </button>
+
+                              {/* Direct Whatsapp API chat invitation */}
+                              <button
+                                onClick={() => window.open(waUrl, "_blank", "noopener,noreferrer")}
+                                className="px-3 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500 hover:text-slate-950 border border-teal-500/20 text-teal-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer"
+                                title="Entrar em contato via WhatsApp"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>Contatar</span>
+                              </button>
+
+                              {/* Delete requests button */}
+                              <button
+                                onClick={() => setDeletingPrayerId(req.id)}
+                                className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-400 transition-all cursor-pointer"
+                                title="Deletar este pedido do sistema"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* TAB 8: GESTÃO DA DIRETORIA */}
           {activeTab === "diretoria" && (
             <div className="space-y-6 text-left">
@@ -4520,7 +4687,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                 {/* Link for Public Download (PDF, Text, etc.) */}
                 <div className="p-3 border border-white/10 rounded bg-[#121c2d]/40 space-y-2">
                   <label className="block text-[9px] font-bold text-amber-500 uppercase">Link do Arquivo da Edição para Download:</label>
-                  <p className="text-[9px] text-[#94a3b8] leading-tight">Cole o endereço exclusivo do arquivo de leitura (Suporta links compartilhados do Google Drive, Dropbox ou site corporativo):</p>
+                  <p className="text-[9px] text-[#94a3b8] leading-tight font-semibold">Cole o endereço exclusivo do arquivo de leitura (Suporta links compartilhados do Google Drive, Dropbox ou site corporativo):</p>
                   
                   <input
                     type="text"
@@ -4530,6 +4697,21 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                     className="w-full bg-[#121c2d] border border-white/10 rounded px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-amber-500/50 font-mono"
                   />
                   <p className="text-[8px] text-slate-500 font-sans leading-tight">Os usuários e generais poderão realizar o download ou ler a edição de forma instantânea e otimizada.</p>
+                </div>
+
+                {/* Link for Google Drive Download */}
+                <div className="p-3 border border-white/10 rounded bg-[#121c2d]/40 space-y-2">
+                  <label className="block text-[9px] font-bold text-sky-400 uppercase">Link da Edição no Google Drive (Download em Nuvem):</label>
+                  <p className="text-[9px] text-[#94a3b8] leading-tight font-semibold font-sans">Insira o link de compartilhamento público ou link direto de download do Google Drive da Revista:</p>
+                  
+                  <input
+                    type="text"
+                    value={revistaForm.googleDriveUrl || ""}
+                    onChange={(e) => setRevistaForm({ ...revistaForm, googleDriveUrl: e.target.value })}
+                    placeholder="https://drive.google.com/file/d/1... ou pasta do Drive"
+                    className="w-full bg-[#121c2d] border border-white/10 rounded px-2.5 py-1.5 text-[10px] text-white outline-none focus:border-amber-500/50 font-mono"
+                  />
+                  <p className="text-[8px] text-slate-500 font-sans leading-tight">Permite que leitores militares façam o download ou salvem o arquivo em suas contas do Google Drive de forma direta e segura.</p>
                 </div>
 
                 <div>
