@@ -291,6 +291,7 @@ CREATE TABLE IF NOT EXISTS public.capelania_volunteers (
     name VARCHAR(255) NOT NULL,
     whatsapp VARCHAR(50) NOT NULL,
     city VARCHAR(100) NOT NULL,
+    service_title VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

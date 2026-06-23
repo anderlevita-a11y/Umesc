@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { MessageSquare, Phone, User, Send, Heart, Check, Church, Compass } from "lucide-react";
+import { MessageSquare, User, Send, Heart, Check, Church, Compass } from "lucide-react";
 import { prayerRequestsService } from "../lib/supabase";
 
 export interface PrayerRequest {
@@ -13,36 +13,20 @@ export interface PrayerRequest {
 
 export default function PrayerRequestsSection() {
   const [name, setName] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
   const [request, setRequest] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
-  // Phone mask helper for (00) 00000-0000 or (00) 0000-0000
-  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value.replace(/\D/g, "");
-    if (value.length > 11) value = value.slice(0, 11);
-    
-    if (value.length > 6) {
-      value = `(${value.slice(0, 2)}) ${value.slice(2, 7)}-${value.slice(7)}`;
-    } else if (value.length > 2) {
-      value = `(${value.slice(0, 2)}) ${value.slice(2)}`;
-    } else if (value.length > 0) {
-      value = `(${value}`;
-    }
-    setWhatsapp(value);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !whatsapp.trim() || !request.trim()) return;
+    if (!name.trim() || !request.trim()) return;
 
     setIsSubmitting(true);
 
     try {
       await prayerRequestsService.createRequest({
         name: name.trim(),
-        whatsapp: whatsapp.replace(/\D/g, ""), // keep digits for linkage
+        whatsapp: "", // Deleted per user request
         request: request.trim(),
         status: "pending"
       });
@@ -50,7 +34,6 @@ export default function PrayerRequestsSection() {
       setIsSubmitting(false);
       setIsSuccess(true);
       setName("");
-      setWhatsapp("");
       setRequest("");
 
       // Trigger custom window event to notify AdminPortal if active
@@ -156,41 +139,21 @@ export default function PrayerRequestsSection() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Nome field */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-slate-305 uppercase text-slate-300 tracking-wider">
-                      Seu Nome:
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                      <input
-                        type="text"
-                        required
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        placeholder="Insira seu nome completo"
-                        className="w-full bg-[#121c2d] border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 transition-all font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  {/* WhatsApp field */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[10px] font-bold text-slate-305 uppercase text-slate-300 tracking-wider">
-                      WhatsApp:
-                    </label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                      <input
-                        type="text"
-                        required
-                        value={whatsapp}
-                        onChange={handlePhoneChange}
-                        placeholder="(00) 00000-0000"
-                        className="w-full bg-[#121c2d] border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 transition-all font-mono"
-                      />
-                    </div>
+                {/* Nome field */}
+                <div className="space-y-1.5">
+                  <label className="block text-[10px] font-bold text-slate-305 uppercase text-slate-300 tracking-wider">
+                    Seu Nome ou Inicial/Codinome (Pode ser sob sigilo/anônimo):
+                  </label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Insira seu nome ou codinome"
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 transition-all font-mono"
+                    />
                   </div>
                 </div>
 

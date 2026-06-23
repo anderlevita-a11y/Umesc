@@ -782,6 +782,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
         description: capelaniaServiceForm.description || "",
         buttonText: capelaniaServiceForm.buttonText || "",
         emoji: capelaniaServiceForm.emoji || "✓",
+        imageUrl: capelaniaServiceForm.imageUrl || "",
         tabLink: capelaniaServiceForm.tabLink as any || "registration"
       };
       updatedList = [...capelaniaServices, newService];
@@ -3654,10 +3655,12 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                             {req.request}
                           </div>
 
-                          <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
-                            <span className="font-bold text-slate-300">WhatsApp de Contato:</span>
-                            <span className="text-amber-400">{req.whatsapp}</span>
-                          </div>
+                          {req.whatsapp && (
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                              <span className="font-bold text-slate-300">WhatsApp de Contato:</span>
+                              <span className="text-amber-400">{req.whatsapp}</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Interactive Options list */}
@@ -3705,14 +3708,16 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                               </button>
 
                               {/* Direct Whatsapp API chat invitation */}
-                              <button
-                                onClick={() => window.open(waUrl, "_blank", "noopener,noreferrer")}
-                                className="px-3 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500 hover:text-slate-950 border border-teal-500/20 text-teal-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer"
-                                title="Entrar em contato via WhatsApp"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>Contatar</span>
-                              </button>
+                              {req.whatsapp && (
+                                <button
+                                  onClick={() => window.open(waUrl, "_blank", "noopener,noreferrer")}
+                                  className="px-3 py-1.5 rounded-lg bg-teal-500/10 hover:bg-teal-500 hover:text-slate-950 border border-teal-500/20 text-teal-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 transition-all cursor-pointer"
+                                  title="Entrar em contato via WhatsApp"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Contatar</span>
+                                </button>
+                              )}
 
                               {/* Delete requests button */}
                               <button
@@ -4125,13 +4130,12 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Emoji / Ícone:</label>
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Foto de Visualização (Link do Google Drive):</label>
                         <input
                           type="text"
-                          required
-                          value={capelaniaServiceForm.emoji || ""}
-                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, emoji: e.target.value })}
-                          placeholder="Ex: ✓ ou 📖 ou 🛡️"
+                          value={capelaniaServiceForm.imageUrl || ""}
+                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, imageUrl: e.target.value })}
+                          placeholder="Cole o link de compartilhamento do Google Drive"
                           className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
                         />
                       </div>
@@ -4210,8 +4214,17 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                       className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0d1723]/30 hover:bg-[#0d1723]/70 transition-colors text-left"
                     >
                       <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold text-lg shrink-0 border border-amber-500/20">
-                          {srv.emoji}
+                        <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold text-lg shrink-0 border border-amber-500/20 overflow-hidden">
+                          {srv.imageUrl ? (
+                            <img
+                              src={getCleanImageUrl(srv.imageUrl)}
+                              alt="Capelania"
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span>{srv.emoji || "✓"}</span>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -4307,6 +4320,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                     <thead className="bg-[#0b1220]/65 text-slate-400 border-b border-white/5 uppercase text-[9px] tracking-wider font-mono">
                       <tr>
                         <th className="py-3 px-4">Nome do Voluntário</th>
+                        <th className="py-3 px-3">Serviço Escolhido</th>
                         <th className="py-3 px-4">WhatsApp / Contato</th>
                         <th className="py-3 px-4">Cidade de Concentração</th>
                         <th className="py-3 px-4 text-center">Data e Hora de Registro</th>
@@ -4317,6 +4331,15 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                       {volunteers.map((vol, index) => (
                         <tr key={vol.id || index} className="hover:bg-white/[0.02] transition-colors">
                           <td className="py-3.5 px-4 font-bold text-white">{vol.name}</td>
+                          <td className="py-3.5 px-3">
+                            {vol.serviceTitle ? (
+                              <span className="px-2 py-1 rounded text-[9px] font-mono leading-none bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 uppercase font-bold tracking-wide">
+                                {vol.serviceTitle}
+                              </span>
+                            ) : (
+                              <span className="text-slate-500 italic text-[9px]">Geral / Padrão</span>
+                            )}
+                          </td>
                           <td className="py-3.5 px-4 font-mono">
                             <div className="flex items-center gap-2">
                               <span>{vol.whatsapp}</span>
@@ -4348,7 +4371,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
                       {volunteers.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="py-12 text-center text-slate-400 font-mono text-xs">
+                          <td colSpan={6} className="py-12 text-center text-slate-400 font-mono text-xs">
                             Nenhum voluntário da Capelania cadastrado no momento.
                           </td>
                         </tr>

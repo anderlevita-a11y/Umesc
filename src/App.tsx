@@ -20,12 +20,13 @@ import Footer from "./components/Footer";
 import { ShieldCheck, Calendar, Users, Scale, UserPlus, Info, Compass, Star } from "lucide-react";
 import { DEFAULT_CAPELANIA_SERVICES } from "./data";
 import { CapelaniaService } from "./types";
+import { getCleanImageUrl } from "./lib/imageDriveHelper";
 
 export default function App() {
   const [view, setView] = useState<"public" | "dashboard" | "admin">("public");
   const [memberDashboardInitialTab, setMemberDashboardInitialTab] = useState<"notices" | "structure" | "registration" | "congressos">("notices");
   const [activeTab, setActiveTab ] = useState("about");
-  const [isDonateModalOpen, setIsDonateModalOpen] = useState(true);
+  const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
 
   // Dynamic capelania services editable in admin portal
   const [capelaniaServices, setCapelaniaServices] = useState<CapelaniaService[]>(() => {
@@ -277,19 +278,31 @@ export default function App() {
                     <button
                       key={srv.id}
                       onClick={() => handleEnterMemberDashboard(srv.tabLink)}
-                      className={`bg-[#121c2d]/20 backdrop-blur-xl p-5 rounded-lg border border-white/5 ${bColor} hover:bg-[#121c2d]/35 text-left transition-all active:scale-[0.98] group cursor-pointer`}
+                      className={`bg-[#121c2d]/20 backdrop-blur-xl p-5 rounded-xl border border-white/5 ${bColor} hover:bg-[#121c2d]/35 text-left transition-all active:scale-[0.98] group cursor-pointer flex flex-col justify-between overflow-hidden h-full`}
                     >
-                      <div className="flex items-center gap-3 mb-2.5">
-                        <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-xs transition-all ${bgCol}`}>
-                          {srv.emoji}
+                      <div>
+                        {srv.imageUrl ? (
+                          <div className="w-full h-32 rounded-lg overflow-hidden mb-3.5 border border-white/10 bg-slate-900/50">
+                            <img
+                              src={getCleanImageUrl(srv.imageUrl)}
+                              alt={srv.title}
+                              referrerPolicy="no-referrer"
+                              className="w-full h-full object-contain group-hover:scale-[1.03] transition-all duration-300"
+                            />
+                          </div>
+                        ) : null}
+                        <div className="flex items-center gap-3 mb-2.5">
+                          <div className={`w-8 h-8 rounded flex items-center justify-center font-bold text-xs transition-all shrink-0 ${bgCol}`}>
+                            {srv.emoji || "✦"}
+                          </div>
+                          <h5 className={`text-xs font-bold text-slate-100 uppercase tracking-wider ${tColor} transition-colors`}>
+                            {srv.title}
+                          </h5>
                         </div>
-                        <h5 className={`text-xs font-bold text-slate-100 uppercase tracking-wider ${tColor} transition-colors`}>
-                          {srv.title}
-                        </h5>
+                        <p className="text-[11px] text-slate-300 leading-relaxed min-h-[32px]">
+                          {srv.description}
+                        </p>
                       </div>
-                      <p className="text-[11px] text-slate-300 leading-relaxed min-h-[32px]">
-                        {srv.description}
-                      </p>
                       <span className={`text-[10px] ${btnCol} font-bold block mt-3 uppercase tracking-wider group-hover:underline`}>
                         {srv.buttonText}
                       </span>

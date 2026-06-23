@@ -146,8 +146,9 @@ export interface CapelaniaService {
   title: string;
   description: string;
   buttonText: string;
-  emoji: string;
-  tabLink: "notices" | "structure" | "registration" | "congressos";
+  emoji?: string;
+  imageUrl?: string;
+  tabLink: "notices" | "structure" | "registration" | "congressos" | "agenda";
 }
 
 

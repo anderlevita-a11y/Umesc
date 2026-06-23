@@ -14,6 +14,8 @@ export default function CapelaniaVolunteeringForm({ loggedInUser }: CapelaniaVol
   const [name, setName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [city, setCity] = useState("");
+  const [services, setServices] = useState<any[]>([]);
+  const [selectedService, setSelectedService] = useState("");
   const [lgpdConsent, setLgpdConsent] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,12 +23,32 @@ export default function CapelaniaVolunteeringForm({ loggedInUser }: CapelaniaVol
   const [errorMessage, setErrorMessage] = useState("");
   const [registeredVol, setRegisteredVol] = useState<CapelaniaVolunteer | null>(null);
 
-  // Pre-fill form if user is logged in
+  // Pre-fill form if user is logged in & load services
   useEffect(() => {
     if (loggedInUser) {
       setName(loggedInUser.name || "");
       setCity(loggedInUser.city || "");
       setWhatsapp(loggedInUser.rawPhone || "");
+    }
+
+    const saved = localStorage.getItem("umesc_capelania_services");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setServices(parsed);
+        if (parsed.length > 0) {
+          setSelectedService(parsed[0].title);
+        }
+      } catch (e) {
+        setServices([]);
+      }
+    } else {
+      setServices([
+        { id: "capsrv_1", title: "Guarnição e Auxílio" },
+        { id: "capsrv_2", title: "Literaturas de Uniforme" },
+        { id: "capsrv_3", title: "Resgate e Ação Social" }
+      ]);
+      setSelectedService("Guarnição e Auxílio");
     }
   }, [loggedInUser]);
 
@@ -48,7 +70,8 @@ export default function CapelaniaVolunteeringForm({ loggedInUser }: CapelaniaVol
       const result = await capelaniaVolunteersService.createVolunteer({
         name: name.trim(),
         whatsapp: whatsapp.trim(),
-        city: city.trim()
+        city: city.trim(),
+        serviceTitle: selectedService
       });
       setRegisteredVol(result);
       setSubmitSuccess(true);
@@ -63,6 +86,9 @@ export default function CapelaniaVolunteeringForm({ loggedInUser }: CapelaniaVol
     setName(loggedInUser?.name || "");
     setWhatsapp(loggedInUser?.rawPhone || "");
     setCity(loggedInUser?.city || "");
+    if (services.length > 0) {
+      setSelectedService(services[0].title);
+    }
     setLgpdConsent(false);
     setSubmitSuccess(false);
     setRegisteredVol(null);
@@ -89,6 +115,9 @@ export default function CapelaniaVolunteeringForm({ loggedInUser }: CapelaniaVol
           </div>
           <div className="flex justify-between"><span className="text-slate-400">IDRegistro:</span> <span className="text-white font-bold">{registeredVol.id}</span></div>
           <div className="flex justify-between"><span className="text-slate-400">Nome:</span> <span className="text-white font-bold truncate max-w-[200px]">{registeredVol.name}</span></div>
+          {registeredVol.serviceTitle && (
+            <div className="flex justify-between"><span className="text-slate-400">Serviço:</span> <span className="text-amber-450 font-bold truncate max-w-[200px]">{registeredVol.serviceTitle}</span></div>
+          )}
           <div className="flex justify-between"><span className="text-slate-400">WhatsApp:</span> <span className="text-white font-bold">{registeredVol.whatsapp}</span></div>
           <div className="flex justify-between"><span className="text-slate-400">Cidade:</span> <span className="text-white font-bold">{registeredVol.city}</span></div>
           <div className="flex justify-between border-t border-white/5 pt-1.5"><span className="text-slate-400">Data e Hora:</span> <span className="text-amber-400 font-bold">{new Date(registeredVol.createdAt || "").toLocaleString("pt-BR")}</span></div>
@@ -156,6 +185,24 @@ export default function CapelaniaVolunteeringForm({ loggedInUser }: CapelaniaVol
             placeholder="Digite seu nome completo"
             className="w-full bg-[#142337] text-xs border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-500 tracking-wide transition-all"
           />
+        </div>
+
+        {/* SERVIÇO DE INTERESSE */}
+        <div>
+          <label className="block text-[10px] font-black uppercase text-slate-300 tracking-wider mb-1.5 flex items-center gap-1">
+            <Compass className="w-3.5 h-3.5 text-amber-500" /> Serviço de Capelania de Interesse:
+          </label>
+          <select
+            value={selectedService}
+            onChange={(e) => setSelectedService(e.target.value)}
+            className="w-full bg-[#142337] text-xs border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-amber-500 tracking-wide transition-all cursor-pointer"
+          >
+            {services.map((srv) => (
+              <option key={srv.id} value={srv.title} className="bg-[#101b2a]">
+                {srv.title}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

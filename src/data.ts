@@ -283,6 +283,7 @@ export const DEFAULT_CAPELANIA_SERVICES: CapelaniaService[] = [
     description: "Acolhimento imediato a militares em face de estresse severo ou crises emocionais.",
     buttonText: "Fazer Inscrição / Solicitar Ajuda →",
     emoji: "✓",
+    imageUrl: "https://images.unsplash.com/photo-1461532252243-85f001ca588a?auto=format&fit=crop&q=80&w=600",
     tabLink: "registration"
   },
   {
@@ -291,6 +292,7 @@ export const DEFAULT_CAPELANIA_SERVICES: CapelaniaService[] = [
     description: "Entrega gratuita de Bíblias compactas de bolso para leitura em postos e patrulhas.",
     buttonText: "Quadro de Avisos / Livros →",
     emoji: "📖",
+    imageUrl: "https://images.unsplash.com/photo-1447069387593-a5de0862481e?auto=format&fit=crop&q=80&w=600",
     tabLink: "notices"
   },
   {
@@ -299,6 +301,7 @@ export const DEFAULT_CAPELANIA_SERVICES: CapelaniaService[] = [
     description: "Sopões e agasalhos na serra e planalto em parcerias voluntárias catarinenses.",
     buttonText: "Projetos e Informativos →",
     emoji: "♥",
+    imageUrl: "https://images.unsplash.com/photo-1541802645635-11f2286a7482?auto=format&fit=crop&q=80&w=600",
     tabLink: "notices"
   }
 ];

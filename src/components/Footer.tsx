@@ -151,21 +151,43 @@ export default function Footer({ onScrollToSection, onOpenDonateModal, onEnterAd
         </div>
 
         {/* Separator / Copyright info */}
-        <div className="pt-8 mt-8 border-t border-slate-900 text-center text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-4 text-[11px]">
-          <div>
+        <div className="pt-8 mt-8 border-t border-slate-900 text-center text-slate-500 flex flex-col sm:flex-row justify-between items-center gap-6 text-[11px]">
+          <div className="text-center sm:text-left">
             © {currentYear} UMESC - União de Militares Evangélicos de Santa Catarina.
           </div>
           
-          <div className="flex flex-wrap gap-4 items-center justify-center text-slate-400">
-            <span>Desenvolvido sob Prerrogativas de Fé e Lei Geral de Proteção de Dados (Lei 13.709/2018)</span>
-            <span>•</span>
+          <div className="flex flex-col sm:flex-row gap-4 items-center justify-center sm:justify-end text-slate-400">
+            <span className="text-center sm:text-right max-w-md">
+              Desenvolvido pela Cloud Church sob prerrogativas de fé com base na protecao de dados da LGPD.
+            </span>
             <a 
-              href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm" 
+              href="https://wa.me/5547997626121" 
               target="_blank" 
               rel="noreferrer"
-              className="hover:text-amber-500 flex items-center gap-1"
+              className="hover:opacity-80 transition-opacity bg-slate-900/60 hover:bg-slate-900 px-3 py-1.5 rounded-xl border border-white/5 flex items-center gap-2"
+              title="Falar com o Desenvolvedor no WhatsApp"
             >
-              Consultar Lei LGPD <ExternalLink className="w-3 h-3" />
+              <div className="relative w-6 h-6 flex items-center justify-center shrink-0">
+                <svg viewBox="0 0 100 100" className="w-full h-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M 25 65 
+                       A 15 15 0 0 1 20 35 
+                       A 20 20 0 0 1 55 22 
+                       A 18 18 0 0 1 85 40 
+                       A 14 14 0 0 1 78 65 
+                       Z"
+                    fill="#57c0cf"
+                  />
+                  <path
+                    d="M 46.5 36 h 7 v 10 h 10 v 6 h -10 v 13 h -7 v -13 h -10 v -6 h 10 Z"
+                    fill="white"
+                  />
+                </svg>
+              </div>
+              <div className="flex flex-col text-left leading-none font-sans">
+                <span className="text-[9px] font-black tracking-wide text-white">CLOUD CHURCH</span>
+                <span className="text-[6.5px] text-slate-400">Desenvolvimento</span>
+              </div>
             </a>
           </div>
         </div>

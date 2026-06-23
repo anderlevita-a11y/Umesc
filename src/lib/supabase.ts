@@ -559,6 +559,7 @@ export interface CapelaniaVolunteer {
   name: string;
   whatsapp: string;
   city: string;
+  serviceTitle?: string;
   createdAt?: string;
 }
 
@@ -582,6 +583,7 @@ export const capelaniaVolunteersService = {
             name: v.name,
             whatsapp: v.whatsapp,
             city: v.city,
+            serviceTitle: v.service_title || v.serviceTitle,
             createdAt: v.created_at || v.createdAt
           }));
         }
@@ -614,6 +616,7 @@ export const capelaniaVolunteersService = {
           name: newVol.name,
           whatsapp: newVol.whatsapp,
           city: newVol.city,
+          service_title: newVol.serviceTitle,
           created_at: newVol.createdAt
         };
 
@@ -633,6 +636,7 @@ export const capelaniaVolunteersService = {
             name: data[0].name,
             whatsapp: data[0].whatsapp,
             city: data[0].city,
+            serviceTitle: data[0].service_title,
             createdAt: data[0].created_at
           };
         }
