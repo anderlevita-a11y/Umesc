@@ -777,7 +777,7 @@ export default function CongressoManager() {
                           </div>
                           <div className="text-white font-extrabold truncate">{selectedIns.paymentProofName || "comprovante_transacao.pdf"}</div>
                           <div className="text-[8px] text-teal-400 mt-1">✓ Transação aprovada e registrada</div>
-                          <div className="text-[8.5px] text-slate-400 mt-1">Valor Unitário: <b className="text-white font-bold">R$ {activeCongress.price.toFixed(2)}</b></div>
+                          <div className="text-[8.5px] text-slate-400 mt-1">Valor Unitário: <b className="text-white font-bold">{activeCongress.price === 0 ? "Entrada Franca" : "R$ " + activeCongress.price.toFixed(2)}</b></div>
                           <div className="text-[8.5px] text-slate-400">Autenticação: <span className="text-slate-500 font-bold">MD5-B3F9A{selectedIns.id}C9482</span></div>
                         </div>
 
@@ -1362,14 +1362,36 @@ export default function CongressoManager() {
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Taxa de Inscrição (R$)</label>
-                <input
-                  type="number"
-                  value={congFormPrice}
-                  onChange={(e) => setCongFormPrice(Number(e.target.value))}
-                  placeholder="40"
-                  className="w-full px-3 py-2 bg-[#0a101a] border border-white/10 rounded-lg text-xs text-white"
-                  required
-                />
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="number"
+                    value={congFormPrice}
+                    onChange={(e) => setCongFormPrice(Number(e.target.value))}
+                    placeholder="40"
+                    className="w-full px-3 py-2 bg-[#0a101a] border border-white/10 rounded-lg text-xs text-white disabled:opacity-50"
+                    required
+                    disabled={congFormPrice === 0}
+                  />
+                  <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-amber-400 select-none">
+                    <input
+                      type="checkbox"
+                      checked={congFormPrice === 0}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setCongFormPrice(0);
+                          setCongFormPixKey("Entrada Franca");
+                          setCongFormPixName("Entrada Franca / Isento");
+                        } else {
+                          setCongFormPrice(45);
+                          setCongFormPixKey("");
+                          setCongFormPixName("");
+                        }
+                      }}
+                      className="accent-amber-500 rounded cursor-pointer w-3.5 h-3.5"
+                    />
+                    <span>Ativar Entrada Franca (Sem custo / PIX)</span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -1381,8 +1403,9 @@ export default function CongressoManager() {
                   value={congFormPixKey}
                   onChange={(e) => setCongFormPixKey(e.target.value)}
                   placeholder="pix@unesc-sc.org.br"
-                  className="w-full px-3 py-2 bg-[#0a101a] border border-white/10 rounded-lg text-xs text-white font-mono"
-                  required
+                  className="w-full px-3 py-2 bg-[#0a101a] border border-white/10 rounded-lg text-xs text-white font-mono disabled:opacity-50"
+                  required={congFormPrice > 0}
+                  disabled={congFormPrice === 0}
                 />
               </div>
               <div>
@@ -1392,8 +1415,9 @@ export default function CongressoManager() {
                   value={congFormPixName}
                   onChange={(e) => setCongFormPixName(e.target.value)}
                   placeholder="UMESC Florianópolis Caixa Geral"
-                  className="w-full px-3 py-2 bg-[#0a101a] border border-white/10 rounded-lg text-xs text-white"
-                  required
+                  className="w-full px-3 py-2 bg-[#0a101a] border border-white/10 rounded-lg text-xs text-white disabled:opacity-50"
+                  required={congFormPrice > 0}
+                  disabled={congFormPrice === 0}
                 />
               </div>
             </div>
@@ -1489,10 +1513,10 @@ export default function CongressoManager() {
                   {/* Big Value Display */}
                   <div className="py-1">
                     <div className="text-3xl font-black text-slate-900 font-mono tracking-tight">
-                      R$ {activeCongress?.price?.toFixed(2) || "100,00"}
+                      {activeCongress?.price === 0 ? "Entrada Franca" : "R$ " + (activeCongress?.price?.toFixed(2) || "100,00")}
                     </div>
                     <div className="text-[9px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" /> Transação Realizada via PIX
+                      <Check className="w-3.5 h-3.5" /> {activeCongress?.price === 0 ? "Inscrição Gratuita Autorizada" : "Transação Realizada via PIX"}
                     </div>
                   </div>
 

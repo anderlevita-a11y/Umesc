@@ -5,7 +5,7 @@
 
 import React from "react";
 import { ShieldCheck, Heart, User, BookOpen, Star, ChevronRight, Compass } from "lucide-react";
-import heroBg from "../assets/images/hero_banner_sgt_carvalho_clean_bible_1781071416408.png";
+const heroBg = "https://qndjkphfsejuqopmfgas.supabase.co/storage/v1/object/public/bennes%20convites%20e%20eventos/WhatsApp%20Image%202026-07-14%20at%2018.48.52.jpeg";
 
 interface HeroProps {
   onScrollToSection: (elementId: string) => void;
@@ -20,8 +20,8 @@ export default function Hero({ onScrollToSection, onEnterMemberDashboard }: Hero
       <div className="absolute inset-0 z-0 select-none pointer-events-none">
         <img
           src={heroBg}
-          alt="Sgt Carvalho fardada segurando a oficial Bíblia do Militar - Capelania PMSC & CBMSC"
-          className="w-full h-full object-cover object-[center_28%]"
+          alt="Banner de Fundo UMESC"
+          className="w-full h-full object-cover object-center"
           referrerPolicy="no-referrer"
         />
         {/* Sleek, deep dark military gradient mask: full charcoal on the left to show readable display texts, fading transparently on the right */}

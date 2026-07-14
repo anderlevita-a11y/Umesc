@@ -57,6 +57,7 @@ export default function VisitorCongressModal({ isOpen, onClose, initialCongressI
   if (!isOpen) return null;
 
   const activeCongress = congresses.find(c => c.id === selectedCongressId);
+  const queriedCongress = selectedQueriedIns ? (congresses.find(c => c.id === selectedQueriedIns.congressId) || activeCongress) : activeCongress;
 
   // Mask CPF Helper
   const handleCpfChange = (val: string) => {
@@ -124,7 +125,7 @@ export default function VisitorCongressModal({ isOpen, onClose, initialCongressI
       memberPhone: phone,
       memberRank: "Visitante", // Special non-member indicator
       selectedWorkshopIds,
-      paymentStatus: "pendente" as const
+      paymentStatus: activeCongress.price === 0 ? ("pago" as const) : ("pendente" as const)
     };
 
     const created = congressService.addInscription(insData);
@@ -325,7 +326,7 @@ export default function VisitorCongressModal({ isOpen, onClose, initialCongressI
                   >
                     {congresses.map(c => (
                       <option key={c.id} value={c.id}>
-                        {c.title} — Taxa: R$ {c.price.toFixed(2)}
+                        {c.title} — Taxa: {c.price === 0 ? "Entrada Franca" : "R$ " + c.price.toFixed(2)}
                       </option>
                     ))}
                   </select>
@@ -508,14 +509,14 @@ export default function VisitorCongressModal({ isOpen, onClose, initialCongressI
                     <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-3 border-t border-white/5">
                       <div className="text-center sm:text-left">
                         <span className="block text-[10px] text-slate-400 font-mono">VALOR TOTAL DA INSCRIÇÃO</span>
-                        <span className="text-xl font-black text-amber-400">R$ {activeCongress.price.toFixed(2)}</span>
+                        <span className="text-xl font-black text-amber-400">{activeCongress.price === 0 ? "Entrada Franca" : "R$ " + activeCongress.price.toFixed(2)}</span>
                       </div>
                       
                       <button
                         type="submit"
                         className="w-full sm:w-auto py-3 px-8 rounded-xl bg-amber-500 hover:bg-amber-600 font-black text-[#0c1421] text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-500/10 cursor-pointer"
                       >
-                        Confirmar Inscrição Avulsa
+                        {activeCongress.price === 0 ? "Confirmar Inscrição Gratuita" : "Confirmar Inscrição Avulsa"}
                       </button>
                     </div>
                   </div>
@@ -741,75 +742,89 @@ export default function VisitorCongressModal({ isOpen, onClose, initialCongressI
                   ) : (
                     <div className="space-y-4">
                       
-                      {/* Payment Pending Alert */}
-                      <div className="bg-[#241312] border border-rose-500/20 p-4 rounded-xl text-xs text-slate-200 leading-relaxed">
-                        <div className="flex items-start gap-2.5">
-                          <AlertTriangle className="w-4.5 h-4.5 text-rose-450 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="block font-bold text-rose-400 uppercase font-mono text-[10px]">Ação Necessária</span>
-                            <span>Para garantir sua vaga oficial e liberar o QR Code de portaria, realize a transferência de <strong>R$ 45,00</strong> via Pix e envie o comprovante de pagamento no formulário ao lado.</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* PIX copy block */}
-                      {activeCongress && (
-                        <div className="bg-[#0e1929] border border-white/5 p-4 rounded-xl space-y-3">
-                          <span className="block text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">DADOS DE PAGAMENTO PIX</span>
-                          
-                          <div className="flex justify-between items-center bg-[#070c18] p-3 rounded-lg border border-white/10 gap-4">
-                            <div className="truncate">
-                              <span className="block text-[8px] text-slate-500 uppercase font-mono">CHAVE PIX (CNPJ ou E-MAIL)</span>
-                              <span className="text-xs text-amber-400 font-mono font-bold truncate block">{activeCongress.pixKey}</span>
+                      {/* Payment Pending Alert / Free Admission Alert */}
+                      {queriedCongress && queriedCongress.price === 0 ? (
+                        <div className="bg-[#0b241b] border border-emerald-500/20 p-4 rounded-xl text-xs text-slate-200 leading-relaxed">
+                          <div className="flex items-start gap-2.5">
+                            <CheckCircle className="w-4.5 h-4.5 text-emerald-400 shrink-0 mt-0.5" />
+                            <div>
+                              <span className="block font-bold text-emerald-400 uppercase font-mono text-[10px]">Entrada Franca / Credenciamento Gratuito</span>
+                              <span>Este congresso é gratuito e livre de taxa de inscrição. Sua vaga está garantida gratuitamente! Seu crachá com o QR Code foi homologado com sucesso.</span>
                             </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="bg-[#241312] border border-rose-500/20 p-4 rounded-xl text-xs text-slate-200 leading-relaxed">
+                            <div className="flex items-start gap-2.5">
+                              <AlertTriangle className="w-4.5 h-4.5 text-rose-450 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="block font-bold text-rose-400 uppercase font-mono text-[10px]">Ação Necessária</span>
+                                <span>Para garantir sua vaga oficial e liberar o QR Code de portaria, realize a transferência de <strong>R$ {queriedCongress ? queriedCongress.price.toFixed(2) : "45,00"}</strong> via Pix e envie o comprovante de pagamento no formulário ao lado.</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* PIX copy block */}
+                          {queriedCongress && (
+                            <div className="bg-[#0e1929] border border-white/5 p-4 rounded-xl space-y-3">
+                              <span className="block text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">DADOS DE PAGAMENTO PIX</span>
+                              
+                              <div className="flex justify-between items-center bg-[#070c18] p-3 rounded-lg border border-white/10 gap-4">
+                                <div className="truncate">
+                                  <span className="block text-[8px] text-slate-500 uppercase font-mono">CHAVE PIX (CNPJ ou E-MAIL)</span>
+                                  <span className="text-xs text-amber-400 font-mono font-bold truncate block">{queriedCongress.pixKey}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyPix(queriedCongress.pixKey)}
+                                  className="py-1 px-3 bg-amber-500 hover:bg-amber-600 text-[#0c1421] text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                                >
+                                  <Clipboard className="w-3 h-3" /> Copiar Chave
+                                </button>
+                              </div>
+
+                              <div className="text-[10px] text-slate-400 space-y-0.5 font-mono">
+                                <p>Favorecido: <strong className="text-white">{queriedCongress.pixReceiverName}</strong></p>
+                                <p>Valor exato: <strong className="text-amber-500">R$ {queriedCongress.price.toFixed(2)}</strong></p>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Receipt Uploader Form */}
+                          <form onSubmit={handleProofSubmit} className="bg-[#0e1929]/50 p-4 rounded-xl border border-white/5 space-y-3">
+                            <span className="block text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">ANEXAR COMPROVANTE DO PIX</span>
+                            
+                            <div className="relative border border-dashed border-white/15 rounded-lg p-4 text-center hover:bg-white/2 hover:border-amber-500/50 transition-all">
+                              <input
+                                type="file"
+                                accept="image/*,application/pdf"
+                                onChange={handleFileChange}
+                                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                              />
+                              <UploadCloud className="w-8 h-8 text-amber-500 mx-auto opacity-70" />
+                              <span className="block text-xs font-bold text-white mt-2">
+                                {fakeFileName ? fakeFileName : "Clique para selecionar foto ou PDF do comprovante"}
+                              </span>
+                              <span className="block text-[9px] text-slate-400 mt-1">
+                                Suporta PNG, JPG ou PDF de até 5MB
+                              </span>
+                            </div>
+
                             <button
-                              type="button"
-                              onClick={() => handleCopyPix(activeCongress.pixKey)}
-                              className="py-1 px-3 bg-amber-500 hover:bg-amber-600 text-[#0c1421] text-[10px] font-bold uppercase rounded-md transition-all cursor-pointer flex items-center gap-1 shrink-0"
+                              type="submit"
+                              disabled={isUploadingProof || (!selectedFile && !fakeFileName)}
+                              className={`w-full py-2 px-4 rounded-lg font-black text-xs uppercase tracking-wider transition-all cursor-pointer ${
+                                isUploadingProof || (!selectedFile && !fakeFileName)
+                                  ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5"
+                                  : "bg-amber-500 hover:bg-amber-600 text-slate-950"
+                              }`}
                             >
-                              <Clipboard className="w-3 h-3" /> Copiar Chave
+                              {isUploadingProof ? "Transmitindo Comprovante..." : "Enviar Comprovante de Pagamento"}
                             </button>
-                          </div>
-
-                          <div className="text-[10px] text-slate-400 space-y-0.5 font-mono">
-                            <p>Favorecido: <strong className="text-white">{activeCongress.pixReceiverName}</strong></p>
-                            <p>Valor exato: <strong className="text-amber-500">R$ {activeCongress.price.toFixed(2)}</strong></p>
-                          </div>
-                        </div>
+                          </form>
+                        </>
                       )}
-
-                      {/* Receipt Uploader Form */}
-                      <form onSubmit={handleProofSubmit} className="bg-[#0e1929]/50 p-4 rounded-xl border border-white/5 space-y-3">
-                        <span className="block text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">ANEXAR COMPROVANTE DO PIX</span>
-                        
-                        <div className="relative border border-dashed border-white/15 rounded-lg p-4 text-center hover:bg-white/2 hover:border-amber-500/50 transition-all">
-                          <input
-                            type="file"
-                            accept="image/*,application/pdf"
-                            onChange={handleFileChange}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                          />
-                          <UploadCloud className="w-8 h-8 text-amber-500 mx-auto opacity-70" />
-                          <span className="block text-xs font-bold text-white mt-2">
-                            {fakeFileName ? fakeFileName : "Clique para selecionar foto ou PDF do comprovante"}
-                          </span>
-                          <span className="block text-[9px] text-slate-400 mt-1">
-                            Suporta PNG, JPG ou PDF de até 5MB
-                          </span>
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={isUploadingProof || (!selectedFile && !fakeFileName)}
-                          className={`w-full py-2 px-4 rounded-lg font-black text-xs uppercase tracking-wider transition-all cursor-pointer ${
-                            isUploadingProof || (!selectedFile && !fakeFileName)
-                              ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5"
-                              : "bg-amber-500 hover:bg-amber-600 text-slate-950"
-                          }`}
-                        >
-                          {isUploadingProof ? "Transmitindo Comprovante..." : "Enviar Comprovante de Pagamento"}
-                        </button>
-                      </form>
 
                     </div>
                   )}

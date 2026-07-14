@@ -178,7 +178,7 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
         memberPhone: loggedInUser.phone || "(48) 99999-9999",
         memberRank: loggedInUser.rank || "Membro",
         selectedWorkshopIds: chosenWsIds,
-        paymentStatus: "pendente",
+        paymentStatus: activeCongress.price === 0 ? "pago" : "pendente",
         memberPhotoUrl: memberPhotoUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=300"
       });
 
@@ -367,7 +367,7 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
 
                       <div className="text-right flex items-center gap-1 text-xs font-mono font-black text-amber-400">
                         <DollarSign className="w-3.5 h-3.5 shrink-0" />
-                        <span>R$ {c.price.toFixed(2)}</span>
+                        <span>{c.price === 0 ? "Entrada Franca" : "R$ " + c.price.toFixed(2)}</span>
                       </div>
                     </div>
 
@@ -451,7 +451,7 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
                 </div>
                 <div className="flex items-center gap-2 text-white font-bold">
                   <DollarSign className="w-4 h-4 text-amber-500 shrink-0" />
-                  <span>Taxa: R$ {activeCongress.price.toFixed(2)}</span>
+                  <span>Taxa: {activeCongress.price === 0 ? "Entrada Franca" : "R$ " + activeCongress.price.toFixed(2)}</span>
                 </div>
               </div>
             </div>
@@ -639,7 +639,7 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
               disabled={isSubmitting}
               className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-lg text-xs uppercase tracking-widest transition-all cursor-pointer font-bold shrink-0 shadow-lg text-center"
             >
-              {isSubmitting ? "Emitindo Inscrição..." : `Confirmar Inscrição • R$ ${activeCongress.price.toFixed(2)}`}
+              {isSubmitting ? "Emitindo Inscrição..." : activeCongress.price === 0 ? "Confirmar Inscrição Gratuita" : `Confirmar Inscrição • R$ ${activeCongress.price.toFixed(2)}`}
             </button>
 
           </div>
@@ -856,7 +856,9 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
                 <div className="p-3.5 bg-[#0b1e1d] border border-teal-500/30 text-teal-350 text-xs rounded-xl flex gap-3 select-none leading-relaxed font-semibold animate-fadeIn">
                   <Check className="w-5 h-5 text-teal-400 shrink-0" />
                   <div>
-                    Inscrição Homologada com Sucesso! Não há nenhuma ação pendente. Desejamos um maravilhoso congresso!
+                    {activeCongress.price === 0 
+                      ? "Inscrição de Entrada Franca Homologada! Sua credencial está garantida e ativa gratuitamente. Desejamos um maravilhoso congresso!" 
+                      : "Inscrição Homologada com Sucesso! Não há nenhuma ação pendente. Desejamos um maravilhoso congresso!"}
                   </div>
                 </div>
               ) : (

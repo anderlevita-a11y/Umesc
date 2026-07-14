@@ -183,25 +183,27 @@ export default function CarouselsSection() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
           
           {/* CAROUSEL 1: CONVITES (INVITATIONS) */}
-          <div className="bg-[#0b1220] rounded-2xl border border-white/5 p-5 flex flex-col justify-between h-[450px]">
+          <div className="bg-[#0b1220] rounded-2xl border border-white/5 p-4 sm:p-5 flex flex-col justify-between min-h-[420px] sm:h-[450px]">
             
             {/* Carousel title block */}
-            <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4">
-              <div className="flex items-center gap-2 text-amber-500">
-                <Megaphone className="w-5 h-5" />
-                <span className="font-extrabold text-xs uppercase text-white tracking-wider font-display">Convites Estaduais & Campanhas</span>
+            <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4 gap-2">
+              <div className="flex items-center gap-2 text-amber-500 min-w-0 flex-1">
+                <Megaphone className="w-5 h-5 shrink-0" />
+                <span className="font-extrabold text-[10px] sm:text-xs uppercase text-white tracking-wider font-display break-words">
+                  Convites Estaduais & Campanhas
+                </span>
               </div>
               <button 
                 onClick={() => setConvitesPlaying(!convitesPlaying)} 
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white transition-colors shrink-0 p-1 rounded hover:bg-white/5"
                 title={convitesPlaying ? "Pausar Reprodução Automática" : "Iniciar Reprodução Automática"}
               >
-                {convitesPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                {convitesPlaying ? <Pause className="w-4 h-4 shrink-0" /> : <Play className="w-4 h-4 shrink-0" />}
               </button>
             </div>
 
             {/* Slider visual frame */}
-            <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5">
+            <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5 min-h-[250px] sm:min-h-[300px]">
               
               {convites.length > 0 && currentConvite ? (
                 <AnimatePresence initial={false} custom={convitesDirection} mode="popLayout">
@@ -307,25 +309,25 @@ export default function CarouselsSection() {
           </div>
 
           {/* CAROUSEL 2: EVENTOS (EVENTS) */}
-          <div className="bg-[#0b1220] rounded-2xl border border-white/5 p-5 flex flex-col justify-between h-[450px]">
+          <div className="bg-[#0b1220] rounded-2xl border border-white/5 p-4 sm:p-5 flex flex-col justify-between min-h-[420px] sm:h-[450px]">
             
             {/* Carousel title block */}
-            <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4">
-              <div className="flex items-center gap-2 text-teal-450 text-teal-450 text-teal-400">
-                <Calendar className="w-5 h-5" />
-                <span className="font-extrabold text-xs uppercase text-white tracking-wider font-display">Ações Sociais & Atividades</span>
+            <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4 gap-2">
+              <div className="flex items-center gap-2 text-teal-400 min-w-0 flex-1">
+                <Calendar className="w-5 h-5 shrink-0" />
+                <span className="font-extrabold text-[10px] sm:text-xs uppercase text-white tracking-wider font-display break-words">Ações Sociais & Atividades</span>
               </div>
               <button 
                 onClick={() => setEventosPlaying(!eventosPlaying)} 
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white transition-colors shrink-0 p-1 rounded hover:bg-white/5"
                 title={eventosPlaying ? "Pausar Reprodução" : "Iniciar Reprodução"}
               >
-                {eventosPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                {eventosPlaying ? <Pause className="w-4 h-4 shrink-0" /> : <Play className="w-4 h-4 shrink-0" />}
               </button>
             </div>
 
             {/* Slider visual frame */}
-            <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5">
+            <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5 min-h-[250px] sm:min-h-[300px]">
               
               {eventos.length > 0 && currentEvento ? (
                 <AnimatePresence initial={false} custom={eventosDirection} mode="popLayout">
