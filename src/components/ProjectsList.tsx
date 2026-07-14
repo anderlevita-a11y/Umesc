@@ -83,12 +83,10 @@ function generatePixString(pixKey: string, amount: number, receiverName: string)
 }
 
 interface ProjectsListProps {
-  isDonateModalOpen: boolean;
-  setIsDonateModalOpen: (open: boolean) => void;
   selectedPreloadProj?: string;
 }
 
-export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, selectedPreloadProj }: ProjectsListProps) {
+export default function ProjectsList({ selectedPreloadProj }: ProjectsListProps) {
   // Dynamic projects list with local storage cache
   const [projectsList, setProjectsList] = useState<Project[]>(() => {
     try {
@@ -98,15 +96,6 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
       return INITIAL_PROJECTS;
     }
   });
-
-  // Donation active triggers
-  const [activeProject, setActiveProject] = useState<Project | null>(null);
-
-  useEffect(() => {
-    if (projectsList.length > 0 && !activeProject) {
-      setActiveProject(projectsList[0]);
-    }
-  }, [projectsList, activeProject]);
 
   useEffect(() => {
     const handleReload = () => {
@@ -120,32 +109,6 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
     window.addEventListener("umesc_content_updated", handleReload);
     return () => window.removeEventListener("umesc_content_updated", handleReload);
   }, []);
-  const [copiedKey, setCopiedKey] = useState(false);
-  const [donationSuccess, setDonationSuccess] = useState(false);
-  const [anonymousDonation, setAnonymousDonation] = useState(false);
-  const [donateAmount, setDonateAmount] = useState<number>(50);
-  const [customAmount, setCustomAmount] = useState<string>("");
-  const [donorName, setDonorName] = useState<string>("");
-  const [donorWhatsapp, setDonorWhatsapp] = useState<string>("");
-  const [selectedProofFile, setSelectedProofFile] = useState<File | null>(null);
-  const [proofFileName, setProofFileName] = useState<string>("");
-  const [proofFileBase64, setProofFileBase64] = useState<string>("");
-  const [isSubmittingDonation, setIsSubmittingDonation] = useState<boolean>(false);
-  const [lgpdDonateConsent, setLgpdDonateConsent] = useState(false);
-
-  const handleProofFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setSelectedProofFile(file);
-      setProofFileName(file.name);
-      
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProofFileBase64(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
   // Volunteering active triggers
   const [volunteeringProject, setVolunteeringProject] = useState<Project | null>(null);
@@ -155,15 +118,6 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
   const [volunteerSkill, setVolunteerSkill] = useState("");
   const [lgpdVolConsent, setLgpdVolConsent] = useState(false);
 
-  // Simulated temporary databases
-  const [simulationSummary, setSimulationSummary] = useState<{
-    id: string;
-    amount: number;
-    projectTitle: string;
-    date: string;
-    authCode: string;
-  } | null>(null);
-
   const [volunteerSummary, setVolunteerSummary] = useState<{
     id: string;
     name: string;
@@ -172,82 +126,12 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
     authCode: string;
   } | null>(null);
 
-  // Set selected project and open donation modal
-  const triggerDonate = (project: Project) => {
-    setActiveProject(project);
-    setDonationSuccess(false);
-    setSimulationSummary(null);
-    setDonorWhatsapp("");
-    setSelectedProofFile(null);
-    setProofFileName("");
-    setProofFileBase64("");
-    setLgpdDonateConsent(false);
-    setIsDonateModalOpen(true);
-  };
-
   // Set selected project and open volunteer block
   const triggerVolunteer = (project: Project) => {
     setVolunteeringProject(project);
     setVolunteerSuccess(false);
     setVolunteerSummary(null);
     setLgpdVolConsent(false);
-  };
-
-  const getDynamicPixString = () => {
-    const finalAmount = customAmount ? parseFloat(customAmount) : donateAmount;
-    const amountVal = isNaN(finalAmount) || finalAmount <= 0 ? 50.00 : finalAmount;
-    return generatePixString("umesc@corpmil.org", amountVal, "UMESC SC");
-  };
-
-  const handleCopyPixString = () => {
-    const pixStr = getDynamicPixString();
-    navigator.clipboard.writeText(pixStr);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2000);
-  };
-
-  const handleConfirmDonate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!lgpdDonateConsent) return;
-
-    const finalAmount = customAmount ? parseFloat(customAmount) : donateAmount;
-    if (!finalAmount || finalAmount <= 0) return;
-
-    setIsSubmittingDonation(true);
-    const mockRefId = `DON-2026-${Math.floor(1000 + Math.random() * 9000)}`;
-    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
-
-    const newDonation: Omit<Donation, "registrationDate"> = {
-      id: mockRefId,
-      projectId: activeProject?.id || "avulsa",
-      projectName: activeProject?.title || "Doação Avulsa",
-      donorName: donorName.trim() || "Anônimo",
-      donorWhatsapp: donorWhatsapp.trim() || "Não Informado",
-      amount: finalAmount,
-      paymentStatus: "em_analise",
-      paymentProofUrl: proofFileBase64 || "",
-      paymentProofName: proofFileName || ""
-    };
-
-    try {
-      await donationsService.createDonation(newDonation);
-
-      setSimulationSummary({
-        id: mockRefId,
-        amount: finalAmount,
-        projectTitle: activeProject?.title || "Doação Avulsa",
-        date: new Date().toLocaleDateString("pt-BR"),
-        authCode: `SHA256-${code}`
-      });
-
-      // Dispara o evento de sincronização que atualiza os outros blocos na tela
-      window.dispatchEvent(new Event("umesc_content_updated"));
-      setDonationSuccess(true);
-    } catch (err) {
-      console.error("Erro ao registrar doação:", err);
-    } finally {
-      setIsSubmittingDonation(false);
-    }
   };
 
   const handleConfirmVolunteer = (e: React.FormEvent) => {
@@ -326,42 +210,16 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
                     <span className="block font-black text-amber-700 uppercase tracking-widest text-[9px] mb-1">Necessidade Primária:</span>
                     <span className="text-slate-600 font-semibold">{project.detailedNeeds}</span>
                   </div>
-                </div>
-
-                {/* Progress bar info */}
-                <div>
-                  <div className="flex justify-between items-end mb-1 text-xs text-slate-500 font-semibold">
-                    <span>Meta Financeira: R$ {project.targetAmount.toLocaleString("pt-BR")}</span>
-                    <span className="font-mono text-amber-700 font-bold">{project.raisedPercent}% alcançado</span>
-                  </div>
-                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden mb-5">
-                    <div 
-                      className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full" 
-                      style={{ width: `${project.raisedPercent}%` }}
-                    ></div>
-                  </div>
-
-                  {/* Buttons */}
-                  <div className="grid grid-cols-2 gap-3">
-                    
-                    <button
-                      id={`project-btn-donate-${project.id}`}
-                      onClick={() => triggerDonate(project)}
-                      className="flex items-center justify-center gap-1.5 py-3 rounded bg-[#1a2a40] hover:bg-[#131f2e] text-amber-400 font-black text-xs transition-colors tracking-widest uppercase cursor-pointer"
-                    >
-                      <Coins className="w-3.5 h-3.5" />
-                      Apoiar com PIX
-                    </button>
-                    
+                   {/* Buttons */}
+                  <div className="w-full">
                     <button
                       id={`project-btn-volunteer-${project.id}`}
                       onClick={() => triggerVolunteer(project)}
-                      className="flex items-center justify-center gap-1.5 py-3 rounded bg-slate-100 hover:bg-slate-200 border border-slate-250 text-[#1a2a40] font-bold text-xs transition-colors tracking-widest uppercase cursor-pointer"
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded bg-[#1a2a40] hover:bg-[#131f2e] text-white font-bold text-xs transition-colors tracking-widest uppercase cursor-pointer"
                     >
-                      <UserCheck className="w-3.5 h-3.5" />
-                      Voluntariar
+                      <UserCheck className="w-4 h-4 text-amber-400" />
+                      Quero me Voluntariar
                     </button>
-
                   </div>
                 </div>
 
@@ -511,274 +369,6 @@ export default function ProjectsList({ isDonateModalOpen, setIsDonateModalOpen, 
         )}
 
       </div>
-
-      {/* Renders Donation Modal Popup */}
-      {isDonateModalOpen && activeProject && (
-        <div className="fixed inset-0 z-50 flex justify-center items-start p-4 bg-slate-950/90 backdrop-blur-sm shadow-2xl overflow-y-auto py-6 sm:py-12">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 w-full max-w-lg shadow-2xl text-white my-auto">
-            
-            {/* Modal header */}
-            <div className="flex justify-between items-center pb-4 border-b border-slate-850 mb-5">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-amber-500 tracking-wider">Apoio Missionário</span>
-                <h3 className="text-xl font-bold">Semeadura no Reino</h3>
-              </div>
-              <button 
-                onClick={() => setIsDonateModalOpen(false)}
-                className="p-1 px-2.5 text-xs font-bold rounded-md bg-slate-950/80 border border-slate-800 text-slate-400 hover:text-white transition-all hover:bg-slate-800"
-              >
-                fechar X
-              </button>
-            </div>
-
-            {!donationSuccess ? (
-              <form onSubmit={handleConfirmDonate} className="space-y-5">
-                
-                <div>
-                  <label className="block text-xs text-slate-400 uppercase font-black mb-1">Destinação Escolhida:</label>
-                  <p className="font-bold text-sm text-amber-400">{activeProject.title}</p>
-                  <p className="text-[11px] text-slate-400">{activeProject.location}</p>
-                </div>
-
-                {/* Amount checklist */}
-                <div>
-                  <label className="block text-xs text-slate-400 uppercase font-black mb-1.5">Escolha o valor de Doação (R$):</label>
-                  <div className="grid grid-cols-4 gap-2 mb-3">
-                    {[20, 50, 100, 200].map((val) => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => {
-                          setDonateAmount(val);
-                          setCustomAmount("");
-                        }}
-                        className={`py-2 rounded-lg text-xs font-bold transition-all ${
-                          donateAmount === val && !customAmount
-                            ? "bg-amber-500 text-slate-950"
-                            : "bg-slate-950 border border-slate-850 hover:bg-slate-800 text-slate-300"
-                        }`}
-                      >
-                        R$ {val}
-                      </button>
-                    ))}
-                  </div>
-
-                  <input 
-                    type="number"
-                    value={customAmount}
-                    onChange={(e) => {
-                      setCustomAmount(e.target.value);
-                      setDonateAmount(0);
-                    }}
-                    placeholder="Outro Valor em R$:" 
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-lg px-3 py-2 text-sm outline-none placeholder-slate-600 font-mono"
-                  />
-                </div>
-
-                {/* User Info */}
-                <div className="space-y-2">
-                  <div>
-                    <label className="block text-xs text-slate-400 uppercase font-bold mb-1">Seu Nome (Opcional):</label>
-                    <input 
-                      type="text"
-                      value={donorName}
-                      onChange={(e) => setDonorName(e.target.value)}
-                      placeholder="Identificar Doação" 
-                      disabled={anonymousDonation}
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-lg px-3 py-2 text-sm outline-none disabled:opacity-50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs text-slate-400 uppercase font-bold mb-1">Seu WhatsApp de Contato:</label>
-                    <input 
-                      type="tel"
-                      required
-                      value={donorWhatsapp}
-                      onChange={(e) => setDonorWhatsapp(e.target.value)}
-                      placeholder="Ex: (48) 99999-9999" 
-                      className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-lg px-3 py-2 text-sm outline-none font-mono text-white"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs text-slate-400 uppercase font-bold mb-1 flex items-center gap-1">
-                      <Paperclip className="w-3.5 h-3.5 text-amber-500" /> Anexar Comprovante PIX/Transferência (Opcional):
-                    </label>
-                    <div className="relative border border-dashed border-slate-800 rounded-lg p-3 bg-slate-950/40 hover:bg-slate-950 transition-colors flex flex-col items-center justify-center text-center">
-                      <input 
-                        type="file" 
-                        accept="image/*,application/pdf"
-                        onChange={handleProofFileChange}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                      />
-                      {proofFileName ? (
-                        <div className="space-y-1">
-                          <p className="text-xs text-emerald-400 font-semibold truncate max-w-[280px]">✓ {proofFileName}</p>
-                          <p className="text-[10px] text-slate-500">Clique ou arraste outro para alterar</p>
-                        </div>
-                      ) : (
-                        <div>
-                          <p className="text-xs text-slate-350 font-medium	">Toque para selecionar imagem ou PDF</p>
-                          <p className="text-[10px] text-slate-500 font-mono mt-0.5">Formatos aceitos: JPG, PNG, PDF</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 cursor-pointer pt-1">
-                    <input 
-                      type="checkbox" 
-                      checked={anonymousDonation}
-                      onChange={(e) => {
-                        setAnonymousDonation(e.target.checked);
-                        if (e.target.checked) setDonorName("Anônimo");
-                        else setDonorName("");
-                      }}
-                      className="accent-amber-500"
-                    />
-                    <span className="text-xs text-slate-450 text-slate-400">Desejo doar de forma 100% Anônima para o público</span>
-                  </label>
-                </div>
-
-                {/* Simulated PIX Box */}
-                <div className="bg-slate-950 p-4 border border-slate-850 rounded-xl">
-                  
-                  <div className="flex gap-4 items-center mb-3">
-                    {/* QR Code de Doação oficial via Supabase */}
-                    <div className="w-32 h-32 bg-white rounded border border-slate-800 p-1 flex items-center justify-center shrink-0 overflow-hidden">
-                      <img 
-                        src="https://qndjkphfsejuqopmfgas.supabase.co/storage/v1/object/public/qr%20code%20pix%20entidade/PIX_UMESC_2023.jpeg" 
-                        alt="QR Code PIX UMESC" 
-                        className="w-full h-full object-contain"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <span className="block text-[11px] text-slate-400 font-semibold leading-relaxed">Escanei o QR Code ao lado ou utilize a chave PIX abaixo no seu banco corporativo para concluir:</span>
-                      <span 
-                        className="block text-[11.5px] text-amber-500 font-bold tracking-wider"
-                        style={{ fontFamily: "Arial, sans-serif" }}
-                      >
-                        CNPJ PIX: 18.232.091/0001-90
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleCopyPixString}
-                    className="w-full flex items-center justify-between px-3 py-2 rounded bg-slate-905 border border-slate-800 text-xs font-mono text-slate-350 hover:bg-slate-800 cursor-pointer slashed-zero"
-                    style={{ fontVariantNumeric: "slashed-zero", fontFeatureSettings: '"zero" 1' }}
-                  >
-                    <span className="truncate max-w-[300px] text-left opacity-90 select-all" title={getDynamicPixString()}>{getDynamicPixString()}</span>
-                    {copiedKey ? (
-                      <span className="text-emerald-400 font-bold text-[10px] flex items-center gap-1"><Check className="w-3 h-3" /> Copiado!</span>
-                    ) : (
-                      <span className="text-amber-500 text-[10px] font-bold"><Copy className="w-3 h-3 inline mr-1" /> Copiar</span>
-                    )}
-                  </button>
-
-                </div>
-
-                {/* Crucial LGPD Privacy Consent box for Donor */}
-                <div className="bg-slate-950 p-3.5 border border-rose-900/30 rounded-lg">
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      required
-                      checked={lgpdDonateConsent}
-                      onChange={(e) => setLgpdDonateConsent(e.target.checked)}
-                      className="mt-1 accent-amber-500 rounded"
-                    />
-                    <span className="text-[11px] text-slate-400 leading-normal">
-                      <strong>Termo do Doador (LGPD):</strong> Dou consentimento livre e inequívoco para tratamento e guarda estritamente confidencial dos dados de WhatsApp, identificação e arquivo de comprovante unicamente para conferência de caixa missionária externa, em total conformidade estatutária e conforme a LGPD brasileira.
-                    </span>
-                  </label>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <button 
-                      type="button"
-                      onClick={() => setIsDonateModalOpen(false)}
-                      className="w-full sm:w-1/3 py-3.5 font-bold uppercase tracking-wider text-xs rounded-xl bg-[#0b1220] hover:bg-slate-800 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer text-center flex items-center justify-center"
-                    >
-                      Voltar
-                    </button>
-                    <button 
-                      type="submit"
-                      id="submit-modal-btn-donate"
-                      disabled={!lgpdDonateConsent || isSubmittingDonation}
-                      className="w-full sm:w-2/3 py-3.5 font-bold uppercase tracking-wider text-xs rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 disabled:opacity-40 transition-all cursor-pointer text-center font-bold flex items-center justify-center gap-2"
-                    >
-                      {isSubmittingDonation ? (
-                        <>
-                          <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"></span>
-                          Registrando...
-                        </>
-                      ) : (
-                        "Registrar e Enviar Comprovante"
-                      )}
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-500 text-center font-mono">Registro oficial enviado para o painel administrativo</p>
-                </div>
-
-              </form>
-            ) : (
-              <div className="text-center py-6 space-y-4">
-                <div className="w-16 h-16 rounded-full bg-emerald-950/70 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-3xl mx-auto">
-                  ✓
-                </div>
-                
-                <div className="space-y-1">
-                  <h4 className="text-xl font-black text-amber-500">Agradecemos, sua doação foi registrada com sucesso!</h4>
-                </div>
-
-                {/* Printable receipt */}
-                <div className="bg-slate-950 p-4 rounded-xl border border-slate-850 font-mono text-xs text-left text-slate-350 space-y-2 max-w-sm mx-auto">
-                  <div className="text-[9px] text-amber-500 font-bold uppercase pb-1 border-b border-slate-800 flex justify-between">
-                    <span>DOC. COMERCIAL INTERNO</span>
-                    <span className="text-emerald-400">DOAÇÃO REGISTRADA</span>
-                  </div>
-                  <div>ID Transação: {simulationSummary?.id}</div>
-                  <div>Destinação: {simulationSummary?.projectTitle}</div>
-                  <div>Doador: {donorName || "Anônimo"}</div>
-                  <div>WhatsApp: {donorWhatsapp || "Não Informado"}</div>
-                  <div>Valor Semeado: R$ {simulationSummary?.amount.toFixed(2)}</div>
-                  <div>Data Registro: {simulationSummary?.date}</div>
-                  {proofFileName && <div className="text-emerald-400">Comprovante: {proofFileName}</div>}
-                  <div className="truncate">Integridade: {simulationSummary?.authCode}</div>
-                  <div className="text-[10px] text-slate-500 mt-2 italic text-center text-slate-400 uppercase">Agradecemos de coração a sua parceria missionária!</div>
-                </div>
-
-                <div className="flex gap-3 justify-center pt-4">
-                  <button
-                    onClick={() => {
-                      setIsDonateModalOpen(false);
-                      setDonationSuccess(false);
-                    }}
-                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs uppercase cursor-pointer"
-                  >
-                    Voltar aos Projetos
-                  </button>
-                  <a 
-                    href={`data:text/plain;charset=utf-8,${encodeURIComponent(`RECIBO DE SIMULACAO DOACAO UMESC\nID: ${simulationSummary?.id}\nProjeto: ${simulationSummary?.projectTitle}\nDoador: ${donorName || "Anonimo"}\nValor: R$ ${simulationSummary?.amount.toFixed(2)}\nIntegridade LGPD: ${simulationSummary?.authCode}\nData: ${simulationSummary?.date}`)}`} 
-                    download={`recibo_umesc_doacao_${simulationSummary?.id}.txt`}
-                    className="px-5 py-2.5 bg-slate-950 hover:bg-slate-850 text-slate-300 border border-slate-800 font-bold rounded-lg text-xs uppercase flex items-center gap-1.5 cursor-pointer"
-                  >
-                    Baixar Recibo (.TXT)
-                  </a>
-                </div>
-
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
 
     </section>
   );

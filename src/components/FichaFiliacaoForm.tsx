@@ -252,6 +252,7 @@ export default function FichaFiliacaoForm({
     currentList = currentList.filter(f => f.memberCpf !== loggedInUser.cpf);
     currentList.push(newFicha);
     localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(currentList));
+    window.dispatchEvent(new CustomEvent("umesc_content_updated"));
 
     setSuccessMsg("Ficha de Filiação enviada e assinada com sucesso!");
     onFichaSubmitted(newFicha);
@@ -309,6 +310,7 @@ export default function FichaFiliacaoForm({
                           const list = JSON.parse(saved) as FichaFiliacao[];
                           const filtered = list.filter(f => f.memberCpf !== loggedInUser.cpf);
                           localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(filtered));
+                          window.dispatchEvent(new CustomEvent("umesc_content_updated"));
                           onFichaDeleted();
                         } catch (e) {
                           console.error(e);
@@ -894,8 +896,7 @@ export default function FichaFiliacaoForm({
             <div className="space-y-4">
               {[
                 { id: 1, text: "1. AUTORIZAR DESCONTO MENSAL" },
-                { id: 2, text: "2. ALTERAR PERCENTUAL ATUAL" },
-                { id: 3, text: "3. CANCELAMENTO DO DESCONTO" }
+                { id: 2, text: "2. ALTERAR PERCENTUAL ATUAL" }
               ].map(opt => (
                 <label 
                   key={opt.id}
@@ -922,11 +923,6 @@ export default function FichaFiliacaoForm({
                     {opt.id === 2 && (
                       <p className="text-[10px] text-slate-400 mt-1">
                         Substitui o percentual de desconto antigo por um novo.
-                      </p>
-                    )}
-                    {opt.id === 3 && (
-                      <p className="text-[10px] text-rose-300 mt-1">
-                        Atenção: Solicita o encerramento do código de repasse e a desvinculação financeira.
                       </p>
                     )}
                   </div>

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { 
   Calendar, MapPin, Clock, ArrowRight, Sparkles, ShieldCheck, 
-  Users, Award, ChevronRight, Lock, Ticket, HelpCircle
+  Users, Award, ChevronRight, Lock, Ticket, HelpCircle, UserPlus, Search
 } from "lucide-react";
 import { congressService, Congress } from "../lib/congressService.ts";
+import VisitorCongressModal from "./VisitorCongressModal.tsx";
 
 interface PublicCongressBannerProps {
   onEnterMemberDashboard: (tab: "notices" | "structure" | "registration" | "congressos") => void;
@@ -52,6 +53,7 @@ function parseCongressDate(dateStr: string): Date {
 export default function PublicCongressBanner({ onEnterMemberDashboard }: PublicCongressBannerProps) {
   const [activeCongresses, setActiveCongresses] = useState<Congress[]>([]);
   const [featuredIndex, setFeaturedIndex] = useState(0);
+  const [isVisitorModalOpen, setIsVisitorModalOpen] = useState(false);
 
   // Countdown timer state
   const [timeLeft, setTimeLeft] = useState({
@@ -276,28 +278,54 @@ export default function PublicCongressBanner({ onEnterMemberDashboard }: PublicC
             )}
 
             {/* Action booking blocks */}
-            <div className="space-y-3 pt-2">
+            <div className="space-y-4 pt-2">
               
               <div className="flex items-center justify-between bg-[#121c2d]/50 rounded-xl p-3.5 border border-white/5">
                 <div>
-                  <span className="block text-[9px] text-slate-400 uppercase font-bold font-mono tracking-widest">VALOR DA INCRIÇÃO</span>
+                  <span className="block text-[9px] text-slate-400 uppercase font-bold font-mono tracking-widest">VALOR DA INSCRIÇÃO</span>
                   <span className="text-lg font-black text-white hover:text-amber-400 transition-colors">R$ {featured.price.toFixed(2)}</span>
                 </div>
               </div>
 
-              <button
-                id={`btn-cta-congress-public-${featured.id}`}
-                onClick={() => onEnterMemberDashboard("congressos")}
-                className="w-full flex items-center justify-center gap-2 py-3.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 font-black text-[#0c1421] uppercase text-xs tracking-wider transition-all shadow-lg shadow-amber-500/10 hover:shadow-amber-500/20 hover:-translate-y-0.5 active:scale-95 cursor-pointer"
-              >
-                <span>Inscrever-se Agora</span>
-                <ArrowRight className="w-4 h-4 text-[#0c1421]" />
-              </button>
+              {/* Twin CTA Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Button 1: Members (Cadastro de Filiados) */}
+                <button
+                  id={`btn-cta-congress-public-${featured.id}`}
+                  onClick={() => onEnterMemberDashboard("congressos")}
+                  className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 font-black text-[#0c1421] uppercase text-xs tracking-wider transition-all shadow-lg shadow-amber-500/10 hover:shadow-amber-500/20 hover:-translate-y-0.5 active:scale-95 cursor-pointer"
+                >
+                  <span>Cadastro de Filiados</span>
+                  <ArrowRight className="w-4 h-4 text-[#0c1421]" />
+                </button>
+
+                {/* Button 2: Visitors (Cadastro de Visitantes) */}
+                <button
+                  type="button"
+                  onClick={() => setIsVisitorModalOpen(true)}
+                  className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-transparent hover:bg-amber-500/10 border-2 border-amber-500 text-amber-400 font-black uppercase text-xs tracking-wider transition-all hover:-translate-y-0.5 active:scale-95 cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>Cadastro de Visitantes</span>
+                </button>
+              </div>
+
+              {/* Status Query Link */}
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsVisitorModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 hover:text-amber-400 transition-colors cursor-pointer group"
+                >
+                  <Search className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400 transition-colors" />
+                  <span>Já se inscreveu? Consulte o status de sua inscrição avulsa aqui</span>
+                </button>
+              </div>
 
               <div className="text-center">
                 <span className="text-[10px] text-slate-500 font-mono flex items-center justify-center gap-1">
                   <Lock className="w-3 h-3 text-slate-500 inline" />
-                  Uso exclusivo para filiados da UMESC via Portal do Membro.
+                  Filiados usam o Portal do Membro. Visitantes usam a credencial avulsa.
                 </span>
               </div>
 
@@ -308,6 +336,13 @@ export default function PublicCongressBanner({ onEnterMemberDashboard }: PublicC
         </div>
 
       </div>
+
+      {/* Visitor / Guest Registration & Query Modal */}
+      <VisitorCongressModal 
+        isOpen={isVisitorModalOpen} 
+        onClose={() => setIsVisitorModalOpen(false)} 
+        initialCongressId={featured.id}
+      />
 
     </section>
   );

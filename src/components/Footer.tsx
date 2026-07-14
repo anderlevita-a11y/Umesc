@@ -6,15 +6,14 @@
 import React from "react";
 import { UMESC_ABOUT } from "../data";
 import { ShieldCheck, Mail, MapPin, Phone, Landmark, ExternalLink, Bookmark } from "lucide-react";
-import logoImg from "../assets/images/umesc_logo_official_1780591542921.png";
+const logoImg = "https://qndjkphfsejuqopmfgas.supabase.co/storage/v1/object/public/qr%20code%20pix%20entidade/Nova%20Log.png";
 
 interface FooterProps {
   onScrollToSection: (elementId: string) => void;
-  onOpenDonateModal: () => void;
   onEnterAdminMode?: () => void;
 }
 
-export default function Footer({ onScrollToSection, onOpenDonateModal, onEnterAdminMode }: FooterProps) {
+export default function Footer({ onScrollToSection, onEnterAdminMode }: FooterProps) {
   const currentYear = new Date().getFullYear();
 
   return (
@@ -86,14 +85,6 @@ export default function Footer({ onScrollToSection, onOpenDonateModal, onEnterAd
                   className="text-slate-400 hover:text-white hover:underline transition-all text-left font-semibold text-amber-500"
                 >
                   Fazer Minha Inscrição
-                </button>
-              </li>
-              <li>
-                <button 
-                  onClick={onOpenDonateModal} 
-                  className="text-slate-400 hover:text-white hover:underline transition-all text-left"
-                >
-                  Doar com PIX Rápido
                 </button>
               </li>
               {onEnterAdminMode && (

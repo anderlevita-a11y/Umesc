@@ -3,12 +3,12 @@ import {
   ShieldAlert, ShieldCheck, Shield, Users, Briefcase, BookOpen, Layers, Calendar, 
   Trash2, Edit, Plus, Check, X, LogIn, LogOut, ArrowLeft, RefreshCw, BarChart2, PieChart, Info,
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
-  Coins, ExternalLink, Paperclip, Compass, Bell
+  Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake
 } from "lucide-react";
-import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService } from "../lib/supabase.ts";
+import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { donationsService } from "../lib/donationService.ts";
-import { MemberRegistration, Project, FichaFiliacao, Donation, MemberContent, CapelaniaService, Announcement, DocumentFile } from "../types";
+import { MemberRegistration, Project, FichaFiliacao, Donation, MemberContent, CapelaniaService, Announcement, DocumentFile, ApoioFemininoPost } from "../types";
 import { generateFichaPdf } from "../lib/fichaPdfHelper.ts";
 import { RevistaEdition } from "./RevistasSection.tsx";
 import { PrayerRequest } from "./PrayerRequestsSection.tsx";
@@ -111,6 +111,140 @@ const DEFAULT_MEMBER_CONTENTS: MemberContent[] = [
   }
 ];
 
+// Helper functions for birthday filtering
+const parseBirthDate = (dateStr: string) => {
+  if (!dateStr) return null;
+  
+  // Remove any time part if it is an ISO string (e.g. 1985-07-14T00:00:00...)
+  const dateOnly = dateStr.split("T")[0].trim();
+  
+  // Split by "-", "/", ".", or spaces
+  const parts = dateOnly.split(/[-/.\s]+/);
+  if (parts.length < 2) return null;
+
+  // Let's find which part is the year.
+  // In most date formats, either the first part (index 0) or the last part (index 2 or length-1) is the 4-digit year.
+  // If we can't find a 4-digit part, we can guess based on values.
+  let yearIndex = -1;
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i].length === 4 && !isNaN(Number(parts[i]))) {
+      yearIndex = i;
+      break;
+    }
+  }
+
+  let day = NaN;
+  let month = NaN; // 0-indexed
+
+  if (yearIndex === 0) {
+    // Format is likely YYYY-MM-DD or YYYY-DD-MM
+    // Standard is YYYY-MM-DD
+    month = parseInt(parts[1], 10) - 1;
+    day = parseInt(parts[2], 10);
+  } else if (yearIndex === 2 || (parts.length >= 3 && yearIndex === parts.length - 1)) {
+    // Format is likely DD-MM-YYYY or MM-DD-YYYY
+    // In Brazil/Latin America, it is always DD-MM-YYYY
+    day = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10) - 1;
+  } else {
+    // No 4-digit year found. Let's make an intelligent guess from the values.
+    // If parts[0] > 12, it must be the day, so DD-MM
+    const p0 = parseInt(parts[0], 10);
+    const p1 = parseInt(parts[1], 10);
+    if (p0 > 12) {
+      day = p0;
+      month = p1 - 1;
+    } else if (p1 > 12) {
+      day = p1;
+      month = p0 - 1;
+    } else {
+      // Default to DD-MM in Brazilian format
+      day = p0;
+      month = p1 - 1;
+    }
+  }
+
+  if (isNaN(day) || isNaN(month) || month < 0 || month > 11 || day < 1 || day > 31) {
+    // Try standard Date fallback as a last resort
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        if (dateStr.includes("T") || dateStr.includes("Z")) {
+          return { month: d.getUTCMonth(), day: d.getUTCDate() };
+        } else {
+          return { month: d.getMonth(), day: d.getDate() };
+        }
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
+  }
+
+  return { month, day };
+};
+
+const isBirthdayThisMonth = (birthDateStr: string | undefined) => {
+  if (!birthDateStr) return false;
+  const parsed = parseBirthDate(birthDateStr);
+  if (!parsed) return false;
+  const now = new Date();
+  return parsed.month === now.getMonth();
+};
+
+const isBirthdayThisWeek = (birthDateStr: string | undefined) => {
+  if (!birthDateStr) return false;
+  const parsed = parseBirthDate(birthDateStr);
+  if (!parsed) return false;
+  
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  
+  // Start of current week (Sunday)
+  const startOfWeek = new Date(now);
+  const dayOfWeek = now.getDay();
+  startOfWeek.setDate(now.getDate() - dayOfWeek);
+  startOfWeek.setHours(0, 0, 0, 0);
+  
+  // End of current week (Saturday)
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  endOfWeek.setHours(23, 59, 59, 999);
+  
+  // Check in current, previous and next years to handle boundaries
+  const bdayThisYear = new Date(currentYear, parsed.month, parsed.day);
+  if (bdayThisYear >= startOfWeek && bdayThisYear <= endOfWeek) return true;
+  
+  const bdayPrevYear = new Date(currentYear - 1, parsed.month, parsed.day);
+  if (bdayPrevYear >= startOfWeek && bdayPrevYear <= endOfWeek) return true;
+  
+  const bdayNextYear = new Date(currentYear + 1, parsed.month, parsed.day);
+  if (bdayNextYear >= startOfWeek && bdayNextYear <= endOfWeek) return true;
+  
+  return false;
+};
+
+const formatBirthDate = (dateStr: string | undefined) => {
+  if (!dateStr) return "Não cadastrado";
+  const parsed = parseBirthDate(dateStr);
+  if (!parsed) return dateStr;
+  const months = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+  return `${parsed.day} de ${months[parsed.month]}`;
+};
+
+const getBirthdayWhatsAppLink = (m: MemberRegistration) => {
+  const cleanPhone = m.phone ? m.phone.replace(/\D/g, "") : "";
+  const linkPhone = cleanPhone ? (cleanPhone.length === 10 || cleanPhone.length === 11 ? "55" + cleanPhone : cleanPhone) : "";
+  if (!linkPhone) return "";
+  
+  const msg = `Olá, *${m.name}*! 🎉\n\nA diretoria da *UMESC* (União de Militares Evangélicos de Santa Catarina) deseja a você um feliz aniversário! 🎂\n\nQue o Senhor Deus o abençoe ricamente, fortalecendo sua fé, sua família e sua honrada caminhada ministerial e militar. 🛡️✨\n\nReceba o nosso carinho e este cartão especial de felicitações:\nhttps://qndjkphfsejuqopmfgas.supabase.co/storage/v1/object/public/bennes%20convites%20e%20eventos/feliz%20aniversario%202026.jpeg`;
+  
+  return `https://api.whatsapp.com/send?phone=${linkPhone}&text=${encodeURIComponent(msg)}`;
+};
+
 interface AdminPortalProps {
   onBackToHome: () => void;
 }
@@ -123,7 +257,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas" | "conteudos" | "servicos" | "voluntarios" | "doacoes" | "oracoes">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas" | "conteudos" | "servicos" | "voluntarios" | "oracoes" | "apoio_feminino">("dashboard");
 
   // Supabase Connection State Diagnostics
   const [dbStatus, setDbStatus] = useState<{
@@ -225,7 +359,25 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
   // Search members state
   const [searchMember, setSearchMember] = useState("");
-  const [membersFilter, setMembersFilter] = useState<"all" | "pending" | "approved" | "paused" | "archived">("all");
+  const [membersFilter, setMembersFilter] = useState<"all" | "pending" | "approved" | "paused" | "archived" | "bday_week" | "bday_month">("all");
+
+  // Birthday card tracking sent state
+  const [sentBdayCards, setSentBdayCards] = useState<Record<string, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem("umesc_sent_bday_cards");
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const toggleBdayCardSent = (cpf: string) => {
+    setSentBdayCards(prev => {
+      const updated = { ...prev, [cpf]: !prev[cpf] };
+      localStorage.setItem("umesc_sent_bday_cards", JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   // Donations admin state
   const [selectedProofView, setSelectedProofView] = useState<Donation | null>(null);
@@ -286,6 +438,12 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [deletingCoordenador, setDeletingCoordenador] = useState<any | null>(null);
   const [deletingFicha, setDeletingFicha] = useState<FichaFiliacao | null>(null);
   const [deletingPrayerId, setDeletingPrayerId] = useState<string | null>(null);
+  const [deletingVolunteer, setDeletingVolunteer] = useState<CapelaniaVolunteer | null>(null);
+
+  // Apoio Feminino state
+  const [apoioFemininoPosts, setApoioFemininoPosts] = useState<ApoioFemininoPost[]>([]);
+  const [apoioFemininoForm, setApoioFemininoForm] = useState<Partial<ApoioFemininoPost> | null>(null);
+  const [deletingApoioFemininoPost, setDeletingApoioFemininoPost] = useState<ApoioFemininoPost | null>(null);
 
   // Load Admin databases
   const refreshAllData = async () => {
@@ -349,6 +507,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       // 11. Prayer Requests (Pedidos de Oração)
       const prayersList = await prayerRequestsService.getRequests();
       setPrayerRequests(prayersList);
+
+      // 12. Apoio Feminino (Blog)
+      const afPosts = await apoioFemininoService.getPosts();
+      setApoioFemininoPosts(afPosts);
     } catch (e) {
       console.error("Error refreshing administrative databases:", e);
     }
@@ -368,6 +530,26 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     return () => {
       window.removeEventListener("umesc_content_updated", handleReload);
       window.removeEventListener("umesc_prayer_requests_updated", handleReload);
+    };
+  }, [isAdminLoggedIn]);
+
+  // Auto-refresh when tabs are switched
+  useEffect(() => {
+    if (isAdminLoggedIn) {
+      refreshAllData();
+    }
+  }, [activeTab]);
+
+  // Auto-refresh when window or browser tab gets focus (for a new access experience)
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      if (isAdminLoggedIn) {
+        refreshAllData();
+      }
+    };
+    window.addEventListener("focus", handleWindowFocus);
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
     };
   }, [isAdminLoggedIn]);
 
@@ -809,16 +991,21 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     alert("Serviço de Capelania removido.");
   };
 
-  const handleDeleteVolunteer = async (v: CapelaniaVolunteer) => {
-    if (!v.id) return;
-    if (window.confirm(`Deseja realmente remover o voluntário "${v.name}" da base de dados da Capelania?`)) {
-      try {
-        await capelaniaVolunteersService.deleteVolunteer(v.id);
-        const list = await capelaniaVolunteersService.getVolunteers();
-        setVolunteers(list);
-      } catch (err) {
-        console.error("Erro deletando voluntário:", err);
-      }
+  const handleDeleteVolunteer = (v: CapelaniaVolunteer) => {
+    setDeletingVolunteer(v);
+  };
+
+  const confirmDeleteVolunteer = async () => {
+    if (!deletingVolunteer || !deletingVolunteer.id) return;
+    try {
+      await capelaniaVolunteersService.deleteVolunteer(deletingVolunteer.id);
+      const list = await capelaniaVolunteersService.getVolunteers();
+      setVolunteers(list);
+      setDeletingVolunteer(null);
+      notifyContentChange();
+      alert("Voluntário excluído com sucesso!");
+    } catch (err) {
+      console.error("Erro deletando voluntário:", err);
     }
   };
 
@@ -1142,13 +1329,13 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
             { id: "congressos", label: "Gestão de Congressos", icon: QrCode },
             { id: "membros", label: `Membros (${members.length})`, icon: Users },
             { id: "fichas", label: `Fichas de Filiação (${fichas.length})`, icon: FileCheck },
-            { id: "doacoes", label: `Doações Recebidas (${donations.length})`, icon: Coins },
             { id: "conteudos", label: `Quadro de Avisos (Mural)`, icon: Bell },
             { id: "projetos", label: "Projetos Missionários", icon: Briefcase },
             { id: "revistas", label: "Revista e Boletins", icon: BookOpen },
             { id: "convites", label: "Carrossel de Convites", icon: Layers },
             { id: "eventos", label: "Carrossel de Eventos", icon: Calendar },
             { id: "termos", label: "Termos & Políticas LGPD", icon: Scale },
+            { id: "apoio_feminino", label: `Apoio Feminino (${apoioFemininoPosts.length})`, icon: Heart },
             { id: "oracoes", label: `Pedidos de Oração (${prayerRequests.length})`, icon: MessageCircle },
             { id: "servicos", label: "Serviços de Capelania", icon: Compass },
             { id: "voluntarios", label: `Voluntários da Capelania (${volunteers.length})`, icon: Compass },
@@ -1170,6 +1357,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                   setContentForm(null);
                   setCapelaniaServiceForm(null);
                   setSelectedContentForDispatch(null);
+                  setApoioFemininoForm(null);
                 }}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl uppercase tracking-wider text-[10px] font-bold text-left transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                   activeTab === tab.id 
@@ -1323,86 +1511,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
               </div>
 
-              {/* Seção de Caixa e Doações integrado ao Dashboard */}
-              <div className="bg-[#0b1220] rounded-xl border border-white/5 p-5 text-left space-y-4">
-                <div className="flex justify-between items-center pb-2 border-b border-white/5 font-display">
-                  <h3 className="font-extrabold text-[#1a2a40] text-amber-500 text-xs uppercase tracking-widest flex items-center gap-2">
-                    <Coins className="w-4 h-4 text-amber-500 animate-bounce" />
-                    Balanço de Doações e Sementes Missionárias
-                  </h3>
-                  <button 
-                    onClick={() => setActiveTab("doacoes")} 
-                    className="text-[9px] font-mono font-bold text-amber-500 hover:text-amber-400 uppercase tracking-widest hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 outline-none p-0"
-                  >
-                    Ir para Gestão de Doações <ExternalLink className="w-3 h-3" />
-                  </button>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Caixa Sócio-Religioso */}
-                  <div className="p-4 bg-[#121c2d] rounded-xl border border-white/5 space-y-2">
-                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold font-mono">Arrecadado Projetos (PAGO)</span>
-                    <div className="text-xl font-extrabold text-amber-400 font-mono">
-                      R$ {donations.filter(d => d.paymentStatus === "pago").reduce((sum, d) => sum + d.amount, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[10px] text-slate-400 leading-normal">
-                      Total líquido em caixa de semeaduras voluntárias homologadas
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-[#121c2d] rounded-xl border border-white/5 space-y-2">
-                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold font-mono">Aguardando Auditoria</span>
-                    <div className="text-xl font-extrabold text-blue-400 font-mono">
-                      R$ {donations.filter(d => d.paymentStatus === "em_analise" || d.paymentStatus === "pendente").reduce((sum, d) => sum + d.amount, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-[10px] text-slate-400 leading-normal">
-                      Doações sob conferência bancária do PIX anexado
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-[#121c2d] rounded-xl border border-white/5 space-y-2">
-                    <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-bold font-mono">Ações de Destinação Ativas</span>
-                    <div className="text-xl font-extrabold text-teal-400 font-mono">
-                      {Array.from(new Set(donations.map(d => d.projectName))).length || 0} frentes
-                    </div>
-                    <div className="text-[10px] text-slate-400 leading-normal">
-                      Frentes missionárias ou avulsas que receberam suporte doador
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recent donations list */}
-                <div className="space-y-2 pt-2">
-                  <span className="text-[9px] uppercase font-bold text-slate-400 block font-mono">Últimas Semeaduras Registradas:</span>
-                  {donations.length === 0 ? (
-                    <p className="text-[10px] text-slate-500 italic pb-2">Nenhum registro de doação para exibir no balanço.</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pb-2">
-                      {donations.slice(0, 4).map((d, index) => (
-                        <div key={index} className="p-3 rounded-lg bg-[#121c2d]/50 border border-white/5 flex items-center justify-between text-xs text-slate-300">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-extrabold text-slate-100">{d.donorName}</span>
-                              <span className="text-[9px] font-mono text-slate-500">{new Date(d.registrationDate).toLocaleDateString("pt-BR")}</span>
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-1 leading-none uppercase">
-                              Projeto: <span className="font-mono text-slate-300">{d.projectName}</span>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <span className="font-mono font-bold text-amber-500 block">R$ {d.amount.toFixed(2)}</span>
-                            <span className={`text-[9px] uppercase font-bold font-mono ${
-                              d.paymentStatus === "pago" ? "text-emerald-400" : d.paymentStatus === "recusado" ? "text-rose-400" : "text-blue-400"
-                            }`}>
-                              {d.paymentStatus === "pago" ? "✓ Homologado" : d.paymentStatus === "recusado" ? "✕ Recusado" : "• Em Análise"}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
 
             </div>
           )}
@@ -1477,7 +1586,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                   className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
                     membersFilter === "paused"
                       ? "bg-[#f97316]/20 text-orange-300 border border-[#f97316]/30 font-black shadow-md shadow-orange-500/5"
-                      : "text-orange-400 hover:text-orange-300 hover:bg-orange-555 hover:bg-orange-500/10"
+                      : "text-orange-400 hover:text-orange-300 hover:bg-[#f97316]/10"
                   }`}
                 >
                   <Pause className="w-3.5 h-3.5 text-orange-400" />
@@ -1494,6 +1603,30 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                 >
                   <Archive className="w-3.5 h-3.5 text-purple-300" />
                   Arquivados ({members.filter(m => m.archived).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMembersFilter("bday_week")}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                    membersFilter === "bday_week"
+                      ? "bg-pink-500/20 text-pink-300 border border-pink-500/30 font-black shadow-md shadow-pink-500/5"
+                      : "text-pink-400 hover:text-pink-300 hover:bg-pink-500/10"
+                  }`}
+                >
+                  <Gift className="w-3.5 h-3.5 text-pink-400" />
+                  Aniversariantes da Semana ({members.filter(m => isBirthdayThisWeek(m.birthDate)).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMembersFilter("bday_month")}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 ${
+                    membersFilter === "bday_month"
+                      ? "bg-pink-500/20 text-pink-300 border border-pink-500/30 font-black shadow-md shadow-pink-500/5"
+                      : "text-pink-400 hover:text-pink-300 hover:bg-pink-500/10"
+                  }`}
+                >
+                  <Cake className="w-3.5 h-3.5 text-pink-400" />
+                  Aniversariantes do Mês ({members.filter(m => isBirthdayThisMonth(m.birthDate)).length})
                 </button>
               </div>
 
@@ -1517,6 +1650,8 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                       if (membersFilter === "approved") return m.approved && !m.paused && !m.archived;
                       if (membersFilter === "paused") return !!m.paused;
                       if (membersFilter === "archived") return !!m.archived;
+                      if (membersFilter === "bday_week") return isBirthdayThisWeek(m.birthDate);
+                      if (membersFilter === "bday_month") return isBirthdayThisMonth(m.birthDate);
                       return true;
                     })
                     .map((m, idx) => (
@@ -1538,6 +1673,17 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                               <span>•</span>
                               <span>{m.rank}</span>
                             </div>
+                            {m.birthDate && (
+                              <div className="flex items-center gap-1 text-[8.5px] font-mono text-slate-400 mt-1">
+                                <Cake className="w-3 h-3 text-pink-400" />
+                                <span>Nasc: <strong className="text-pink-300">{formatBirthDate(m.birthDate)}</strong></span>
+                                {isBirthdayThisWeek(m.birthDate) && (
+                                  <span className="ml-1 inline-block px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[7px] font-bold uppercase tracking-tight font-sans animate-pulse">
+                                    Esta Semana! 🎉
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           <div className="col-span-1 font-mono text-[9px] tracking-wider text-slate-200 truncate">
@@ -1589,6 +1735,42 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                           </div>
 
                           <div className="col-span-2 flex justify-end gap-1.5 shrink-0 items-center">
+                            {/* Birthday card tracking sent state checkbox */}
+                            {m.birthDate && (
+                              <label 
+                                title={sentBdayCards[m.cpf] ? "Cartão de aniversário já enviado" : "Marcar cartão de aniversário como enviado"}
+                                className={`p-1.5 rounded transition-all cursor-pointer flex items-center justify-center border gap-1 text-[9px] font-bold uppercase font-sans tracking-tight shrink-0 select-none ${
+                                  sentBdayCards[m.cpf]
+                                    ? "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/30"
+                                    : "bg-slate-800 hover:bg-slate-700 text-pink-400 border-white/5 hover:border-pink-500/30"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!!sentBdayCards[m.cpf]}
+                                  onChange={() => toggleBdayCardSent(m.cpf)}
+                                  className="accent-pink-500 w-3 h-3 cursor-pointer rounded bg-slate-950 border-white/10"
+                                />
+                                <span className="hidden xl:inline">
+                                  {sentBdayCards[m.cpf] ? "Enviado" : "Pendente"}
+                                </span>
+                              </label>
+                            )}
+
+                            {/* Send Happy Birthday Card Button */}
+                            {m.birthDate && (isBirthdayThisWeek(m.birthDate) || isBirthdayThisMonth(m.birthDate)) && getBirthdayWhatsAppLink(m) && (
+                              <a
+                                href={getBirthdayWhatsAppLink(m)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Enviar Cartão de Aniversário para ${m.name}`}
+                                className="p-1.5 rounded bg-pink-500/20 hover:bg-pink-500/30 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer flex items-center justify-center border border-pink-500/30 gap-1 text-[9px] font-bold uppercase font-sans tracking-tight shrink-0"
+                              >
+                                <Gift className="w-3.5 h-3.5 text-pink-400 animate-pulse" />
+                                <span className="hidden lg:inline">Cartão 🎉</span>
+                              </a>
+                            )}
+
                             {/* WhatsApp shortcut */}
                             {(() => {
                               const cleanPhone = m.phone ? m.phone.replace(/\D/g, "") : "";
@@ -1677,6 +1859,17 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                                 <span>•</span>
                                 <span>{m.rank}</span>
                               </div>
+                              {m.birthDate && (
+                                <div className="flex items-center gap-1 text-[8.5px] font-mono text-slate-400 mt-1">
+                                  <Cake className="w-3 h-3 text-pink-400" />
+                                  <span>Nasc: <strong className="text-pink-300">{formatBirthDate(m.birthDate)}</strong></span>
+                                  {isBirthdayThisWeek(m.birthDate) && (
+                                    <span className="ml-1 inline-block px-1 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[7px] font-bold uppercase tracking-tight font-sans animate-pulse">
+                                      Semana! 🎉
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                             
                             {/* Status Badge */}
@@ -1752,6 +1945,39 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
                             {/* Right: Icon actions */}
                             <div className="flex items-center gap-1.5 ml-auto">
+                              {/* Birthday card tracking sent state checkbox Mobile */}
+                              {m.birthDate && (
+                                <label 
+                                  title={sentBdayCards[m.cpf] ? "Cartão de aniversário já enviado" : "Marcar cartão como enviado"}
+                                  className={`p-1.5 rounded cursor-pointer flex items-center justify-center border text-[9px] gap-1 shrink-0 select-none ${
+                                    sentBdayCards[m.cpf]
+                                      ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-bold"
+                                      : "bg-slate-800 text-pink-400 border-white/5 hover:border-pink-500/30"
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={!!sentBdayCards[m.cpf]}
+                                    onChange={() => toggleBdayCardSent(m.cpf)}
+                                    className="accent-pink-500 w-3 h-3 cursor-pointer rounded bg-slate-950 border-white/10"
+                                  />
+                                  <span className="text-[8px] font-bold">Cartão</span>
+                                </label>
+                              )}
+
+                              {/* Send Happy Birthday Card Button Mobile */}
+                              {m.birthDate && (isBirthdayThisWeek(m.birthDate) || isBirthdayThisMonth(m.birthDate)) && getBirthdayWhatsAppLink(m) && (
+                                <a
+                                  href={getBirthdayWhatsAppLink(m)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={`Enviar Cartão de Aniversário para ${m.name}`}
+                                  className="p-1.5 rounded bg-pink-500/20 hover:bg-pink-500/30 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer flex items-center justify-center border border-pink-500/30 shrink-0"
+                                >
+                                  <Gift className="w-3.5 h-3.5 text-pink-400 animate-pulse" />
+                                </a>
+                              )}
+
                               {/* WhatsApp shortcut */}
                               {(() => {
                                 const cleanPhone = m.phone ? m.phone.replace(/\D/g, "") : "";
@@ -1818,6 +2044,8 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                     if (membersFilter === "approved") return m.approved && !m.paused && !m.archived;
                     if (membersFilter === "paused") return !!m.paused;
                     if (membersFilter === "archived") return !!m.archived;
+                    if (membersFilter === "bday_week") return isBirthdayThisWeek(m.birthDate);
+                    if (membersFilter === "bday_month") return isBirthdayThisMonth(m.birthDate);
                     return true;
                   }).length === 0 && (
                     <div className="p-8 text-center text-slate-500 uppercase font-mono">Nenhum associado localizado para este filtro.</div>
@@ -2503,432 +2731,6 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                     </div>
                   </div>
                 ))}
-              </div>
-
-            </div>
-          )}
-
-          {/* TAB: DOAÇÕES RECEBIDAS */}
-          {activeTab === "doacoes" && (
-            <div className="space-y-6">
-              
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="text-left font-display">
-                  <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2">
-                    <Coins className="w-5 h-5 text-amber-500" />
-                    Registro Geral de Doações e Sementes
-                  </h2>
-                  <p className="text-slate-400 text-xs text-left">Gerencie e homologue todas as contribuições financeiras enviadas para as frentes missionárias.</p>
-                </div>
-              </div>
-
-              {/* KPI Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-4 rounded-xl bg-[#0b1220] border border-white/5 text-left">
-                  <span className="block text-[9px] uppercase font-bold tracking-widest text-slate-400">Total Arrecadado (Confirmado)</span>
-                  <div className="text-xl font-extrabold text-emerald-400 font-mono mt-1">
-                    R$ {donations.filter(d => d.paymentStatus === "pago").reduce((sum, d) => sum + d.amount, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </div>
-                  <span className="block text-[9px] text-slate-500 mt-0.5">
-                    {donations.filter(d => d.paymentStatus === "pago").length} transações homologadas
-                  </span>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#0b1220] border border-white/5 text-left">
-                  <span className="block text-[9px] uppercase font-bold tracking-widest text-slate-400">Aguardando Verificação</span>
-                  <div className="text-xl font-extrabold text-blue-400 font-mono mt-1">
-                    R$ {donations.filter(d => d.paymentStatus === "em_analise" || d.paymentStatus === "pendente").reduce((sum, d) => sum + d.amount, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </div>
-                  <span className="block text-[9px] text-slate-500 mt-0.5">
-                    {donations.filter(d => d.paymentStatus === "em_analise" || d.paymentStatus === "pendente").length} sob auditoria manual
-                  </span>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#0b1220] border border-white/5 text-left">
-                  <span className="block text-[9px] uppercase font-bold tracking-widest text-slate-400">Maior Semeadura Única</span>
-                  <div className="text-xl font-extrabold text-amber-400 font-mono mt-1">
-                    R$ {Math.max(0, ...donations.map(d => d.amount)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                  </div>
-                  <span className="block text-[9px] text-slate-500 mt-0.5">Destaque de parceria</span>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#0b1220] border border-white/5 text-left">
-                  <span className="block text-[9px] uppercase font-bold tracking-widest text-slate-400">Fichas com Comprovante</span>
-                  <div className="text-xl font-extrabold text-[#f97316] font-mono mt-1">
-                    {donations.filter(d => d.paymentProofUrl).length}
-                  </div>
-                  <span className="block text-[9px] text-slate-500 mt-0.5">Documentação anexada</span>
-                </div>
-              </div>
-
-              {/* Filters Box */}
-              <div className="p-4 rounded-xl bg-[#0b1220]/70 border border-white/5 flex flex-col md:flex-row gap-3">
-                <div className="flex-1 text-left">
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filtrar por Frente / Destinação</label>
-                  <select
-                    value={doacaoFilterProject}
-                    onChange={(e) => setDoacaoFilterProject(e.target.value)}
-                    className="w-full bg-slate-950 border border-white/5 rounded-lg px-2.5 py-2 text-xs text-white outline-none"
-                  >
-                    <option value="all">Todas as frentes</option>
-                    <option value="Doação Avulsa / Geral">Doação Avulsa / Geral</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.title}>{p.title}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="w-full md:w-56 text-left">
-                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">Filtrar por Status</label>
-                  <select
-                    value={doacaoFilterStatus}
-                    onChange={(e) => setDoacaoFilterStatus(e.target.value)}
-                    className="w-full bg-slate-950 border border-[#1a1f2c] rounded-lg px-2.5 py-2 text-xs text-white outline-none"
-                  >
-                    <option value="all">Todos os status</option>
-                    <option value="em_analise">Em Análise / Pendente</option>
-                    <option value="pago">Homologada / Conservada</option>
-                    <option value="recusado">Recusada</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Central List */}
-              <div className="bg-[#0b1220] rounded-xl border border-white/5 p-4 text-left">
-                {(() => {
-                  const filteredDonations = donations.filter(d => {
-                    const mProj = doacaoFilterProject === "all" || d.projectName === doacaoFilterProject;
-                    const mStat = doacaoFilterStatus === "all" || d.paymentStatus === doacaoFilterStatus;
-                    return mProj && mStat;
-                  });
-
-                  if (filteredDonations.length === 0) {
-                    return (
-                      <div className="py-12 text-center text-slate-500 border border-dashed border-white/5 rounded-xl flex flex-col items-center justify-center space-y-2">
-                        <Coins className="w-8 h-8 text-slate-600" />
-                        <p className="text-xs font-bold font-mono uppercase text-slate-400">Nenhum registro para estes filtros</p>
-                        <p className="text-[11px] text-slate-500">Mude as opções de busca acima para atualizar os resultados.</p>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <div className="space-y-4">
-                      {/* Tabela para Desktop (visible on md and above) */}
-                      <div className="hidden md:block overflow-x-auto">
-                        <table className="w-full text-left border-collapse text-xs">
-                          <thead>
-                            <tr className="border-b border-[#121c2d] text-slate-400 uppercase tracking-wider text-[9px] font-bold">
-                              <th className="py-3 px-3">Protocolo</th>
-                              <th className="py-3 px-3">Parceiro Missionário</th>
-                              <th className="py-3 px-3">Destinação</th>
-                              <th className="py-3 px-3">Data</th>
-                              <th className="py-3 px-3">Semente</th>
-                              <th className="py-3 px-3">Status Cobrança</th>
-                              <th className="py-3 px-3">Comprovante</th>
-                              <th className="py-3 px-3 text-right">Ação</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-white/5">
-                            {filteredDonations.map((d) => (
-                              <tr key={d.id} className="hover:bg-white/2 transition-colors">
-                                <td className="py-3.5 px-3 font-mono text-slate-400 font-bold">{d.id}</td>
-                                <td className="py-3.5 px-3">
-                                  <div className="font-extrabold text-slate-100">{d.donorName}</div>
-                                  {d.donorWhatsapp && d.donorWhatsapp !== "Não Informado" && (
-                                    <a 
-                                      href={`https://api.whatsapp.com/send?phone=${d.donorWhatsapp.replace(/\D/g, "")}`}
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-[10px] text-teal-400 hover:underline font-mono"
-                                    >
-                                      {d.donorWhatsapp}
-                                    </a>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-3">
-                                  <span className="px-2 py-0.5 rounded text-[10px] bg-[#121c2d] text-slate-300 font-bold uppercase border border-white/5">
-                                    {d.projectName}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-3 text-slate-400 font-mono">
-                                  {new Date(d.registrationDate).toLocaleDateString("pt-BR") + " " + new Date(d.registrationDate).toLocaleTimeString("pt-BR", {hour: '2-digit', minute:'2-digit'})}
-                                </td>
-                                <td className="py-3.5 px-3 font-mono font-bold text-amber-400">R$ {d.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                                <td className="py-3.5 px-3">
-                                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
-                                    d.paymentStatus === "pago" && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  } ${
-                                    d.paymentStatus === "em_analise" && "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                  } ${
-                                    d.paymentStatus === "pendente" && "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                  } ${
-                                    d.paymentStatus === "recusado" && "bg-rose-500/10 text-rose-450 text-rose-405 text-rose-400 border border-rose-500/20"
-                                  }`}>
-                                    {d.paymentStatus === "pago" && "Homologada/Pago"}
-                                    {d.paymentStatus === "em_analise" && "Em Análise"}
-                                    {d.paymentStatus === "pendente" && "Pendente"}
-                                    {d.paymentStatus === "recusado" && "Recusado"}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-3">
-                                  {d.paymentProofUrl ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setSelectedProofView(d)}
-                                      className="text-[10px] text-amber-500 hover:text-amber-400 hover:underline uppercase font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0 inline-flex"
-                                    >
-                                      <Paperclip className="w-3.5 h-3.5 text-amber-500 mr-0.5" /> Ver Arquivo
-                                    </button>
-                                  ) : (
-                                    <span className="text-[10px] text-slate-500 italic">Nenhum</span>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-3 text-right space-x-1 whitespace-nowrap">
-                                  {d.donorWhatsapp && d.donorWhatsapp !== "Não Informado" && (
-                                    <a 
-                                      href={`https://api.whatsapp.com/send?phone=${d.donorWhatsapp.replace(/\D/g, "")}&text=${encodeURIComponent(`Olá, ${d.donorName}! Paz do Senhor.\nA diretoria da UMESC SC recebeu a sua doação de R$ ${d.amount.toFixed(2)} e de forma mútua agradece profundamente por apoiar a capelania militar na frente missionária *${d.projectName}*.\n\nSeu apoio é fundamental para mantermos as pregações e distribuição de bíblias para as fardas estaduais!\n\nDeus abençoe ricamente!`)}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      title="Enviar mensagem de agradecimento"
-                                      className="inline-flex items-center justify-center p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 transition-all cursor-pointer"
-                                    >
-                                      <MessageCircle className="w-3.5 h-3.5" />
-                                    </a>
-                                  )}
-
-                                  {d.paymentStatus !== "pago" && (
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        await donationsService.updateDonationStatus(d.id, "pago");
-                                        const next = await donationsService.getDonations();
-                                        setDonations(next);
-                                      }}
-                                      title="Homologar pagamento"
-                                      className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-[#10b981] hover:text-white hover:bg-emerald-600 text-emerald-400 transition-all cursor-pointer border-0"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-
-                                  {d.paymentStatus !== "recusado" && (
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        await donationsService.updateDonationStatus(d.id, "recusado");
-                                        const next = await donationsService.getDonations();
-                                        setDonations(next);
-                                      }}
-                                      title="Recusar doação"
-                                      className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-[#ef4444] hover:text-white text-[#ef4444] hover:bg-rose-600 transition-all cursor-pointer border-0"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-
-                                  {deletingDonationId === d.id ? (
-                                    <div className="inline-flex items-center gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={async () => {
-                                          await donationsService.deleteDonation(d.id);
-                                          const next = await donationsService.getDonations();
-                                          setDonations(next);
-                                          setDeletingDonationId(null);
-                                        }}
-                                        className="px-2 py-1 rounded text-[10px] uppercase font-black bg-red-600 text-white hover:bg-red-700 transition-colors animate-pulse cursor-pointer border-0"
-                                      >
-                                        Confirmar
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setDeletingDonationId(null)}
-                                        className="px-2 py-1 rounded text-[10px] uppercase font-bold bg-[#121c2d] text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer border-0"
-                                      >
-                                        X
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => setDeletingDonationId(d.id)}
-                                      title="Deletar Transação"
-                                      className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white transition-all cursor-pointer border-0"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Visualização em Cards para Dispositivos Móveis (visible only on screens smaller than md) */}
-                      <div className="grid grid-cols-1 gap-4 md:hidden">
-                        {filteredDonations.map((d) => (
-                          <div key={d.id} className="p-4 rounded-xl bg-slate-900/60 border border-white/5 space-y-3">
-                            <div className="flex justify-between items-center border-b border-white/5 pb-2">
-                              <span className="font-mono text-[10px] text-slate-350 font-black bg-[#121c2d] px-2 py-0.5 rounded border border-white/5">
-                                #{d.id}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                {new Date(d.registrationDate).toLocaleDateString("pt-BR") + " " + new Date(d.registrationDate).toLocaleTimeString("pt-BR", {hour: '2-digit', minute:'2-digit'})}
-                              </span>
-                            </div>
-
-                            <div className="space-y-2">
-                              <div>
-                                <span className="block text-[8px] uppercase font-bold text-slate-500">Parceiro Missionário</span>
-                                <span className="text-xs font-extrabold text-slate-100">{d.donorName}</span>
-                                {d.donorWhatsapp && d.donorWhatsapp !== "Não Informado" && (
-                                  <div>
-                                    <a 
-                                      href={`https://api.whatsapp.com/send?phone=${d.donorWhatsapp.replace(/\D/g, "")}`}
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-[10px] text-teal-400 hover:underline font-mono inline-flex items-center gap-1 mt-0.5"
-                                    >
-                                      <MessageCircle className="w-3 h-3" /> {d.donorWhatsapp}
-                                    </a>
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="flex flex-wrap gap-2">
-                                <div>
-                                  <span className="block text-[8px] uppercase font-bold text-slate-500">Frente Destinada</span>
-                                  <span className="px-2 py-0.5 rounded text-[9px] bg-[#121c2d] text-slate-300 font-bold uppercase border border-white/5 inline-block">
-                                    {d.projectName}
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="block text-[8px] uppercase font-bold text-slate-500">Situação</span>
-                                  <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider inline-block ${
-                                    d.paymentStatus === "pago" && "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  } ${
-                                    d.paymentStatus === "em_analise" && "bg-blue-500/10 text-blue-400 border border-blue-500/20"
-                                  } ${
-                                    d.paymentStatus === "pendente" && "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                  } ${
-                                    d.paymentStatus === "recusado" && "bg-rose-500/10 text-rose-450 text-rose-400 border border-rose-500/20"
-                                  }`}>
-                                    {d.paymentStatus === "pago" && "Homologada/Pago"}
-                                    {d.paymentStatus === "em_analise" && "Em Análise"}
-                                    {d.paymentStatus === "pendente" && "Pendente"}
-                                    {d.paymentStatus === "recusado" && "Recusado"}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="flex justify-between items-center bg-slate-950/40 p-2.5 rounded-lg border border-white/5">
-                              <div>
-                                <span className="block text-[8px] uppercase text-slate-500 font-bold tracking-wider">Semente</span>
-                                <span className="font-mono font-bold text-xs text-amber-400">
-                                  R$ {d.amount.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                                </span>
-                              </div>
-                              <div className="text-right">
-                                <span className="block text-[8px] uppercase text-slate-500 font-bold tracking-wider mb-0.5">Comprovante</span>
-                                {d.paymentProofUrl ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setSelectedProofView(d)}
-                                    className="text-[10px] text-amber-500 hover:text-amber-400 hover:underline uppercase font-bold flex items-center gap-1 cursor-pointer bg-transparent border-none p-0 inline-flex"
-                                  >
-                                    <Paperclip className="w-3.5 h-3.5 text-amber-500 mr-0.5" /> Ver Arquivo
-                                  </button>
-                                ) : (
-                                  <span className="text-[10px] text-slate-500 italic block">Nenhum</span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex items-center justify-end gap-1.5 pt-2 border-t border-white/5">
-                              {d.donorWhatsapp && d.donorWhatsapp !== "Não Informado" && (
-                                <a 
-                                  href={`https://api.whatsapp.com/send?phone=${d.donorWhatsapp.replace(/\D/g, "")}&text=${encodeURIComponent(`Olá, ${d.donorName}! Paz do Senhor.\nA diretoria da UMESC SC recebeu a sua doação de R$ ${d.amount.toFixed(2)} e de forma mútua agradece profundamente por apoiar a capelania militar na frente missionária *${d.projectName}*.\n\nSeu apoio é fundamental para mantermos as pregações e distribuição de bíblias para as fardas estaduais!\n\nDeus abençoe ricamente!`)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Enviar mensagem de agradecimento"
-                                  className="inline-flex items-center justify-center p-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 transition-all cursor-pointer"
-                                >
-                                  <MessageCircle className="w-4 h-4" />
-                                </a>
-                              )}
-
-                              {d.paymentStatus !== "pago" && (
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    await donationsService.updateDonationStatus(d.id, "pago");
-                                    const next = await donationsService.getDonations();
-                                    setDonations(next);
-                                  }}
-                                  title="Homologar pagamento"
-                                  className="p-2 rounded-lg bg-emerald-500/10 hover:bg-[#10b981] hover:text-white hover:bg-emerald-600 text-emerald-400 transition-all cursor-pointer border-0"
-                                >
-                                  <Check className="w-4 h-4" />
-                                </button>
-                              )}
-
-                              {d.paymentStatus !== "recusado" && (
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    await donationsService.updateDonationStatus(d.id, "recusado");
-                                    const next = await donationsService.getDonations();
-                                    setDonations(next);
-                                  }}
-                                  title="Recusar doação"
-                                  className="p-2 rounded-lg bg-rose-500/10 hover:bg-[#ef4444] hover:text-white text-[#ef4444] hover:bg-rose-600 transition-all cursor-pointer border-0"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              )}
-
-                              {deletingDonationId === d.id ? (
-                                <div className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      await donationsService.deleteDonation(d.id);
-                                      const next = await donationsService.getDonations();
-                                      setDonations(next);
-                                      setDeletingDonationId(null);
-                                    }}
-                                    className="px-2.5 py-1 rounded text-[10px] uppercase font-black bg-red-600 text-white hover:bg-red-700 transition-colors animate-pulse cursor-pointer border-0"
-                                  >
-                                    Confirmar
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setDeletingDonationId(null)}
-                                    className="px-2.5 py-1 rounded text-[10px] uppercase font-bold bg-[#121c2d] text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer border-0"
-                                  >
-                                    X
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => setDeletingDonationId(d.id)}
-                                  title="Deletar Transação"
-                                  className="p-2 rounded-lg bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white transition-all cursor-pointer border-0"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
               </div>
 
             </div>
@@ -3735,6 +3537,239 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                   })}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB: GESTÃO DE APOIO FEMININO */}
+          {activeTab === "apoio_feminino" && (
+            <div className="space-y-6 text-left animate-fadeIn">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-white/5 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                    <Heart className="w-5 h-5 text-pink-500 fill-pink-500 animate-pulse" />
+                    Gestão do Apoio Feminino
+                  </h2>
+                  <p className="text-slate-400 text-xs">Administre as publicações, fotos, reflexões e links de vídeos para o blog oficial do Apoio Feminino.</p>
+                </div>
+                
+                <button
+                  onClick={() => setApoioFemininoForm({ title: "", content: "", mediaType: "none", mediaUrl: "" })}
+                  className="px-4 py-2 bg-pink-600 hover:bg-pink-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2 shadow-lg shadow-pink-600/10 transition-all cursor-pointer font-sans"
+                >
+                  <Plus className="w-4 h-4" />
+                  Nova Publicação
+                </button>
+              </div>
+
+              {/* Editing or Adding Form */}
+              {apoioFemininoForm && (
+                <div className="bg-[#0c1626]/90 border border-pink-500/20 rounded-2xl p-6 space-y-4">
+                  <h3 className="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-2 font-display">
+                    {apoioFemininoForm.id ? "Editar Publicação" : "Nova Publicação do Apoio Feminino"}
+                  </h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400 font-mono">Título do Post</label>
+                      <input
+                        type="text"
+                        value={apoioFemininoForm.title || ""}
+                        onChange={(e) => setApoioFemininoForm({ ...apoioFemininoForm, title: e.target.value })}
+                        className="w-full bg-[#111e35]/80 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-pink-500 outline-none"
+                        placeholder="Ex: Encontro Mensal de Mulheres de Oração"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400 font-mono">Tipo de Mídia</label>
+                      <select
+                        value={apoioFemininoForm.mediaType || "none"}
+                        onChange={(e) => setApoioFemininoForm({ ...apoioFemininoForm, mediaType: e.target.value as any })}
+                        className="w-full bg-[#111e35]/80 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-pink-500 outline-none"
+                      >
+                        <option value="none">Sem mídia (Apenas texto)</option>
+                        <option value="image">Imagem (Foto ilustrativa)</option>
+                        <option value="video">Vídeo (Link do YouTube)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {apoioFemininoForm.mediaType !== "none" && (
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400 font-mono">
+                        {apoioFemininoForm.mediaType === "video" ? "Link do Vídeo no YouTube" : "Link da Imagem / Foto"}
+                      </label>
+                      <input
+                        type="text"
+                        value={apoioFemininoForm.mediaUrl || ""}
+                        onChange={(e) => setApoioFemininoForm({ ...apoioFemininoForm, mediaUrl: e.target.value })}
+                        className="w-full bg-[#111e35]/80 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-pink-500 outline-none"
+                        placeholder={apoioFemininoForm.mediaType === "video" ? "Ex: https://www.youtube.com/watch?v=..." : "Ex: https://images.unsplash.com/..."}
+                      />
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        {apoioFemininoForm.mediaType === "video" 
+                          ? "Insira o link padrão do YouTube. Nós converteremos automaticamente em reprodutor." 
+                          : "Insira uma URL pública da imagem (pode utilizar URLs do Unsplash, Supabase storage, etc.)."}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold text-slate-400 font-mono">Conteúdo do Artigo / Texto</label>
+                    <textarea
+                      rows={5}
+                      value={apoioFemininoForm.content || ""}
+                      onChange={(e) => setApoioFemininoForm({ ...apoioFemininoForm, content: e.target.value })}
+                      className="w-full bg-[#111e35]/80 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:border-pink-500 outline-none resize-none"
+                      placeholder="Escreva aqui a mensagem devocional, convite ou crônica detalhada para divulgar..."
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2.5">
+                    <button
+                      onClick={() => setApoioFemininoForm(null)}
+                      className="px-4 py-2 rounded-xl border border-white/10 bg-[#132031]/55 text-slate-300 hover:text-white text-xs font-bold uppercase transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!apoioFemininoForm.title || !apoioFemininoForm.content) {
+                          alert("Por favor, preencha o título e o conteúdo da publicação!");
+                          return;
+                        }
+
+                        try {
+                          if (apoioFemininoForm.id) {
+                            // Update
+                            await apoioFemininoService.updatePost(apoioFemininoForm.id, {
+                              title: apoioFemininoForm.title,
+                              content: apoioFemininoForm.content,
+                              mediaType: apoioFemininoForm.mediaType,
+                              mediaUrl: apoioFemininoForm.mediaUrl
+                            });
+                          } else {
+                            // Create
+                            await apoioFemininoService.createPost({
+                              title: apoioFemininoForm.title,
+                              content: apoioFemininoForm.content,
+                              mediaType: apoioFemininoForm.mediaType || "none",
+                              mediaUrl: apoioFemininoForm.mediaUrl
+                            });
+                          }
+                          setApoioFemininoForm(null);
+                          const updated = await apoioFemininoService.getPosts();
+                          setApoioFemininoPosts(updated);
+                        } catch (err: any) {
+                          alert("Erro ao salvar publicação: " + err?.message);
+                        }
+                      }}
+                      className="px-5 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white text-xs font-bold uppercase transition-all cursor-pointer"
+                    >
+                      {apoioFemininoForm.id ? "Atualizar" : "Salvar Publicação"}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Deleting Confirm Dialog */}
+              {deletingApoioFemininoPost && (
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-rose-400 uppercase tracking-wider">Confirmar Exclusão</h4>
+                    <p className="text-xs text-slate-300">Tem certeza que deseja excluir permanentemente o post "{deletingApoioFemininoPost.title}"?</p>
+                  </div>
+                  <div className="flex gap-2.5">
+                    <button
+                      onClick={() => setDeletingApoioFemininoPost(null)}
+                      className="px-3.5 py-1.5 rounded-xl bg-slate-800 text-slate-300 text-xs font-bold uppercase cursor-pointer"
+                    >
+                      Não
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (deletingApoioFemininoPost.id) {
+                          await apoioFemininoService.deletePost(deletingApoioFemininoPost.id);
+                          const updated = await apoioFemininoService.getPosts();
+                          setApoioFemininoPosts(updated);
+                        }
+                        setDeletingApoioFemininoPost(null);
+                      }}
+                      className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold uppercase cursor-pointer"
+                    >
+                      Sim, Excluir
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Grid / List of posts */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {apoioFemininoPosts.map((post) => {
+                  return (
+                    <div key={post.id} className="bg-[#111e35]/40 rounded-2xl border border-white/5 p-5 flex flex-col justify-between hover:border-pink-500/10 transition-all">
+                      <div className="space-y-3">
+                        {post.mediaType === "image" && post.mediaUrl && (
+                          <div className="aspect-video w-full rounded-xl overflow-hidden bg-black/20">
+                            <img
+                              src={post.mediaUrl}
+                              alt={post.title}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                        )}
+                        {post.mediaType === "video" && post.mediaUrl && (
+                          <div className="aspect-video w-full rounded-xl bg-black/40 border border-white/5 flex flex-col items-center justify-center p-3 text-center">
+                            <Compass className="w-8 h-8 text-pink-400 animate-pulse" />
+                            <span className="text-[10px] font-mono text-slate-400 mt-1 uppercase tracking-wider">Reprodutor de Vídeo YouTube Ativo</span>
+                            <span className="text-[9px] text-slate-500 max-w-xs truncate">{post.mediaUrl}</span>
+                          </div>
+                        )}
+
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono text-pink-400 uppercase tracking-widest font-black">
+                              {post.mediaType === "video" ? "VÍDEO" : post.mediaType === "image" ? "FOTO" : "TEXTO APENAS"}
+                            </span>
+                            <span className="text-[10px] font-mono text-slate-500">
+                              {post.createdAt ? new Date(post.createdAt).toLocaleDateString("pt-BR") : ""}
+                            </span>
+                          </div>
+                          <h4 className="font-extrabold text-white text-sm mt-1 leading-snug">{post.title}</h4>
+                          <p className="text-xs text-slate-300 mt-2 line-clamp-3 leading-relaxed whitespace-pre-line">{post.content}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-end gap-2 border-t border-white/5 pt-3.5 mt-4">
+                        <button
+                          onClick={() => {
+                            setApoioFemininoForm({ ...post });
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                          }}
+                          className="px-3.5 py-1.5 rounded-lg bg-[#132031]/55 border border-white/5 hover:border-pink-500 hover:bg-pink-500/10 text-slate-300 hover:text-white text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>Editar</span>
+                        </button>
+                        <button
+                          onClick={() => setDeletingApoioFemininoPost(post)}
+                          className="px-3.5 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 hover:bg-rose-600 hover:text-white text-rose-400 text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Excluir</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {apoioFemininoPosts.length === 0 && (
+                  <div className="col-span-1 md:col-span-2 p-12 text-center bg-[#0b1220]/40 rounded-2xl border border-white/5 font-mono text-xs text-slate-400">
+                    Nenhuma publicação cadastrada. Comece clicando em "Nova Publicação" acima!
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -5450,6 +5485,46 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
               <button
                 type="button"
                 onClick={() => setDeletingFicha(null)}
+                className="px-4 py-2 bg-[#121c2d] hover:bg-[#1a2a40] border border-white/10 rounded text-slate-300 font-bold text-[10px] uppercase cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE VOLUNTEER MODAL */}
+      {deletingVolunteer && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
+            <div className="mx-auto w-12 h-12 bg-rose-500/10 text-rose-500 rounded-full flex items-center justify-center">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            
+            <div className="space-y-1.5">
+              <h3 className="font-extrabold text-xs uppercase tracking-widest text-rose-400 font-display">
+                Excluir Voluntário
+              </h3>
+              <p className="text-[11px] text-slate-300 leading-normal">
+                Deseja realmente remover o voluntário <span className="text-white font-bold font-mono">"{deletingVolunteer.name}"</span> da base de dados da Capelania?
+              </p>
+              <p className="text-[9px] text-rose-300 font-bold bg-rose-500/10 border border-rose-500/10 p-2 rounded leading-normal">
+                ⚠️ ATENÇÃO: Esta ação é irreversível e removerá todos os dados do voluntário!
+              </p>
+            </div>
+            
+            <div className="flex gap-2.5 justify-center pt-2">
+              <button
+                type="button"
+                onClick={confirmDeleteVolunteer}
+                className="px-4 py-2 hover:bg-rose-500 bg-rose-600 rounded text-white font-bold text-[10px] uppercase tracking-wider cursor-pointer"
+              >
+                Confirmar Exclusão
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeletingVolunteer(null)}
                 className="px-4 py-2 bg-[#121c2d] hover:bg-[#1a2a40] border border-white/10 rounded text-slate-300 font-bold text-[10px] uppercase cursor-pointer"
               >
                 Cancelar

@@ -17,16 +17,16 @@ import PrayerRequestsSection from "./components/PrayerRequestsSection";
 import LgpdPolicyBanner from "./components/LgpdPolicyBanner";
 import Footer from "./components/Footer";
 
-import { ShieldCheck, Calendar, Users, Scale, UserPlus, Info, Compass, Star } from "lucide-react";
+import { ShieldCheck, Calendar, Users, Scale, UserPlus, Info, Compass, Star, X } from "lucide-react";
 import { DEFAULT_CAPELANIA_SERVICES } from "./data";
-import { CapelaniaService } from "./types";
+import { CapelaniaService, ApoioFemininoPost } from "./types";
 import { getCleanImageUrl } from "./lib/imageDriveHelper";
+import { apoioFemininoService } from "./lib/supabase";
 
 export default function App() {
   const [view, setView] = useState<"public" | "dashboard" | "admin">("public");
   const [memberDashboardInitialTab, setMemberDashboardInitialTab] = useState<"notices" | "structure" | "registration" | "congressos">("notices");
   const [activeTab, setActiveTab ] = useState("about");
-  const [isDonateModalOpen, setIsDonateModalOpen] = useState(false);
 
   // Dynamic capelania services editable in admin portal
   const [capelaniaServices, setCapelaniaServices] = useState<CapelaniaService[]>(() => {
@@ -34,16 +34,25 @@ export default function App() {
     return saved ? JSON.parse(saved) : DEFAULT_CAPELANIA_SERVICES;
   });
 
+  const [apoioFemininoPosts, setApoioFemininoPosts] = useState<ApoioFemininoPost[]>([]);
+  const [selectedApoioPost, setSelectedApoioPost] = useState<ApoioFemininoPost | null>(null);
+
+  React.useEffect(() => {
+    if (view === "public") {
+      apoioFemininoService.getPosts().then((posts) => {
+        setApoioFemininoPosts(posts);
+      }).catch(err => {
+        console.error("Erro ao buscar publicações do Apoio Feminino:", err);
+      });
+    }
+  }, [view]);
+
   // Smooth scroll helper for public elements
   const handleScrollToSection = (elementId: string) => {
     const el = document.getElementById(elementId);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  };
-
-  const handleOpenDonateOverlay = () => {
-    setIsDonateModalOpen(true);
   };
 
   const handleEnterMemberDashboard = (tab: "notices" | "structure" | "registration" | "congressos" = "notices") => {
@@ -91,7 +100,6 @@ export default function App() {
       <Header 
         activeTab={activeTab} 
         setActiveTab={setActiveTab} 
-        onOpenDonateModal={handleOpenDonateOverlay}
         onScrollToSection={handleScrollOrRedirectToDashboard}
         onEnterAdminMode={() => setView("admin")}
       />
@@ -101,12 +109,14 @@ export default function App() {
         {/* 3. Hero Visual Section with quick CTAs */}
         <Hero 
           onScrollToSection={handleScrollOrRedirectToDashboard}
-          onOpenDonateModal={handleOpenDonateOverlay}
           onEnterMemberDashboard={() => handleEnterMemberDashboard("notices")}
         />
 
         {/* Public Featured Congress Banner with Countdown built dynamically */}
         <PublicCongressBanner onEnterMemberDashboard={handleEnterMemberDashboard} />
+
+        {/* Dynamic magazines and bulletin catalogs layout */}
+        <RevistasSection />
 
         {/* Comemorative 37 Years Medal Honor Section */}
         <div id="selo-comemorativo-37-anos" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 relative">
@@ -149,6 +159,125 @@ export default function App() {
               <div className="text-center md:text-right">
                 <div className="text-2xl font-black text-emerald-400 font-mono tracking-tight">37 Anos</div>
                 <div className="text-[10px] text-slate-400 uppercase tracking-widest font-mono mt-0.5">De Capelania</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Apoio Feminino Section */}
+        <div id="apoio-feminino-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 relative">
+          <div className="relative overflow-hidden bg-[#0c1626]/90 rounded-3xl border border-pink-500/10 shadow-xl p-6 sm:p-8">
+            {/* Background elements */}
+            <div className="absolute top-0 right-0 w-80 h-80 bg-pink-500/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-60 h-60 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="flex flex-col lg:flex-row gap-8 items-stretch">
+              {/* Left Column: Information and the Special Commemorative Banner */}
+              <div className="w-full lg:w-1/3 flex flex-col justify-between space-y-6">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-pink-500/10 border border-pink-500/20 text-pink-400 text-[10px] font-black uppercase tracking-widest font-mono">
+                    Ministério da Família
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-black text-white font-display tracking-tight mt-3">
+                    Apoio Feminino da UMESC
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-300 mt-3 leading-relaxed">
+                    Um braço forte de comunhão, oração e suporte espiritual dedicado às mulheres militares, esposas de policiais e bombeiros militares, e apoiadoras da segurança pública em Santa Catarina.
+                  </p>
+                </div>
+
+                {/* Main Logo/Banner Image */}
+                <div className="relative rounded-2xl overflow-hidden border border-pink-500/20 shadow-2xl bg-black/40 group aspect-[4/3] max-w-sm mx-auto lg:mx-0 w-full flex items-center justify-center">
+                  <img
+                    src="https://qndjkphfsejuqopmfgas.supabase.co/storage/v1/object/public/qr%20code%20pix%20entidade/APOIO%20FEMENINO%20(2).png"
+                    alt="Logo Oficial Apoio Feminino UMESC"
+                    className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-500"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </div>
+
+              {/* Right Column: Dynamic Blog Feed */}
+              <div className="w-full lg:w-2/3 border-t lg:border-t-0 lg:border-l border-white/10 pt-6 lg:pt-0 lg:pl-8 flex flex-col justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-pink-500 animate-pulse"></span>
+                    Blog & Novidades do Apoio Feminino
+                  </h4>
+
+                  {apoioFemininoPosts.length === 0 ? (
+                    <div className="bg-[#111e35]/30 border border-white/5 rounded-2xl p-8 text-center text-slate-400 font-mono text-xs">
+                      Nenhuma publicação cadastrada no momento. Novas mensagens de encorajamento e vídeos estarão disponíveis em breve!
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
+                      {apoioFemininoPosts.map((post) => {
+                        const youtubeMatch = post.mediaUrl ? post.mediaUrl.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/) : null;
+                        const embedCode = (youtubeMatch && youtubeMatch[2].length === 11) ? youtubeMatch[2] : null;
+
+                        return (
+                          <div 
+                            key={post.id} 
+                            onClick={() => setSelectedApoioPost(post)}
+                            className="bg-[#111e35]/40 rounded-2xl border border-white/5 p-4 flex flex-col justify-between hover:border-pink-500/40 hover:bg-[#111e35]/60 hover:scale-[1.01] hover:shadow-lg hover:shadow-pink-500/5 transition-all shadow-md cursor-pointer group"
+                          >
+                            <div className="flex flex-col justify-between h-full w-full">
+                              <div>
+                                {post.mediaType === "video" && embedCode ? (
+                                  <div className="aspect-video w-full rounded-xl overflow-hidden bg-black mb-3 relative">
+                                    <img
+                                      src={`https://img.youtube.com/vi/${embedCode}/mqdefault.jpg`}
+                                      alt={post.title}
+                                      className="w-full h-full object-cover brightness-90 group-hover:brightness-100 transition-all"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/10 transition-colors">
+                                      <div className="w-10 h-10 rounded-full bg-red-600 flex items-center justify-center text-white shadow-lg">
+                                        <svg className="w-5 h-5 fill-current ml-0.5" viewBox="0 0 24 24">
+                                          <path d="M8 5v14l11-7z" />
+                                        </svg>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : post.mediaType === "image" && post.mediaUrl ? (
+                                  <div className="aspect-video w-full rounded-xl overflow-hidden bg-black/20 mb-3">
+                                    <img
+                                      src={post.mediaUrl}
+                                      alt={post.title}
+                                      className="w-full h-full object-cover group-hover:scale-102 transition-all"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+                                ) : null}
+
+                                <span className="text-[9px] font-mono text-pink-400 font-semibold block">
+                                  {post.createdAt ? new Date(post.createdAt).toLocaleDateString("pt-BR") : "Recente"}
+                                </span>
+                                <h5 className="font-extrabold text-white text-sm mt-1 leading-snug line-clamp-2 group-hover:text-pink-300 transition-colors">
+                                  {post.title}
+                                </h5>
+                                <p className="text-slate-300 text-xs mt-2 line-clamp-4 leading-relaxed whitespace-pre-line">
+                                  {post.content}
+                                </p>
+                              </div>
+                              <div className="mt-4 pt-2 border-t border-white/5 flex justify-end">
+                                <span className="text-[10px] font-bold text-pink-400 group-hover:text-pink-300 transition-colors uppercase tracking-wider flex items-center gap-1">
+                                  Ler na Íntegra →
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-6 flex justify-end">
+                  <span className="text-[10px] font-mono text-slate-500 italic">
+                    Espaço atualizado pela Coordenação Estadual do Apoio Feminino
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -318,9 +447,6 @@ export default function App() {
         {/* Carousel containing Invitations and Events */}
         <CarouselsSection />
 
-        {/* Dynamic magazines and bulletin catalogs layout */}
-        <RevistasSection />
-
         {/* Global Prayer Requests Platform */}
         <PrayerRequestsSection />
 
@@ -331,10 +457,7 @@ export default function App() {
 
         {/* 5. Current Projects List */}
         <div className="bg-[#070c18] py-12">
-          <ProjectsList 
-            isDonateModalOpen={isDonateModalOpen}
-            setIsDonateModalOpen={setIsDonateModalOpen}
-          />
+          <ProjectsList />
         </div>
 
       </main>
@@ -345,9 +468,89 @@ export default function App() {
       {/* 7. Footer Section with full addresses and legal numbers */}
       <Footer 
         onScrollToSection={handleScrollOrRedirectToDashboard}
-        onOpenDonateModal={handleOpenDonateOverlay}
         onEnterAdminMode={() => setView("admin")}
       />
+
+      {/* Modal para leitura completa do Apoio Feminino */}
+      {selectedApoioPost && (() => {
+        const youtubeMatch = selectedApoioPost.mediaUrl ? selectedApoioPost.mediaUrl.match(/^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/) : null;
+        const embedCode = (youtubeMatch && youtubeMatch[2].length === 11) ? youtubeMatch[2] : null;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+            <div className="relative w-full max-w-3xl bg-[#0c1626] border border-pink-500/20 rounded-3xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden animate-scaleIn">
+              {/* Top Banner Accent */}
+              <div className="h-1.5 bg-gradient-to-r from-pink-500 via-indigo-500 to-pink-600 w-full" />
+              
+              {/* Header */}
+              <div className="p-6 border-b border-white/5 flex justify-between items-start gap-4">
+                <div>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-pink-500/10 border border-pink-500/20 text-pink-400 text-[9px] font-bold uppercase tracking-widest font-mono">
+                    Apoio Feminino • Reflexão
+                  </span>
+                  <h4 className="text-lg sm:text-xl font-black text-white font-display mt-2 leading-snug">
+                    {selectedApoioPost.title}
+                  </h4>
+                  <p className="text-[10px] font-mono text-slate-400 mt-1">
+                    Publicado em {selectedApoioPost.createdAt ? new Date(selectedApoioPost.createdAt).toLocaleDateString("pt-BR", { day: '2-digit', month: 'long', year: 'numeric' }) : "Recente"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedApoioPost(null)}
+                  className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  title="Fechar"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="p-6 overflow-y-auto custom-scrollbar space-y-6 flex-1">
+                {selectedApoioPost.mediaType === "video" && embedCode ? (
+                  <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-lg border border-white/5">
+                    <iframe
+                      className="w-full h-full"
+                      src={`https://www.youtube.com/embed/${embedCode}?autoplay=1`}
+                      title={selectedApoioPost.title}
+                      frameBorder="0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : selectedApoioPost.mediaType === "image" && selectedApoioPost.mediaUrl ? (
+                  <div className="rounded-2xl overflow-hidden bg-black/20 shadow-lg border border-white/5 max-h-[350px] flex items-center justify-center">
+                    <img
+                      src={selectedApoioPost.mediaUrl}
+                      alt={selectedApoioPost.title}
+                      className="w-full h-full object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                ) : null}
+
+                <div className="space-y-4">
+                  <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-line font-sans selection:bg-pink-500/30">
+                    {selectedApoioPost.content}
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 bg-black/20 border-t border-white/5 flex justify-between items-center gap-4">
+                <span className="text-[10px] font-mono text-slate-500 italic">
+                  UMESC - União de Militares Evangélicos de SC
+                </span>
+                <button
+                  onClick={() => setSelectedApoioPost(null)}
+                  className="px-5 py-2 rounded-xl bg-pink-600 hover:bg-pink-500 text-white text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-pink-600/10"
+                >
+                  Fechar Leitura
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

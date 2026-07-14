@@ -151,4 +151,14 @@ export interface CapelaniaService {
   tabLink: "notices" | "structure" | "registration" | "congressos" | "agenda";
 }
 
+export interface ApoioFemininoPost {
+  id?: string;
+  title: string;
+  content: string;
+  mediaType: "image" | "video" | "none";
+  mediaUrl?: string;
+  createdAt?: string;
+}
+
+
 

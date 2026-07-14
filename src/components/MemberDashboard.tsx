@@ -658,6 +658,9 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
           setMembersList(list);
         } catch (_) {}
 
+        // Notify other windows/panels in real-time (e.g. Administrative Portal)
+        window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+
         setTimeout(() => {
           setProfileSuccessMsg(false);
         }, 5010);
@@ -823,28 +826,29 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
       const list = await membersService.getMembers();
       setMembersList(list);
       setSuccessMessage(true);
-    } catch (error) {
+
+      // Reset Form fields (Only on success!)
+      setNome("");
+      setCpf("");
+      setBirthDate("");
+      setRank("");
+      setRgMilitar("");
+      setChurch("");
+      setPhone("");
+      setEmail("");
+      setCity("");
+      setRegPassword("");
+      setLgpdConsent(false);
+      setMarketingConsent(false);
+
+      setTimeout(() => {
+        setSuccessMessage(false);
+      }, 5000);
+    } catch (error: any) {
       console.error("Erro ao registrar membro:", error);
-      setRegErrorMsg("Houve uma falha ao cadastrar o membro no banco de dados.");
+      const errorMsg = error?.message || "Houve uma falha ao cadastrar o membro no banco de dados.";
+      setRegErrorMsg(errorMsg);
     }
-
-    // Reset Form fields
-    setNome("");
-    setCpf("");
-    setBirthDate("");
-    setRank("");
-    setRgMilitar("");
-    setChurch("");
-    setPhone("");
-    setEmail("");
-    setCity("");
-    setRegPassword("");
-    setLgpdConsent(false);
-    setMarketingConsent(false);
-
-    setTimeout(() => {
-      setSuccessMessage(false);
-    }, 5000);
   };
 
   // Erase register (LGPD complies)

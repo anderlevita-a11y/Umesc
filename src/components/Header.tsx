@@ -5,17 +5,16 @@
 
 import React, { useState } from "react";
 import { ShieldCheck, Menu, X, Landmark, Heart, FileText, UserPlus, Calendar, Compass } from "lucide-react";
-import logoImg from "../assets/images/umesc_logo_official_1780591542921.png";
+const logoImg = "https://qndjkphfsejuqopmfgas.supabase.co/storage/v1/object/public/qr%20code%20pix%20entidade/Nova%20Log.png";
 
 interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onOpenDonateModal: () => void;
   onScrollToSection: (elementId: string) => void;
   onEnterAdminMode?: () => void;
 }
 
-export default function Header({ activeTab, setActiveTab, onOpenDonateModal, onScrollToSection, onEnterAdminMode }: HeaderProps) {
+export default function Header({ activeTab, setActiveTab, onScrollToSection, onEnterAdminMode }: HeaderProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const menuItems = [
@@ -161,12 +160,6 @@ export default function Header({ activeTab, setActiveTab, onOpenDonateModal, onS
 
           {/* Mobile Hamburguer Toggle */}
           <div className="flex items-center lg:hidden gap-2">
-            <button
-              onClick={onOpenDonateModal}
-              className="px-3 py-1 bg-amber-500 hover:bg-amber-600 rounded text-[#1a2a40] text-xs font-bold uppercase transition-colors"
-            >
-              Doar
-            </button>
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-1 px-2.5 ml-1 text-slate-300 hover:text-white hover:bg-white/10 rounded transition-colors focus:outline-none"

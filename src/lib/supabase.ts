@@ -4,7 +4,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { MemberRegistration } from "../types";
+import { MemberRegistration, ApoioFemininoPost } from "../types";
 
 // Read environment variables for Supabase
 const rawUrl = (import.meta as any).env.VITE_SUPABASE_URL || "";
@@ -207,19 +207,49 @@ export const membersService = {
 
         if (error) {
           console.error("Erro ao criar membro no Supabase:", error.message);
+          if (error.code === "23505" || error.message?.includes("duplicate key") || error.message?.includes("unique constraint")) {
+            if (error.message?.includes("members_cpf_key") || error.message?.includes("cpf")) {
+              throw new Error("Este CPF já está cadastrado no sistema. Por favor, utilize outro CPF ou faça login.");
+            }
+            if (error.message?.includes("members_email_key") || error.message?.includes("email")) {
+              throw new Error("Este E-mail já está cadastrado no sistema. Por favor, utilize outro e-mail ou faça login.");
+            }
+            throw new Error("Este CPF ou E-mail já está cadastrado no sistema. Por favor, verifique seus dados.");
+          }
           throw error;
         }
 
         if (data && data.length > 0) {
           return fromSupabase(data[0]);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn("Falha de gravação no Supabase. Gravando localmente por contingência.", err);
+        // Se for um erro amigável de validação (duplicidade), propaga para o componente tratar
+        if (err?.message?.includes("já está cadastrado")) {
+          throw err;
+        }
       }
     }
 
     // Fallback Code
     const savedMembers = await this.getMembers();
+    
+    // Validar duplicidade de CPF no fallback local
+    const hasDuplicateCpf = savedMembers.some(m => {
+      const cleanStored = m.cpf.replace(/\D/g, "");
+      const cleanNew = memberWithDefaults.cpf.replace(/\D/g, "");
+      return (cleanStored === cleanNew && cleanNew !== "") || m.cpf === memberWithDefaults.cpf;
+    });
+    if (hasDuplicateCpf) {
+      throw new Error("Este CPF já está cadastrado no sistema. Por favor, utilize outro CPF ou faça login.");
+    }
+
+    // Validar duplicidade de E-mail no fallback local
+    const hasDuplicateEmail = savedMembers.some(m => m.email.toLowerCase().trim() === memberWithDefaults.email.toLowerCase().trim());
+    if (hasDuplicateEmail) {
+      throw new Error("Este E-mail já está cadastrado no sistema. Por favor, utilize outro e-mail ou faça login.");
+    }
+
     const updated = [memberWithDefaults, ...savedMembers];
     localStorage.setItem("umesc_sim_members", JSON.stringify(updated));
     return memberWithDefaults;
@@ -367,6 +397,10 @@ export const membersService = {
         if (updatedFields.archived !== undefined) dbFields.archived = updatedFields.archived;
         if (updatedFields.photoUrl !== undefined) dbFields.photo_url = updatedFields.photoUrl;
         if (updatedFields.isDirector !== undefined) dbFields.is_director = updatedFields.isDirector;
+        if (updatedFields.birthDate !== undefined) dbFields.birth_date = updatedFields.birthDate;
+        if (updatedFields.cpf !== undefined) dbFields.cpf = updatedFields.cpf;
+        if (updatedFields.lgpdConsent !== undefined) dbFields.lgpd_consent = updatedFields.lgpdConsent;
+        if (updatedFields.marketingConsent !== undefined) dbFields.marketing_consent = updatedFields.marketingConsent;
 
         let { error } = await supabase
           .from("members")
@@ -820,6 +854,180 @@ export const prayerRequestsService = {
     const list = await this.getRequests();
     const filtered = list.filter((r) => r.id !== id && r.id?.toString() !== id);
     localStorage.setItem("umesc_prayer_requests", JSON.stringify(filtered));
+    return true;
+  }
+};
+
+/**
+ * Service to manage Apoio Feminino posts (blog/conteúdos)
+ */
+export const apoioFemininoService = {
+  async getPosts(): Promise<ApoioFemininoPost[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("apoio_feminino")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Erro ao carregar posts do Apoio Feminino do Supabase:", error.message);
+          throw error;
+        }
+
+        if (data) {
+          return data.map((item: any) => ({
+            id: item.id?.toString(),
+            title: item.title,
+            content: item.content,
+            mediaType: item.media_type || "none",
+            mediaUrl: item.media_url || "",
+            createdAt: item.created_at || item.createdAt
+          }));
+        }
+      } catch (err) {
+        console.warn("Falha ao conectar no Supabase para Apoio Feminino. Usando localStorage de contingência.", err);
+      }
+    }
+
+    const saved = localStorage.getItem("umesc_apoio_feminino_posts");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    
+    // Seed initial demo content if empty and local storage is empty
+    const seed: ApoioFemininoPost[] = [
+      {
+        id: "post-1",
+        title: "Reunião Geral do Apoio Feminino",
+        content: "Sejam bem-vindas à nossa página de Apoio Feminino! Aqui compartilhamos mensagens de fé, devocionais e a união das esposas de militares e militares de farda de Santa Catarina. Participe de nossas reuniões mensais de oração e acolhimento.",
+        mediaType: "image",
+        mediaUrl: "https://images.unsplash.com/photo-1573498813002-4221a2014c5a?auto=format&fit=crop&q=80&w=800",
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: "post-2",
+        title: "A Importância do Apoio Emocional",
+        content: "Neste vídeo especial, compartilhamos sobre como o apoio emocional e espiritual fortalece as famílias de nossas corporações de segurança. Assista, compartilhe e seja edificada pela união e carinho de nossa equipe voluntária.",
+        mediaType: "video",
+        mediaUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
+      }
+    ];
+    localStorage.setItem("umesc_apoio_feminino_posts", JSON.stringify(seed));
+    return seed;
+  },
+
+  async createPost(post: ApoioFemininoPost): Promise<ApoioFemininoPost> {
+    const newPost = {
+      ...post,
+      id: post.id || `POST-${Math.floor(Math.random() * 900000 + 100000)}`,
+      createdAt: post.createdAt || new Date().toISOString()
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          title: newPost.title,
+          content: newPost.content,
+          media_type: newPost.mediaType,
+          media_url: newPost.mediaUrl,
+          created_at: newPost.createdAt
+        };
+
+        const { data, error } = await supabase
+          .from("apoio_feminino")
+          .insert([dbRecord])
+          .select();
+
+        if (error) {
+          console.error("Erro ao criar post de Apoio Feminino no Supabase:", error.message);
+          throw error;
+        }
+
+        if (data && data.length > 0) {
+          return {
+            id: data[0].id?.toString(),
+            title: data[0].title,
+            content: data[0].content,
+            mediaType: data[0].media_type,
+            mediaUrl: data[0].media_url,
+            createdAt: data[0].created_at
+          };
+        }
+      } catch (err) {
+        console.warn("Falha de gravação no Supabase para Apoio Feminino. Gravando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getPosts();
+    const updated = [newPost, ...list];
+    localStorage.setItem("umesc_apoio_feminino_posts", JSON.stringify(updated));
+    return newPost;
+  },
+
+  async updatePost(id: string, updatedFields: Partial<ApoioFemininoPost>): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const numericId = parseInt(id, 10);
+        const queryId = isNaN(numericId) ? id : numericId;
+
+        const dbRecord: any = {};
+        if (updatedFields.title !== undefined) dbRecord.title = updatedFields.title;
+        if (updatedFields.content !== undefined) dbRecord.content = updatedFields.content;
+        if (updatedFields.mediaType !== undefined) dbRecord.media_type = updatedFields.mediaType;
+        if (updatedFields.mediaUrl !== undefined) dbRecord.media_url = updatedFields.mediaUrl;
+
+        const { error } = await supabase
+          .from("apoio_feminino")
+          .update(dbRecord)
+          .eq("id", queryId);
+
+        if (error) {
+          console.error("Erro ao atualizar post no Supabase:", error.message);
+          throw error;
+        }
+      } catch (err) {
+        console.warn("Falha de atualização no Supabase para Apoio Feminino. Atualizando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getPosts();
+    const updated = list.map((item) => 
+      (item.id === id || item.id?.toString() === id) ? { ...item, ...updatedFields } : item
+    );
+    localStorage.setItem("umesc_apoio_feminino_posts", JSON.stringify(updated));
+    return true;
+  },
+
+  async deletePost(id: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const numericId = parseInt(id, 10);
+        const queryId = isNaN(numericId) ? id : numericId;
+
+        const { error } = await supabase
+          .from("apoio_feminino")
+          .delete()
+          .eq("id", queryId);
+
+        if (error) {
+          console.error("Erro ao deletar post de Apoio Feminino no Supabase:", error.message);
+          throw error;
+        }
+        return true;
+      } catch (err) {
+        console.warn("Falha de deleção no Supabase para Apoio Feminino. Deletando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getPosts();
+    const filtered = list.filter((item) => item.id !== id && item.id?.toString() !== id);
+    localStorage.setItem("umesc_apoio_feminino_posts", JSON.stringify(filtered));
     return true;
   }
 };

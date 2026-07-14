@@ -102,28 +102,29 @@ export default function MemberRegistrationSection() {
       const list = await membersService.getMembers();
       setMembersList(list);
       setSuccessMessage(true);
-    } catch (error) {
+
+      // Reset Form Fields (Only on success!)
+      setNome("");
+      setCpf("");
+      setBirthDate("");
+      setRank("");
+      setRgMilitar("");
+      setChurch("");
+      setPhone("");
+      setEmail("");
+      setCity("");
+      setSenha("");
+      setLgpdConsent(false);
+      setMarketingConsent(false);
+
+      setTimeout(() => {
+        setSuccessMessage(false);
+      }, 6000);
+    } catch (error: any) {
       console.error("Erro ao registrar membro no Supabase:", error);
-      alert("Houve um problema de conexão ao salvar seu registro no banco de dados.");
+      const errorMsg = error?.message || "Houve um problema de conexão ao salvar seu registro no banco de dados.";
+      alert(errorMsg);
     }
-
-    // Reset Form Fields
-    setNome("");
-    setCpf("");
-    setBirthDate("");
-    setRank("");
-    setRgMilitar("");
-    setChurch("");
-    setPhone("");
-    setEmail("");
-    setCity("");
-    setSenha("");
-    setLgpdConsent(false);
-    setMarketingConsent(false);
-
-    setTimeout(() => {
-      setSuccessMessage(false);
-    }, 6000);
   };
 
   // LGPD: Right of Deletion ("Direito de Exclusão")

@@ -348,3 +348,37 @@ CREATE POLICY "Deleção livre para todos de prayer_requests" ON public.prayer_r
 
 NOTIFY pgrst, 'reload schema';
 
+
+-- ====================================================================
+-- 21. TABELA DE APOIO FEMININO (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.apoio_feminino (
+    id SERIAL PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    media_type VARCHAR(50) DEFAULT 'image' NOT NULL, -- 'image', 'video', 'none'
+    media_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+COMMENT ON TABLE public.apoio_feminino IS 'Gerenciamento de publicações da área de Apoio Feminino da UMESC';
+
+-- Permissões explicitadas no canal REST
+GRANT ALL ON TABLE public.apoio_feminino TO anon, authenticated, service_role;
+
+-- Configurar RLS (Row Level Security)
+ALTER TABLE public.apoio_feminino ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de apoio_feminino" ON public.apoio_feminino;
+DROP POLICY IF EXISTS "Inserção livre para todos de apoio_feminino" ON public.apoio_feminino;
+DROP POLICY IF EXISTS "Atualização livre para todos de apoio_feminino" ON public.apoio_feminino;
+DROP POLICY IF EXISTS "Deleção livre para todos de apoio_feminino" ON public.apoio_feminino;
+
+CREATE POLICY "Leitura livre para todos de apoio_feminino" ON public.apoio_feminino FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de apoio_feminino" ON public.apoio_feminino FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de apoio_feminino" ON public.apoio_feminino FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de apoio_feminino" ON public.apoio_feminino FOR DELETE USING (true);
+
+NOTIFY pgrst, 'reload schema';
+
+
