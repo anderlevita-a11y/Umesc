@@ -11,60 +11,10 @@ import evento2 from "../assets/images/umesc_evento_2_1779818351705.png";
 import evento3 from "../assets/images/umesc_evento_3_1779818385804.png";
 
 // Default Fallback Slide Data for UMESC Invitations
-const INITIAL_CONVITES = [
-  {
-    id: 1,
-    image: convite1,
-    tag: "CONGRESSO",
-    title: "35° Congresso Estadual UMESC",
-    description: "Grande comemoração e palestras teológicas militares em Florianópolis, reunindo forças de segurança de SC.",
-    date: "Acontece em Novembro"
-  },
-  {
-    id: 2,
-    image: convite2,
-    tag: "ESPIRITUALIDADE",
-    title: "II Recruta Espiritual Catarinense",
-    description: "Um dia intensivo de mentoria e renovação espiritual sob a palavra sagrada para policiais fardados.",
-    date: "Inscreva-se Já"
-  },
-  {
-    id: 3,
-    image: convite3,
-    tag: "TREINAMENTO",
-    title: "Liderança e Capelania Integrada",
-    description: "Treinamento especializado em inteligência emocional e suporte em crises agudas nas guarnições.",
-    date: "Próximo Sábado"
-  }
-];
+const INITIAL_CONVITES: any[] = [];
 
 // Default Fallback Slide Data for UMESC Events & Social Actions
-const INITIAL_EVENTOS = [
-  {
-    id: 1,
-    image: evento1,
-    tag: "DEVOCIONAL",
-    title: "Círculos de Oração em Postos",
-    description: "Militares orando juntos pelo bem-estar e integridade emocional de toda a tropa estadual de SC.",
-    place: "Batalhões Locais de SC"
-  },
-  {
-    id: 2,
-    image: evento2,
-    tag: "AÇÃO SOCIAL",
-    title: "Resgate e Auxílio na Serra",
-    description: "Ação beneficente voluntária levando sopas quentes e agasalhos para as regiões mais frias de SC.",
-    place: "Serra Catarinense"
-  },
-  {
-    id: 3,
-    image: evento3,
-    tag: "DISTRIBUIÇÃO",
-    title: "Literaturas de Uniforme Oficiais",
-    description: "Entrega solene de Bíblias de bolso compactas de farda em cerimônia oficial de apoio espiritual.",
-    place: "Regiões Metropolitanas"
-  }
-];
+const INITIAL_EVENTOS: any[] = [];
 
 export default function CarouselsSection() {
   // Load dynamic content

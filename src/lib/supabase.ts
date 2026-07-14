@@ -900,24 +900,7 @@ export const apoioFemininoService = {
     }
     
     // Seed initial demo content if empty and local storage is empty
-    const seed: ApoioFemininoPost[] = [
-      {
-        id: "post-1",
-        title: "Reunião Geral do Apoio Feminino",
-        content: "Sejam bem-vindas à nossa página de Apoio Feminino! Aqui compartilhamos mensagens de fé, devocionais e a união das esposas de militares e militares de farda de Santa Catarina. Participe de nossas reuniões mensais de oração e acolhimento.",
-        mediaType: "image",
-        mediaUrl: "https://images.unsplash.com/photo-1573498813002-4221a2014c5a?auto=format&fit=crop&q=80&w=800",
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: "post-2",
-        title: "A Importância do Apoio Emocional",
-        content: "Neste vídeo especial, compartilhamos sobre como o apoio emocional e espiritual fortalece as famílias de nossas corporações de segurança. Assista, compartilhe e seja edificada pela união e carinho de nossa equipe voluntária.",
-        mediaType: "video",
-        mediaUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        createdAt: new Date(Date.now() - 86400000 * 2).toISOString()
-      }
-    ];
+    const seed: ApoioFemininoPost[] = [];
     localStorage.setItem("umesc_apoio_feminino_posts", JSON.stringify(seed));
     return seed;
   },

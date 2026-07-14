@@ -139,110 +139,11 @@ const INITIAL_AGENDA: AgendaItem[] = [
 ];
 
 // Initial Congress
-const INITIAL_CONGRESSES: Congress[] = [
-  {
-    id: "cong-35",
-    title: "35° Congresso Estadual UMESC (Florianópolis)",
-    description: "Grande celebração militar estadual com palestras ético-espirituais, simpósios e debates integrados sob o lema 'Valorização Humana, Fé e Resiliência Psicológica nas Forças de Segurança'.",
-    date: "13 a 15 de Novembro de 2026",
-    location: "Centro de Convenções de Florianópolis - CentroSul, Florianópolis - SC",
-    price: 45.00,
-    pixKey: "pix@umesc-sc.org.br",
-    pixReceiverName: "União Divina dos Oficiais e Praças de Santa Catarina - UMESC",
-    workshops: INITIAL_WORKSHOPS,
-    agenda: INITIAL_AGENDA,
-    status: "open",
-    isFeatured: true
-  },
-  {
-    id: "cong-recruta",
-    title: "II Recruta Espiritual de Oficiais",
-    description: "Retiro técnico-espiritual intensivo para líderes e sargentos, com dinâmicas de ética no comando fardado e fortalecimento de capelanias regionais.",
-    date: "04 de Outubro de 2026",
-    location: "Sede Recreativa da UMESC, Lages - SC",
-    price: 30.00,
-    pixKey: "financeiro@umesc-sc.org.br",
-    pixReceiverName: "UMESC Regional Planalto",
-    workshops: [
-      {
-        id: "ws-rec-1",
-        title: "Treinamento de Capelães Voluntários",
-        speaker: "Pastor Sgto PM Gerson",
-        capacity: 40,
-        registeredCount: 12,
-        timeSlot: "Domingo, das 10:00 às 11:30"
-      }
-    ],
-    agenda: [
-      {
-        id: "ag-rec-1",
-        day: "Único",
-        time: "08:00",
-        title: "Café da manhã de recepção e credenciamento",
-        description: "Alinhamento das guarnições metropolitanas."
-      }
-    ],
-    status: "open"
-  }
-];
+const INITIAL_CONGRESSES: Congress[] = [];
 
 // Pre-seeded system inscriptions for simulation purposes (useful for demo checking!)
 const SEEDED_INSCRIPTIONS = (congresses: Congress[]): CongressInscription[] => {
-  return [
-    {
-      id: "INS-AZX87",
-      congressId: "cong-35",
-      congressTitle: "35° Congresso Estadual UMESC (Florianópolis)",
-      memberCpf: "102.304.506-88",
-      memberName: "Sargento Anderson Marcondes",
-      memberEmail: "anderson.marcondes@pm.sc.gov.br",
-      memberPhone: "(48) 98844-3232",
-      memberRank: "Sargento PM",
-      selectedWorkshopIds: ["ws-1", "ws-4"],
-      paymentStatus: "pago",
-      paymentProofUrl: "MOCK_RECEIPT_OK",
-      paymentProofName: "comprovante_pix_anderson.png",
-      registrationDate: "2026-06-01T15:20:00Z",
-      qrCodeToken: "UMESC-35-AZX87-pago",
-      checkedIn: true,
-      checkedInAt: "2026-06-08T09:15:00Z",
-      memberPhotoUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=300"
-    },
-    {
-      id: "INS-UIP98",
-      congressId: "cong-35",
-      congressTitle: "35° Congresso Estadual UMESC (Florianópolis)",
-      memberCpf: "223.334.445-55",
-      memberName: "Cabo PM Ricardo Goulart",
-      memberEmail: "ricardo.goulart@bombeiros.sc.gov.br",
-      memberPhone: "(47) 99122-1144",
-      memberRank: "Cabo BM",
-      selectedWorkshopIds: ["ws-2"],
-      paymentStatus: "em_analise",
-      paymentProofUrl: "MOCK_RECEIPT_ANALYSIS",
-      paymentProofName: "transfer_print_nubank_banco.jpg",
-      registrationDate: "2026-06-05T10:45:12Z",
-      qrCodeToken: "UMESC-35-UIP98-analise",
-      checkedIn: false,
-      memberPhotoUrl: "https://images.unsplash.com/photo-1542909168-82c3e7fdca5c?auto=format&fit=crop&q=80&w=300"
-    },
-    {
-      id: "INS-HYP50",
-      congressId: "cong-35",
-      congressTitle: "35° Congresso Estadual UMESC (Florianópolis)",
-      memberCpf: "445.556.667-11",
-      memberName: "Soldado PM Júlia Kuster",
-      memberEmail: "julia.kuster@pm.sc.gov.br",
-      memberPhone: "(48) 99877-0101",
-      memberRank: "Soldado PM",
-      selectedWorkshopIds: ["ws-1", "ws-3"],
-      paymentStatus: "pendente",
-      registrationDate: "2026-06-07T18:12:00Z",
-      qrCodeToken: "UMESC-35-HYP50-pendente",
-      checkedIn: false,
-      memberPhotoUrl: "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=300"
-    }
-  ];
+  return [];
 };
 
 export const congressService = {

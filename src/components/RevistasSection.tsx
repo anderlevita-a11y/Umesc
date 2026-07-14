@@ -134,35 +134,7 @@ const generateUmescPdf = (title: string, volume: string, date: string, descripti
   return new Blob([pdfBody], { type: "application/pdf" });
 };
 
-const INITIAL_REVISTAS: RevistaEdition[] = [
-  {
-    id: "rev_1",
-    title: "Revista Oficial Capelania e Fé",
-    volume: "Edição Especial Nº 15",
-    publishedDate: "2026-04-01",
-    description: "Artigos científicos sobre prevenção ao esgotamento psicológico nas tropas, saúde mental no fardamento e guia prático de oração nos postos.",
-    coverImage: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=400",
-    downloads: 342
-  },
-  {
-    id: "rev_2",
-    title: "Informativo UMESC - Conexão e Assistência",
-    volume: "Volume II Trimestral",
-    publishedDate: "2026-02-15",
-    description: "Balanço ilustrado das ações de resgate com sopas nos invernos de Santa Catarina, reformas de capelas e relatórios de novos fardados associados.",
-    coverImage: "https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?auto=format&fit=crop&q=80&w=400",
-    downloads: 189
-  },
-  {
-    id: "rev_3",
-    title: "Valores Éticos Cristãos na Segurança Pública",
-    volume: "Edição Digital Livro",
-    publishedDate: "2025-11-10",
-    description: "Análise doutrinária das bases de ética de patrulhamento sob a lei da dignidade humana, com prefácio especial do conselho oficial da UMESC SC.",
-    coverImage: "https://images.unsplash.com/photo-1476275466078-4007374efbbe?auto=format&fit=crop&q=80&w=400",
-    downloads: 512
-  }
-];
+const INITIAL_REVISTAS: RevistaEdition[] = [];
 
 export default function RevistasSection() {
   const [revistas, setRevistas] = useState<RevistaEdition[]>(() => {

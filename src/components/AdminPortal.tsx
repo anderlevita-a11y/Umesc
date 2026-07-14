@@ -22,94 +22,14 @@ import evento1 from "../assets/images/umesc_evento_1_1779818334743.png";
 import evento2 from "../assets/images/umesc_evento_2_1779818351705.png";
 
 // Fallbacks matching INITIAL_REVISTAS
-const DEFAULT_REVISTAS = [
-  {
-    id: "rev_1",
-    title: "Revista Oficial Capelania e Fé",
-    volume: "Edição Especial Nº 15",
-    publishedDate: "2026-04-01",
-    description: "Artigos científicos sobre prevenção ao esgotamento psicológico nas tropas, saúde mental no fardamento e guia prático de oração nos postos.",
-    coverImage: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=400",
-    downloads: 342
-  },
-  {
-    id: "rev_2",
-    title: "Informativo UMESC - Conexão e Assistência",
-    volume: "Volume II Trimestral",
-    publishedDate: "2026-02-15",
-    description: "Balanço ilustrado das ações de resgate com sopas nos invernos de Santa Catarina, reformas de capelas e relatórios de novos fardados associados.",
-    coverImage: "https://images.unsplash.com/photo-1506880018603-83d5b814b5a6?auto=format&fit=crop&q=80&w=400",
-    downloads: 189
-  }
-];
+const DEFAULT_REVISTAS: any[] = [];
 
 // Fallbacks matching carousels slides
-const DEFAULT_CONVITES = [
-  {
-    id: 1,
-    image: convite1,
-    tag: "CONGRESSO",
-    title: "35° Congresso Estadual UMESC",
-    description: "Grande comemoração e palestras teológicas militares em Florianópolis, reunindo forças de segurança de SC.",
-    date: "Acontece em Novembro"
-  },
-  {
-    id: 2,
-    image: convite2,
-    tag: "ESPIRITUALIDADE",
-    title: "II Recruta Espiritual Catarinense",
-    description: "Um dia intensivo de mentoria e renovação espiritual sob a palavra sagrada para policiais fardados.",
-    date: "Inscreva-se Já"
-  }
-];
+const DEFAULT_CONVITES: any[] = [];
 
-const DEFAULT_EVENTOS = [
-  {
-    id: 1,
-    image: evento1,
-    tag: "DEVOCIONAL",
-    title: "Círculos de Oração em Postos",
-    description: "Militares orando juntos pelo bem-estar e integridade emocional de toda a tropa estadual de SC.",
-    place: "Batalhões Locais de SC"
-  },
-  {
-    id: 2,
-    image: evento2,
-    tag: "AÇÃO SOCIAL",
-    title: "Resgate e Auxílio na Serra",
-    description: "Ação beneficente voluntária levando sopas quentes e agasalhos para as regiões mais frias de SC.",
-    place: "Serra Catarinense"
-  }
-];
+const DEFAULT_EVENTOS: any[] = [];
 
-const DEFAULT_MEMBER_CONTENTS: MemberContent[] = [
-  {
-    id: "content_1",
-    title: "Mensagem Espiritual de Alento aos Guerreiros",
-    category: "Devocional Diário",
-    bodyText: "Prezados irmãos de farda, meditemos hoje no Salmo 91: 'Aquele que habita no esconderijo do Altíssimo, à sombra do Onipotente descansará.' Em cada patrulha, em cada plantão, o Senhor é o vosso escudo e fortaleza. Deus abençoe a todos os policiais e bombeiros militares hoje!",
-    attachmentUrl: "https://umesc.org.br/devocional",
-    status: "Pronto",
-    createdAt: "2026-06-11"
-  },
-  {
-    id: "content_2",
-    title: "Convocação para 35º Congresso Anual da UMESC",
-    category: "Convocação de Assembléia",
-    bodyText: "Atenção Coordenadores e Associados! Convocamos todos os membros ativos a participarem da nossa Assembléia Geral Extraordinária preparatória para o 35º Congresso Anual. Data: 25 de Junho às 19:30 via Zoom Link.",
-    attachmentUrl: "https://zoom.us/j/umesc-symposium",
-    status: "Pronto",
-    createdAt: "2026-06-10"
-  },
-  {
-    id: "content_3",
-    title: "Informativo de Recadastramento Obrigatório de Fardas",
-    category: "Aviso de Farda",
-    bodyText: "Lembramos a todos os membros associados homologados que o preenchimento da nova Ficha de Filiação Digital já está disponível no Portal UMESC. Favor atualizar seus dados de Lotação, Patente e endereço de contatos para emissão das credenciais atualizadas.",
-    status: "Pronto",
-    createdAt: "2026-06-08"
-  }
-];
+const DEFAULT_MEMBER_CONTENTS: MemberContent[] = [];
 
 // Helper functions for birthday filtering
 const parseBirthDate = (dateStr: string) => {
