@@ -7,6 +7,7 @@ import React, { useState, useEffect } from "react";
 import { MemberRegistration } from "../types";
 import { ShieldCheck, UserPlus, Trash2, Eye, EyeOff, FileDown, Lock, CheckCircle, HelpCircle, RefreshCw } from "lucide-react";
 import { membersService, isSupabaseConfigured } from "../lib/supabase.ts";
+import { sanitizeInput, isValidCPF, formatPhone, isValidPhone, isValidEmail } from "../lib/validation.ts";
 
 export default function MemberRegistrationSection() {
   const [membersList, setMembersList] = useState<MemberRegistration[]>([]);
@@ -71,30 +72,55 @@ export default function MemberRegistrationSection() {
       return;
     }
 
-    const compiledHash = generateSha256Sim(nome + cpf);
-    const maskedCpfValue = formatMaskedCpf(cpf);
+    const cleanNome = sanitizeInput(nome, 100);
+    const cleanCpf = sanitizeInput(cpf, 11);
+    const cleanRank = sanitizeInput(rank, 50);
+    const cleanRgMilitar = sanitizeInput(rgMilitar || "N/A", 50);
+    const cleanChurch = sanitizeInput(church, 150);
+    const cleanPhone = sanitizeInput(phone, 25);
+    const cleanEmail = sanitizeInput(email, 100);
+    const cleanCity = sanitizeInput(city, 50);
+    const cleanSenha = sanitizeInput(senha, 30);
 
-    if (senha.length < 6) {
+    if (!isValidCPF(cleanCpf)) {
+      alert("O CPF fornecido é matematicamente inválido. Por favor, verifique.");
+      return;
+    }
+
+    if (!isValidEmail(cleanEmail)) {
+      alert("Por favor, informe um endereço de e-mail corporativo ou seguro válido.");
+      return;
+    }
+
+    if (!isValidPhone(cleanPhone)) {
+      alert("Por favor, informe um número de telefone WhatsApp válido com DDD (10 ou 11 dígitos).");
+      return;
+    }
+
+    if (cleanSenha.length < 6) {
       alert("A senha de acesso deve possuir ao menos 6 caracteres.");
       return;
     }
 
+    const compiledHash = generateSha256Sim(cleanNome + cleanCpf);
+    const maskedCpfValue = formatMaskedCpf(cleanCpf);
+
     const newMember: MemberRegistration = {
-      name: nome,
+      name: cleanNome,
       cpf: maskedCpfValue,
-      birthDate,
+      birthDate: sanitizeInput(birthDate, 20),
       militaryForce,
-      rank,
-      rgMilitar: rgMilitar || "N/A",
-      church,
-      phone,
-      email,
-      city,
+      rank: cleanRank,
+      rgMilitar: cleanRgMilitar,
+      church: cleanChurch,
+      phone: formatPhone(cleanPhone),
+      email: cleanEmail,
+      city: cleanCity,
       lgpdConsent,
       marketingConsent,
       registrationDate: new Date().toISOString().split('T')[0],
       securityHash: compiledHash,
-      password: senha
+      password: cleanSenha
     };
 
     try {
@@ -202,6 +228,7 @@ export default function MemberRegistrationSection() {
                   <input 
                     type="text" 
                     required
+                    maxLength={100}
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
                     placeholder="Sargento João da Silva Santos"
@@ -215,6 +242,7 @@ export default function MemberRegistrationSection() {
                   <input 
                     type="text" 
                     required
+                    maxLength={11}
                     value={cpf}
                     onChange={(e) => handleCpfFormatting(e.target.value)}
                     placeholder="Somente Números (11 dígitos)"
@@ -257,6 +285,7 @@ export default function MemberRegistrationSection() {
                   <input 
                     type="text" 
                     required
+                    maxLength={50}
                     value={rank}
                     onChange={(e) => setRank(e.target.value)}
                     placeholder="Ex: Sargento, Major, Advogado, etc"
@@ -269,6 +298,7 @@ export default function MemberRegistrationSection() {
                   <label className="block text-xs font-bold text-[#1a2a40] uppercase mb-1">Matrícula ou RG Militar (Se aplicável):</label>
                   <input 
                     type="text" 
+                    maxLength={50}
                     value={rgMilitar}
                     onChange={(e) => setRgMilitar(e.target.value)}
                     placeholder="Ex: PMSC 923.412-0"
@@ -282,6 +312,7 @@ export default function MemberRegistrationSection() {
                   <input 
                     type="text" 
                     required
+                    maxLength={50}
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
                     placeholder="Ex: Joinville, Lages, Chapecó"
@@ -295,6 +326,7 @@ export default function MemberRegistrationSection() {
                   <input 
                     type="text" 
                     required
+                    maxLength={150}
                     value={church}
                     onChange={(e) => setChurch(e.target.value)}
                     placeholder="Ex: Igreja Batista do Vale, Assembleia de Deus Central"
@@ -308,8 +340,9 @@ export default function MemberRegistrationSection() {
                   <input 
                     type="tel" 
                     required
+                    maxLength={15}
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
+                    onChange={(e) => setPhone(formatPhone(e.target.value))}
                     placeholder="(48) 99999-9999"
                     className="w-full bg-white border border-slate-250 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded px-3 py-2 text-xs outline-none text-slate-900"
                   />
@@ -320,6 +353,7 @@ export default function MemberRegistrationSection() {
                   <input 
                     type="email" 
                     required
+                    maxLength={100}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="exemplo@sc.gov.br ou pessoal"
@@ -332,6 +366,7 @@ export default function MemberRegistrationSection() {
                   <input 
                     type="password" 
                     required
+                    maxLength={30}
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
                     placeholder="Mínimo 6 caracteres"

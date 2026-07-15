@@ -61,10 +61,16 @@ export default function CongressoManager() {
     ins: CongressInscription | null;
   } | null>(null);
 
-  // Load all initial state on mounting
+  // Load all initial state on mounting and subscribe to live sync events
   useEffect(() => {
     loadData();
-  }, []);
+
+    const handleSync = () => {
+      loadData();
+    };
+    window.addEventListener("umesc-data-sync", handleSync);
+    return () => window.removeEventListener("umesc-data-sync", handleSync);
+  }, [selectedCongressId]);
 
   const loadData = () => {
     const list = congressService.getCongresses();

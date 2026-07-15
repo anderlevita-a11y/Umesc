@@ -106,7 +106,14 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
       setMemberPhotoUrl(loggedInUser.photoUrl);
     }
     loadCongressData();
-  }, [loggedInUser]);
+
+    // Subscribe to background data synchronization events
+    const refresh = () => {
+      loadCongressData();
+    };
+    window.addEventListener("umesc-data-sync", refresh);
+    return () => window.removeEventListener("umesc-data-sync", refresh);
+  }, [loggedInUser, selectedCongressId]);
 
   const loadCongressData = () => {
     const list = congressService.getCongresses().filter(c => c.status === "open" && c.isActive !== false);

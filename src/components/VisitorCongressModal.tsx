@@ -39,20 +39,43 @@ export default function VisitorCongressModal({ isOpen, onClose, initialCongressI
   const [fakeFileName, setFakeFileName] = useState("");
   const [isUploadingProof, setIsUploadingProof] = useState(false);
 
-  // Load congresses
+  // Load congresses and subscribe to live changes
   useEffect(() => {
-    const list = congressService.getCongresses().filter(c => c.status === "open" && c.isActive !== false);
-    setCongresses(list);
+    const refresh = () => {
+      const list = congressService.getCongresses().filter(c => c.status === "open" && c.isActive !== false);
+      setCongresses(list);
 
-    if (list.length > 0) {
-      if (initialCongressId && list.some(c => c.id === initialCongressId)) {
-        setSelectedCongressId(initialCongressId);
-      } else {
-        const featured = list.find(c => c.isFeatured);
-        setSelectedCongressId(featured ? featured.id : list[0].id);
+      if (list.length > 0) {
+        if (initialCongressId && list.some(c => c.id === initialCongressId)) {
+          setSelectedCongressId(initialCongressId);
+        } else {
+          const featured = list.find(c => c.isFeatured);
+          setSelectedCongressId(prev => prev || (featured ? featured.id : list[0].id));
+        }
       }
-    }
-  }, [isOpen, initialCongressId]);
+
+      // If already queried, refresh query results to reflect payment updates / check-ins in real-time
+      if (searched && queryInput) {
+        const term = queryInput.replace(/\D/g, "").trim();
+        if (term) {
+          const allInscriptions = congressService.getInscriptions();
+          const matches = allInscriptions.filter(ins => {
+            const matchCpf = ins.memberCpf.replace(/\D/g, "") === term;
+            const matchPhone = ins.memberPhone.replace(/\D/g, "").includes(term);
+            return matchCpf || matchPhone;
+          });
+          setQueryResult(matches);
+          if (matches.length === 1) {
+            setSelectedQueriedIns(matches[0]);
+          }
+        }
+      }
+    };
+
+    refresh();
+    window.addEventListener("umesc-data-sync", refresh);
+    return () => window.removeEventListener("umesc-data-sync", refresh);
+  }, [isOpen, initialCongressId, searched, queryInput]);
 
   if (!isOpen) return null;
 

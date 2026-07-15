@@ -40,6 +40,7 @@ import CongressoInscricaoMembro from "./CongressoInscricaoMembro.tsx";
 import CapelaniaVolunteeringForm from "./CapelaniaVolunteeringForm.tsx";
 import { membersService, isSupabaseConfigured } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
+import { sanitizeInput, isValidCPF, formatPhone, isValidPhone, isValidEmail } from "../lib/validation.ts";
 import { 
   CORE_GOVERNANCE, 
   COORDINATORS_DATA, 
@@ -607,7 +608,22 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
       return;
     }
 
-    if (profilePassword.length < 6) {
+    // Input validations
+    const cleanEmail = sanitizeInput(profileEmail, 100);
+    const cleanPhone = sanitizeInput(profilePhone, 15);
+
+    if (!isValidEmail(cleanEmail)) {
+      setProfileErrorMsg("Por favor, informe um endereço de e-mail corporativo ou seguro válido.");
+      return;
+    }
+
+    if (!isValidPhone(cleanPhone)) {
+      setProfileErrorMsg("Por favor, informe um número de WhatsApp válido com DDD (10 ou 11 dígitos).");
+      return;
+    }
+
+    const cleanPassword = sanitizeInput(profilePassword, 30);
+    if (cleanPassword.length < 6) {
       setProfileErrorMsg("A senha de acesso deve possuir ao menos 6 caracteres.");
       return;
     }
@@ -616,17 +632,25 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
     setProfileSuccessMsg(false);
 
     try {
+      // Complete sanitization of remaining fields to avoid script injection or overlength values
+      const cleanName = sanitizeInput(profileName, 100);
+      const cleanBirthDate = sanitizeInput(profileBirthDate, 20);
+      const cleanRank = sanitizeInput(profileRank, 50);
+      const cleanRgMilitar = sanitizeInput(profileRgMilitar, 50);
+      const cleanChurch = sanitizeInput(profileChurch, 150);
+      const cleanCity = sanitizeInput(profileCity, 50);
+
       const updatedFields: Partial<MemberRegistration> = {
-        name: profileName,
-        birthDate: profileBirthDate,
+        name: cleanName,
+        birthDate: cleanBirthDate,
         militaryForce: profileForce,
-        rank: profileRank,
-        rgMilitar: profileRgMilitar,
-        church: profileChurch,
-        phone: profilePhone,
-        email: profileEmail,
-        city: profileCity,
-        password: profilePassword,
+        rank: cleanRank,
+        rgMilitar: cleanRgMilitar,
+        church: cleanChurch,
+        phone: cleanPhone,
+        email: cleanEmail,
+        city: cleanCity,
+        password: cleanPassword,
         photoUrl: profilePhotoUrl
       };
 
@@ -636,17 +660,17 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
         // Update local session
         const nextUserSession = {
           ...loggedInUser,
-          name: profileName,
-          rank: profileRank,
+          name: cleanName,
+          rank: cleanRank,
           force: profileForce === "PM" ? "Polícia Militar SC" : profileForce === "BM" ? "Bombeiro Militar SC" : profileForce === "FFAA" ? "Forças Armadas" : profileForce === "Civil" ? "Polícia Civil / Servente" : "Apoiador Voluntário",
-          city: profileCity,
-          registrationID: profileRgMilitar || "N/A",
-          rawBirthDate: profileBirthDate,
+          city: cleanCity,
+          registrationID: cleanRgMilitar || "N/A",
+          rawBirthDate: cleanBirthDate,
           rawForce: profileForce,
-          rawChurch: profileChurch,
-          rawPhone: profilePhone,
-          rawEmail: profileEmail,
-          password: profilePassword,
+          rawChurch: cleanChurch,
+          rawPhone: cleanPhone,
+          rawEmail: cleanEmail,
+          password: cleanPassword,
           photoUrl: profilePhotoUrl
         };
         setLoggedInUser(nextUserSession);
@@ -677,17 +701,33 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   const handleFirstAccessSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFirstAccessError("");
-    if (firstAccessPass !== firstAccessPassConfirm) {
+
+    const cleanEmail = sanitizeInput(firstAccessEmail, 100);
+    const cleanCpf = sanitizeInput(firstAccessCpf, 11);
+    const cleanPass = sanitizeInput(firstAccessPass, 30);
+    const cleanPassConfirm = sanitizeInput(firstAccessPassConfirm, 30);
+
+    if (!isValidEmail(cleanEmail)) {
+      setFirstAccessError("Por favor, insira um endereço de e-mail válido.");
+      return;
+    }
+
+    if (!isValidCPF(cleanCpf)) {
+      setFirstAccessError("O CPF informado é inválido. Por favor, verifique.");
+      return;
+    }
+
+    if (cleanPass !== cleanPassConfirm) {
       setFirstAccessError("As senhas inseridas não correspondem. Por favor, verifique.");
       return;
     }
-    if (firstAccessPass.length < 6) {
+    if (cleanPass.length < 6) {
       setFirstAccessError("A nova senha de acesso deve possuir ao menos 6 caracteres.");
       return;
     }
 
     try {
-      const success = await membersService.updatePassword(firstAccessEmail, firstAccessCpf, firstAccessPass);
+      const success = await membersService.updatePassword(cleanEmail, cleanCpf, cleanPass);
       if (!success) {
         setFirstAccessError("Dados cadastrais do associado não foram encontrados! Verifique seu e-mail e CPF cadastrados.");
         return;
@@ -697,7 +737,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
       setTimeout(() => {
         setFirstAccessSuccess(false);
         setLoginMode("standard");
-        setAuthEmail(firstAccessEmail);
+        setAuthEmail(cleanEmail);
         setAuthPassword("");
       }, 3500);
     } catch (err) {
@@ -710,17 +750,33 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   const handleForgotSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotError("");
-    if (forgotNewPass !== forgotNewPassConfirm) {
+
+    const cleanEmail = sanitizeInput(forgotEmail, 100);
+    const cleanCpf = sanitizeInput(forgotCpf, 11);
+    const cleanNewPass = sanitizeInput(forgotNewPass, 30);
+    const cleanNewPassConfirm = sanitizeInput(forgotNewPassConfirm, 30);
+
+    if (!isValidEmail(cleanEmail)) {
+      setForgotError("Por favor, informe um endereço de e-mail válido.");
+      return;
+    }
+
+    if (!isValidCPF(cleanCpf)) {
+      setForgotError("O CPF informado é inválido. Por favor, verifique.");
+      return;
+    }
+
+    if (cleanNewPass !== cleanNewPassConfirm) {
       setForgotError("As senhas informadas não coincidem. Digite novamente.");
       return;
     }
-    if (forgotNewPass.length < 6) {
+    if (cleanNewPass.length < 6) {
       setForgotError("A nova senha de acesso deve possuir ao menos 6 caracteres.");
       return;
     }
 
     try {
-      const success = await membersService.updatePassword(forgotEmail, forgotCpf, forgotNewPass);
+      const success = await membersService.updatePassword(cleanEmail, cleanCpf, cleanNewPass);
       if (!success) {
         setForgotError("Redefinição inválida: E-mail e CPF fornecidos não coincidem com nenhum associado homologado.");
         return;
@@ -730,7 +786,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
       setTimeout(() => {
         setForgotSuccess(false);
         setLoginMode("standard");
-        setAuthEmail(forgotEmail);
+        setAuthEmail(cleanEmail);
         setAuthPassword("");
       }, 3500);
     } catch (err) {
@@ -1146,6 +1202,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         onChange={(e) => setFirstAccessEmail(e.target.value)}
                         placeholder="Ex: seu-nome@corporativo.com"
                         required
+                        maxLength={100}
                         className="w-full bg-[#071311] text-xs border border-emerald-500/20 rounded px-3.5 py-2.5 text-white outline-none focus:border-emerald-500 tracking-wide transition-all"
                       />
                     </div>
@@ -1158,6 +1215,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         onChange={(e) => setFirstAccessCpf(e.target.value.replace(/\D/g, ""))}
                         placeholder="Ex: 01234567890"
                         required
+                        maxLength={11}
                         className="w-full bg-[#071311] text-xs border border-emerald-500/20 rounded px-3.5 py-2.5 text-white outline-none focus:border-emerald-500 tracking-wide transition-all"
                       />
                     </div>
@@ -1171,6 +1229,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                           onChange={(e) => setFirstAccessPass(e.target.value)}
                           placeholder="Mínimo 6 dígitos"
                           required
+                          maxLength={30}
                           className="w-full bg-[#071311] text-xs border border-emerald-500/20 rounded px-2.5 py-2.5 text-white outline-none focus:border-emerald-500 tracking-wide transition-all"
                         />
                       </div>
@@ -1182,6 +1241,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                           onChange={(e) => setFirstAccessPassConfirm(e.target.value)}
                           placeholder="Re-digite a senha"
                           required
+                          maxLength={30}
                           className="w-full bg-[#071311] text-xs border border-emerald-500/20 rounded px-2.5 py-2.5 text-white outline-none focus:border-emerald-500 tracking-wide transition-all"
                         />
                       </div>
@@ -2205,6 +2265,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         <input 
                           type="text"
                           required
+                          maxLength={100}
                           value={profileName}
                           onChange={(e) => setProfileName(e.target.value)}
                           className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
@@ -2244,6 +2305,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         <input 
                           type="text"
                           required
+                          maxLength={50}
                           value={profileRank}
                           onChange={(e) => setProfileRank(e.target.value)}
                           className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
@@ -2256,6 +2318,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Matrícula SC ou RG Militar:</label>
                         <input 
                           type="text"
+                          maxLength={50}
                           value={profileRgMilitar}
                           onChange={(e) => setProfileRgMilitar(e.target.value)}
                           placeholder="Ex: PMSC 912.420-9"
@@ -2268,6 +2331,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         <input 
                           type="text"
                           required
+                          maxLength={50}
                           value={profileCity}
                           onChange={(e) => setProfileCity(e.target.value)}
                           className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
@@ -2280,6 +2344,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                       <input 
                         type="text"
                         required
+                        maxLength={150}
                         value={profileChurch}
                         onChange={(e) => setProfileChurch(e.target.value)}
                         className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
@@ -2292,6 +2357,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         <input 
                           type="email"
                           required
+                          maxLength={100}
                           value={profileEmail}
                           onChange={(e) => setProfileEmail(e.target.value)}
                           className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
@@ -2303,8 +2369,10 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         <input 
                           type="text"
                           required
+                          maxLength={15}
+                          placeholder="(48) 99999-9999"
                           value={profilePhone}
-                          onChange={(e) => setProfilePhone(e.target.value)}
+                          onChange={(e) => setProfilePhone(formatPhone(e.target.value))}
                           className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
                         />
                       </div>
@@ -2315,6 +2383,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                       <input 
                         type="password"
                         required
+                        maxLength={30}
                         value={profilePassword}
                         onChange={(e) => setProfilePassword(e.target.value)}
                         className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"

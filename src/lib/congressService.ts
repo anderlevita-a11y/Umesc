@@ -1,7 +1,10 @@
 /**
  * Service to manage Congresses, Agendas, Workshops, and Inscriptions
- * Using robust LocalStorage persistence to synchronize between Member and Admin views
+ * Using robust LocalStorage persistence with background Supabase synchronization and Realtime subscriptions
  */
+
+import { supabase, isSupabaseConfigured } from "./supabase";
+
 
 export interface Workshop {
   id: string;
@@ -146,6 +149,176 @@ const SEEDED_INSCRIPTIONS = (congresses: Congress[]): CongressInscription[] => {
   return [];
 };
 
+/**
+ * Robust Background Supabase Sync System
+ */
+let isSyncInProgress = false;
+
+export async function fetchAllFromSupabaseAndSync() {
+  if (!isSupabaseConfigured || !supabase || isSyncInProgress) return;
+  isSyncInProgress = true;
+  try {
+    // Fetch congresses
+    const { data: dbCongresses, error: cErr } = await supabase
+      .from("congresses")
+      .select("*");
+    
+    // Fetch workshops
+    const { data: dbWorkshops, error: wErr } = await supabase
+      .from("workshops")
+      .select("*");
+
+    // Fetch agenda items
+    const { data: dbAgenda, error: aErr } = await supabase
+      .from("agenda_items")
+      .select("*");
+
+    // Fetch inscriptions
+    const { data: dbInscriptions, error: iErr } = await supabase
+      .from("inscriptions")
+      .select("*");
+
+    if (cErr || wErr || aErr || iErr) {
+      console.warn("Erro ao buscar dados do Congresso no Supabase:", cErr || wErr || aErr || iErr);
+      isSyncInProgress = false;
+      return;
+    }
+
+    // Process and assemble Congresses
+    const assembledCongresses: Congress[] = (dbCongresses || []).map((c: any) => {
+      const filteredWorkshops = (dbWorkshops || [])
+        .filter((w: any) => w.congress_id === c.id)
+        .map((w: any) => ({
+          id: w.id,
+          title: w.title,
+          speaker: w.speaker,
+          capacity: Number(w.capacity),
+          registeredCount: Number(w.registered_count || 0),
+          timeSlot: w.time_slot
+        }));
+
+      const filteredAgenda = (dbAgenda || [])
+        .filter((a: any) => a.congress_id === c.id)
+        .map((a: any) => ({
+          id: a.id,
+          day: a.day,
+          time: a.time,
+          title: a.title,
+          description: a.description || ""
+        }));
+
+      return {
+        id: c.id,
+        title: c.title,
+        description: c.description,
+        date: c.date,
+        location: c.location,
+        price: Number(c.price || 0),
+        pixKey: c.pix_key,
+        pixReceiverName: c.pix_receiver_name,
+        status: (c.status || "open") as "open" | "closed",
+        isFeatured: !!c.is_featured,
+        isActive: c.is_active !== false,
+        workshops: filteredWorkshops,
+        agenda: filteredAgenda
+      };
+    });
+
+    // Process Inscriptions
+    const assembledInscriptions: CongressInscription[] = (dbInscriptions || []).map((ins: any) => {
+      let selectedWorkshopIds: string[] = [];
+      try {
+        if (typeof ins.selected_workshop_ids === "string") {
+          selectedWorkshopIds = JSON.parse(ins.selected_workshop_ids);
+        } else if (Array.isArray(ins.selected_workshop_ids)) {
+          selectedWorkshopIds = ins.selected_workshop_ids;
+        }
+      } catch (e) {
+        selectedWorkshopIds = [];
+      }
+
+      return {
+        id: ins.id,
+        congressId: ins.congress_id,
+        congressTitle: ins.congress_title,
+        memberCpf: ins.member_cpf,
+        memberName: ins.member_name,
+        memberEmail: ins.member_email,
+        memberPhone: ins.member_phone,
+        memberRank: ins.member_rank,
+        selectedWorkshopIds,
+        paymentStatus: ins.payment_status as any,
+        paymentProofUrl: ins.payment_proof_url || "",
+        paymentProofName: ins.payment_proof_name || "",
+        registrationDate: ins.registration_date,
+        qrCodeToken: ins.qr_code_token,
+        checkedIn: !!ins.checked_in,
+        checkedInAt: ins.checked_in_at || undefined,
+        memberPhotoUrl: ins.member_photo_url || ins.payment_proof_url || ""
+      };
+    });
+
+    // Save to LocalStorage and dispatch event
+    localStorage.setItem("umesc_congress_list", JSON.stringify(assembledCongresses));
+    localStorage.setItem("umesc_congress_inscriptions", JSON.stringify(assembledInscriptions));
+    
+    // Dispatch window event so components re-render immediately
+    window.dispatchEvent(new Event("umesc-data-sync"));
+  } catch (err) {
+    console.warn("Exceção durante sincronização com Supabase:", err);
+  } finally {
+    isSyncInProgress = false;
+  }
+}
+
+let isRealtimeSubscribed = false;
+
+export function setupCongressRealtimeSubscription() {
+  if (isRealtimeSubscribed || !isSupabaseConfigured || !supabase) return;
+  isRealtimeSubscribed = true;
+
+  const channel = supabase
+    .channel("schema-congresses-db-changes")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "congresses" },
+      () => {
+        fetchAllFromSupabaseAndSync();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "workshops" },
+      () => {
+        fetchAllFromSupabaseAndSync();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "agenda_items" },
+      () => {
+        fetchAllFromSupabaseAndSync();
+      }
+    )
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "inscriptions" },
+      () => {
+        fetchAllFromSupabaseAndSync();
+      }
+    )
+    .subscribe((status) => {
+      console.log(`Canal de Realtime para congressos e inscrições: ${status}`);
+    });
+}
+
+// Trigger initialization on load
+if (isSupabaseConfigured && supabase) {
+  fetchAllFromSupabaseAndSync();
+  setupCongressRealtimeSubscription();
+}
+
+
 export const congressService = {
   getCongresses(): Congress[] {
     const list = localStorage.getItem("umesc_congress_list");
@@ -194,6 +367,26 @@ export const congressService = {
     };
     congresses.push(created);
     this.saveCongresses(congresses);
+
+    // Write to Supabase in background
+    if (isSupabaseConfigured && supabase) {
+      supabase.from("congresses").insert({
+        id,
+        title: created.title,
+        description: created.description,
+        date: created.date,
+        location: created.location,
+        price: Number(created.price),
+        pix_key: created.pixKey,
+        pix_receiver_name: created.pixReceiverName,
+        status: created.status,
+        is_featured: !!created.isFeatured,
+        is_active: created.isActive !== false
+      }).then(({ error }) => {
+        if (error) console.error("Erro ao criar congresso no Supabase:", error);
+      });
+    }
+
     return created;
   },
 
@@ -204,6 +397,59 @@ export const congressService = {
       congresses[index] = updated;
       this.saveCongresses(congresses);
     }
+
+    if (isSupabaseConfigured && supabase) {
+      // Async full updates
+      (async () => {
+        try {
+          const { error: cErr } = await supabase.from("congresses").update({
+            title: updated.title,
+            description: updated.description,
+            date: updated.date,
+            location: updated.location,
+            price: Number(updated.price),
+            pix_key: updated.pixKey,
+            pix_receiver_name: updated.pixReceiverName,
+            status: updated.status,
+            is_featured: !!updated.isFeatured,
+            is_active: updated.isActive !== false
+          }).eq("id", updated.id);
+
+          if (cErr) console.error("Erro ao atualizar congresso no Supabase:", cErr);
+
+          // Sync workshops (delete and insert to mirror exact client state)
+          await supabase.from("workshops").delete().eq("congress_id", updated.id);
+          if (updated.workshops && updated.workshops.length > 0) {
+            const { error: wErr } = await supabase.from("workshops").insert(updated.workshops.map(w => ({
+              id: w.id,
+              congress_id: updated.id,
+              title: w.title,
+              speaker: w.speaker,
+              capacity: Number(w.capacity),
+              registered_count: Number(w.registeredCount),
+              time_slot: w.timeSlot
+            })));
+            if (wErr) console.error("Erro ao inserir oficinas no Supabase:", wErr);
+          }
+
+          // Sync agenda items
+          await supabase.from("agenda_items").delete().eq("congress_id", updated.id);
+          if (updated.agenda && updated.agenda.length > 0) {
+            const { error: aErr } = await supabase.from("agenda_items").insert(updated.agenda.map(a => ({
+              id: a.id,
+              congress_id: updated.id,
+              day: a.day,
+              time: a.time,
+              title: a.title,
+              description: a.description || ""
+            })));
+            if (aErr) console.error("Erro ao inserir cronograma no Supabase:", aErr);
+          }
+        } catch (err) {
+          console.error("Exceção na atualização do congresso no Supabase:", err);
+        }
+      })();
+    }
   },
 
   setFeaturedCongress(congressId: string) {
@@ -213,6 +459,17 @@ export const congressService = {
       isFeatured: c.id === congressId
     }));
     this.saveCongresses(updated);
+
+    if (isSupabaseConfigured && supabase) {
+      (async () => {
+        try {
+          await supabase.from("congresses").update({ is_featured: false }).neq("id", congressId);
+          await supabase.from("congresses").update({ is_featured: true }).eq("id", congressId);
+        } catch (e) {
+          console.error("Erro ao definir congresso destacado no Supabase:", e);
+        }
+      })();
+    }
   },
 
   deleteCongress(congressId: string) {
@@ -220,10 +477,15 @@ export const congressService = {
     const filtered = congresses.filter(c => c.id !== congressId);
     this.saveCongresses(filtered);
 
-    // Filter corresponding inscriptions too
     const inscriptions = this.getInscriptions();
     const filteredIns = inscriptions.filter(i => i.congressId !== congressId);
     this.saveInscriptions(filteredIns);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from("congresses").delete().eq("id", congressId).then(({ error }) => {
+        if (error) console.error("Erro ao deletar congresso no Supabase:", error);
+      });
+    }
   },
 
   addInscription(ins: Omit<CongressInscription, "id" | "registrationDate" | "qrCodeToken" | "checkedIn">): CongressInscription {
@@ -254,6 +516,40 @@ export const congressService = {
 
     inscriptions.push(created);
     this.saveInscriptions(inscriptions);
+
+    // Save to Supabase
+    if (isSupabaseConfigured && supabase) {
+      (async () => {
+        try {
+          const dbRecord = {
+            id,
+            congress_id: created.congressId,
+            congress_title: created.congressTitle,
+            member_cpf: created.memberCpf,
+            member_name: created.memberName,
+            member_email: created.memberEmail,
+            member_phone: created.memberPhone,
+            member_rank: created.memberRank,
+            selected_workshop_ids: created.selectedWorkshopIds,
+            payment_status: created.paymentStatus,
+            payment_proof_url: created.paymentProofUrl || null,
+            payment_proof_name: created.paymentProofName || null,
+            registration_date: created.registrationDate,
+            qr_code_token: created.qrCodeToken,
+            checked_in: created.checkedIn,
+            is_visitor: created.memberRank === "Visitante"
+          };
+
+          const { error } = await supabase.from("inscriptions").insert([dbRecord]);
+          if (error) {
+            console.error("Erro ao gravar inscrição no Supabase:", error.message);
+          }
+        } catch (e) {
+          console.error("Exceção ao gravar inscrição no Supabase:", e);
+        }
+      })();
+    }
+
     return created;
   },
 
@@ -269,7 +565,6 @@ export const congressService = {
         inscriptions[index].paymentProofName = proofName;
       }
       
-      // Update token string to represent payment state
       const rawToken = inscriptions[index].qrCodeToken.split("-");
       if (rawToken.length >= 3) {
         rawToken[3] = status;
@@ -277,6 +572,20 @@ export const congressService = {
       }
 
       this.saveInscriptions(inscriptions);
+
+      if (isSupabaseConfigured && supabase) {
+        const updateFields: any = {
+          payment_status: status,
+          qr_code_token: inscriptions[index].qrCodeToken
+        };
+        if (proofUrl) updateFields.payment_proof_url = proofUrl;
+        if (proofName) updateFields.payment_proof_name = proofName;
+
+        supabase.from("inscriptions").update(updateFields).eq("id", id).then(({ error }) => {
+          if (error) console.error("Erro ao atualizar status do pagamento no Supabase:", error);
+        });
+      }
+
       return inscriptions[index];
     }
     return null;
@@ -287,9 +596,22 @@ export const congressService = {
     const index = inscriptions.findIndex(i => i.id === id);
     if (index !== -1) {
       const alreadyChecked = inscriptions[index].checkedIn;
-      inscriptions[index].checkedIn = !alreadyChecked;
-      inscriptions[index].checkedInAt = !alreadyChecked ? new Date().toISOString() : undefined;
+      const checkedInVal = !alreadyChecked;
+      const checkedInAtVal = checkedInVal ? new Date().toISOString() : null;
+
+      inscriptions[index].checkedIn = checkedInVal;
+      inscriptions[index].checkedInAt = checkedInAtVal || undefined;
       this.saveInscriptions(inscriptions);
+
+      if (isSupabaseConfigured && supabase) {
+        supabase.from("inscriptions").update({
+          checked_in: checkedInVal,
+          checked_in_at: checkedInAtVal
+        }).eq("id", id).then(({ error }) => {
+          if (error) console.error("Erro ao registrar check-in no Supabase:", error);
+        });
+      }
+
       return inscriptions[index];
     }
     return null;

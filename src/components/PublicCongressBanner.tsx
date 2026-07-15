@@ -64,18 +64,23 @@ export default function PublicCongressBanner({ onEnterMemberDashboard }: PublicC
     isOver: false
   });
 
-  // Pull latest congresses on mount
+  // Pull latest congresses on mount and sync on live changes
   useEffect(() => {
-    const list = congressService.getCongresses().filter(c => c.status === "open" && c.isActive !== false);
-    setActiveCongresses(list);
-    
-    // Prioritize the congress marked as featured/active by the admin
-    const featIdx = list.findIndex(c => c.isFeatured === true);
-    if (featIdx !== -1) {
-      setFeaturedIndex(featIdx);
-    } else {
-      setFeaturedIndex(0);
-    }
+    const refresh = () => {
+      const list = congressService.getCongresses().filter(c => c.status === "open" && c.isActive !== false);
+      setActiveCongresses(list);
+      
+      const featIdx = list.findIndex(c => c.isFeatured === true);
+      if (featIdx !== -1) {
+        setFeaturedIndex(featIdx);
+      } else {
+        setFeaturedIndex(0);
+      }
+    };
+
+    refresh();
+    window.addEventListener("umesc-data-sync", refresh);
+    return () => window.removeEventListener("umesc-data-sync", refresh);
   }, []);
 
   const featured = activeCongresses[featuredIndex];

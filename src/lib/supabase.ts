@@ -7,8 +7,8 @@ import { createClient } from "@supabase/supabase-js";
 import { MemberRegistration, ApoioFemininoPost } from "../types";
 
 // Read environment variables for Supabase
-const rawUrl = (import.meta as any).env.VITE_SUPABASE_URL || "";
-const rawKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY || "";
+const rawUrl = import.meta.env.VITE_SUPABASE_URL || "";
+const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 
 // Sanitize and validate Supabase credentials
 const cleanRawUrl = typeof rawUrl === "string" ? rawUrl.trim() : "";
