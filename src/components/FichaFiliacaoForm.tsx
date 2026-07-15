@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { FichaFiliacao, MemberRegistration } from "../types";
 import { generateFichaPdf } from "../lib/fichaPdfHelper";
+import { fichasFiliacaoService } from "../lib/supabase";
 
 interface FichaFiliacaoFormProps {
   loggedInUser: MemberRegistration;
@@ -154,7 +155,7 @@ export default function FichaFiliacaoForm({
   };
 
   // Submit digital form
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
     setSuccessMsg("");
@@ -238,20 +239,8 @@ export default function FichaFiliacaoForm({
       securitySeal: mockHash,
     };
 
-    // Save to localStorage
-    const saved = localStorage.getItem("umesc_fichas_filiacao");
-    let currentList: FichaFiliacao[] = [];
-    if (saved) {
-      try {
-        currentList = JSON.parse(saved);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    // Filter existing from this member
-    currentList = currentList.filter(f => f.memberCpf !== loggedInUser.cpf);
-    currentList.push(newFicha);
-    localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(currentList));
+    // Save to Supabase (with localStorage fallback)
+    await fichasFiliacaoService.submitFicha(newFicha);
     window.dispatchEvent(new CustomEvent("umesc_content_updated"));
 
     setSuccessMsg("Ficha de Filiação enviada e assinada com sucesso!");
@@ -302,19 +291,14 @@ export default function FichaFiliacaoForm({
               
               {onFichaDeleted && (
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (confirm("Deseja realmente cancelar seu desconto e remover esta ficha de filiação? Suas informações serão removidas dos registros de consignação da UMESC.")) {
-                      const saved = localStorage.getItem("umesc_fichas_filiacao");
-                      if (saved) {
-                        try {
-                          const list = JSON.parse(saved) as FichaFiliacao[];
-                          const filtered = list.filter(f => f.memberCpf !== loggedInUser.cpf);
-                          localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(filtered));
-                          window.dispatchEvent(new CustomEvent("umesc_content_updated"));
-                          onFichaDeleted();
-                        } catch (e) {
-                          console.error(e);
-                        }
+                      try {
+                        await fichasFiliacaoService.deleteFicha(loggedInUser.cpf);
+                        window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+                        onFichaDeleted();
+                      } catch (e) {
+                        console.error(e);
                       }
                     }
                   }}

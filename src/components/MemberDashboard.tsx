@@ -38,7 +38,7 @@ import FichaFiliacaoForm from "./FichaFiliacaoForm.tsx";
 import PlanoLeituraBiblica from "./PlanoLeituraBiblica.tsx";
 import CongressoInscricaoMembro from "./CongressoInscricaoMembro.tsx";
 import CapelaniaVolunteeringForm from "./CapelaniaVolunteeringForm.tsx";
-import { membersService, isSupabaseConfigured } from "../lib/supabase.ts";
+import { membersService, isSupabaseConfigured, fichasFiliacaoService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { sanitizeInput, isValidCPF, formatPhone, isValidPhone, isValidEmail } from "../lib/validation.ts";
 import { 
@@ -220,17 +220,13 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   // Load Submitted Ficha and Pre-fill form fields
   useEffect(() => {
     if (loggedInUser) {
-      // 1. Load from localStorage
-      const saved = localStorage.getItem("umesc_fichas_filiacao");
-      if (saved) {
-        try {
-          const list = JSON.parse(saved) as FichaFiliacao[];
-          const found = list.find((f) => f.memberCpf === loggedInUser.rawCpf);
-          setSubmittedFicha(found || null);
-        } catch (e) {
-          console.error("Error loading submitted ficha:", e);
-        }
-      }
+      // 1. Load from Supabase service
+      fichasFiliacaoService.getFichas().then((list) => {
+        const found = list.find((f) => f.memberCpf === loggedInUser.rawCpf);
+        setSubmittedFicha(found || null);
+      }).catch((e) => {
+        console.error("Error loading submitted ficha from service:", e);
+      });
 
       // 2. Pre-fill form
       const forcePrefill = loggedInUser.rawForce === "PM" ? "PMSC 2801" : loggedInUser.rawForce === "BM" ? "BMSC 2802" : "OUTRO";

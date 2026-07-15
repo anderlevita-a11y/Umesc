@@ -5,7 +5,7 @@ import {
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
   Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake
 } from "lucide-react";
-import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService } from "../lib/supabase.ts";
+import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { donationsService } from "../lib/donationService.ts";
 import { MemberRegistration, Project, FichaFiliacao, Donation, MemberContent, CapelaniaService, Announcement, DocumentFile, ApoioFemininoPost } from "../types";
@@ -397,8 +397,8 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       setCoordenadores(savedCoords ? JSON.parse(savedCoords) : COORDINATORS_DATA);
 
       // 8. Fichas de Filiação
-      const savedFichas = localStorage.getItem("umesc_fichas_filiacao");
-      setFichas(savedFichas ? JSON.parse(savedFichas) : []);
+      const fichasData = await fichasFiliacaoService.getFichas();
+      setFichas(fichasData);
 
       // 8.5. Envio de Conteúdos para Membros
       const savedContents = localStorage.getItem("umesc_member_contents");
@@ -929,18 +929,14 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     }
   };
 
-  const confirmDeleteFicha = () => {
+  const confirmDeleteFicha = async () => {
     if (!deletingFicha) return;
-    const saved = localStorage.getItem("umesc_fichas_filiacao");
-    if (saved) {
-      try {
-        const list = JSON.parse(saved) as FichaFiliacao[];
-        const filtered = list.filter(item => item.id !== deletingFicha.id);
-        localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(filtered));
-        setFichas(filtered);
-      } catch (e) {
-        console.error(e);
-      }
+    try {
+      await fichasFiliacaoService.deleteFicha(deletingFicha.memberCpf);
+      const updated = await fichasFiliacaoService.getFichas();
+      setFichas(updated);
+    } catch (e) {
+      console.error("Erro deletando ficha no Admin:", e);
     }
     setDeletingFicha(null);
     notifyContentChange();
@@ -1988,9 +1984,9 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => {
-                      const saved = localStorage.getItem("umesc_fichas_filiacao");
-                      setFichas(saved ? JSON.parse(saved) : []);
+                    onClick={async () => {
+                      const data = await fichasFiliacaoService.getFichas();
+                      setFichas(data);
                     }}
                     className="p-2 bg-[#121c2d] hover:bg-[#1a2b44] text-amber-500 rounded-lg hover:text-amber-400 transition-colors border border-white/5 cursor-pointer flex items-center gap-2 text-xs font-bold uppercase"
                   >

@@ -379,6 +379,57 @@ CREATE POLICY "Inserção livre para todos de apoio_feminino" ON public.apoio_fe
 CREATE POLICY "Atualização livre para todos de apoio_feminino" ON public.apoio_feminino FOR UPDATE USING (true);
 CREATE POLICY "Deleção livre para todos de apoio_feminino" ON public.apoio_feminino FOR DELETE USING (true);
 
+-- ====================================================================
+-- 22. TABELA DE FICHAS DE FILIAÇÃO (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.fichas_filiacao (
+    id VARCHAR(55) PRIMARY KEY,
+    member_cpf VARCHAR(15) UNIQUE NOT NULL,
+    member_name VARCHAR(255) NOT NULL,
+    organ VARCHAR(50) NOT NULL,
+    organ_other VARCHAR(255),
+    lotacao_municipio VARCHAR(255) NOT NULL,
+    categoria VARCHAR(50) NOT NULL,
+    matricula VARCHAR(100) NOT NULL,
+    vinculo VARCHAR(50) NOT NULL,
+    birth_date DATE NOT NULL,
+    genero VARCHAR(10) NOT NULL,
+    address_rua VARCHAR(255) NOT NULL,
+    address_bairro VARCHAR(255) NOT NULL,
+    address_cep VARCHAR(30) NOT NULL,
+    address_cidade VARCHAR(255) NOT NULL,
+    contact_cidade VARCHAR(255) NOT NULL,
+    contact_fones VARCHAR(255) NOT NULL,
+    contact_email VARCHAR(255) NOT NULL,
+    opcao_autorizacao INT NOT NULL,
+    percentual_desconto NUMERIC(3,2),
+    percentual_anterior NUMERIC(3,2),
+    percentual_novo NUMERIC(3,2),
+    data_inscricao VARCHAR(255) NOT NULL,
+    assinatura_nome VARCHAR(255) NOT NULL,
+    assinatura_desenho TEXT,
+    signature_date VARCHAR(100) NOT NULL,
+    ip_address VARCHAR(100) NOT NULL,
+    security_seal VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+COMMENT ON TABLE public.fichas_filiacao IS 'Fichas de filiação autorizadas e assinadas eletronicamente';
+
+GRANT ALL ON TABLE public.fichas_filiacao TO anon, authenticated, service_role;
+
+ALTER TABLE public.fichas_filiacao ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de fichas_filiacao" ON public.fichas_filiacao;
+DROP POLICY IF EXISTS "Inserção livre para todos de fichas_filiacao" ON public.fichas_filiacao;
+DROP POLICY IF EXISTS "Atualização livre para todos de fichas_filiacao" ON public.fichas_filiacao;
+DROP POLICY IF EXISTS "Deleção livre para todos de fichas_filiacao" ON public.fichas_filiacao;
+
+CREATE POLICY "Leitura livre para todos de fichas_filiacao" ON public.fichas_filiacao FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de fichas_filiacao" ON public.fichas_filiacao FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de fichas_filiacao" ON public.fichas_filiacao FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de fichas_filiacao" ON public.fichas_filiacao FOR DELETE USING (true);
+
 NOTIFY pgrst, 'reload schema';
 
 

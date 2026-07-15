@@ -4,11 +4,11 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { MemberRegistration, ApoioFemininoPost } from "../types";
+import { MemberRegistration, ApoioFemininoPost, FichaFiliacao } from "../types";
 
-// Read environment variables for Supabase
-const rawUrl = import.meta.env.VITE_SUPABASE_URL || "";
-const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
+// Read environment variables for Supabase with user credentials as default fallback
+const rawUrl = import.meta.env.VITE_SUPABASE_URL || "https://qndjkphfsejuqopmfgas.supabase.co";
+const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuZGprcGhmc2VqdXFvcG1mZ2FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1Nzk3MTgsImV4cCI6MjA5NjE1NTcxOH0.eJY2qFjEmVK0jV56RRQsRpykvsl0d52jKrFHFt84Rnk";
 
 // Sanitize and validate Supabase credentials
 const cleanRawUrl = typeof rawUrl === "string" ? rawUrl.trim() : "";
@@ -573,9 +573,22 @@ export const adminService = {
         }
       }
 
+      // 4. Check schema for fichas_filiacao
+      const { error: fichasError } = await supabase.from("fichas_filiacao").select("id").limit(1);
+      if (fichasError) {
+        const dberr = fichasError.message.toLowerCase();
+        if (fichasError.code === "PGRST116" || dberr.includes("relation") && dberr.includes("does not exist") || dberr.includes("não existe")) {
+          return {
+            active: true,
+            details: "Conectado com sucesso! As tabelas de membros e doações estão ativas, mas a tabela 'fichas_filiacao' está ausente no seu banco de dados Supabase. Execute o script 'schema.sql' no seu painel.",
+            tablesExist: false
+          };
+        }
+      }
+
       return { 
         active: true, 
-        details: "Conexão estabelecida com sucesso! Todas as tabelas ('members', 'admins' e 'donations') estão operando plenamente no Supabase.", 
+        details: "Conexão estabelecida com sucesso! Todas as tabelas ('members', 'admins', 'donations' e 'fichas_filiacao') estão operando plenamente no Supabase.", 
         tablesExist: true 
       };
     } catch (err: any) {
@@ -1011,6 +1024,198 @@ export const apoioFemininoService = {
     const list = await this.getPosts();
     const filtered = list.filter((item) => item.id !== id && item.id?.toString() !== id);
     localStorage.setItem("umesc_apoio_feminino_posts", JSON.stringify(filtered));
+    return true;
+  }
+};
+
+
+/**
+ * Maps the internal FichaFiliacao model to Supabase database columns
+ */
+export interface SupabaseFicha {
+  id: string;
+  member_cpf: string;
+  member_name: string;
+  organ: string;
+  organ_other?: string;
+  lotacao_municipio: string;
+  categoria: string;
+  matricula: string;
+  vinculo: string;
+  birth_date: string;
+  genero: string;
+  address_rua: string;
+  address_bairro: string;
+  address_cep: string;
+  address_cidade: string;
+  contact_cidade: string;
+  contact_fones: string;
+  contact_email: string;
+  opcao_autorizacao: number;
+  percentual_desconto?: number;
+  percentual_anterior?: number;
+  percentual_novo?: number;
+  data_inscricao: string;
+  assinatura_nome: string;
+  assinatura_desenho?: string;
+  signature_date: string;
+  ip_address: string;
+  security_seal: string;
+}
+
+function toSupabaseFicha(ficha: FichaFiliacao): SupabaseFicha {
+  return {
+    id: ficha.id,
+    member_cpf: ficha.memberCpf,
+    member_name: ficha.memberName,
+    organ: ficha.organ,
+    organ_other: ficha.organOther || "",
+    lotacao_municipio: ficha.lotacaoMunicipio,
+    categoria: ficha.categoria,
+    matricula: ficha.matricula,
+    vinculo: ficha.vinculo,
+    birth_date: ficha.birthDate,
+    genero: ficha.genero,
+    address_rua: ficha.addressRua,
+    address_bairro: ficha.addressBairro,
+    address_cep: ficha.addressCep,
+    address_cidade: ficha.addressCidade,
+    contact_cidade: ficha.contactCidade,
+    contact_fones: ficha.contactFones,
+    contact_email: ficha.contactEmail,
+    opcao_autorizacao: ficha.opcaoAutorizacao,
+    percentual_desconto: ficha.percentualDesconto,
+    percentual_anterior: ficha.percentualAnterior,
+    percentual_novo: ficha.percentualNovo,
+    data_inscricao: ficha.dataInscricao,
+    assinatura_nome: ficha.assinaturaNome,
+    assinatura_desenho: ficha.assinaturaDesenho || "",
+    signature_date: ficha.signatureDate,
+    ip_address: ficha.ipAddress,
+    security_seal: ficha.securitySeal
+  };
+}
+
+function fromSupabaseFicha(db: any): FichaFiliacao {
+  return {
+    id: db.id,
+    memberCpf: db.member_cpf,
+    memberName: db.member_name,
+    organ: db.organ as any,
+    organOther: db.organ_other || "",
+    lotacaoMunicipio: db.lotacao_municipio,
+    categoria: db.categoria as any,
+    matricula: db.matricula,
+    vinculo: db.vinculo,
+    birthDate: db.birth_date,
+    genero: db.genero as any,
+    addressRua: db.address_rua,
+    addressBairro: db.address_bairro,
+    addressCep: db.address_cep,
+    addressCidade: db.address_cidade,
+    contactCidade: db.contact_cidade,
+    contactFones: db.contact_fones,
+    contactEmail: db.contact_email,
+    opcaoAutorizacao: db.opcao_autorizacao as any,
+    percentualDesconto: db.percentual_desconto !== null && db.percentual_desconto !== undefined ? Number(db.percentual_desconto) as any : undefined,
+    percentualAnterior: db.percentual_anterior !== null && db.percentual_anterior !== undefined ? Number(db.percentual_anterior) as any : undefined,
+    percentualNovo: db.percentual_novo !== null && db.percentual_novo !== undefined ? Number(db.percentual_novo) as any : undefined,
+    dataInscricao: db.data_inscricao,
+    assinaturaNome: db.assinatura_nome,
+    assinaturaDesenho: db.assinatura_desenho || "",
+    signatureDate: db.signature_date,
+    ipAddress: db.ip_address,
+    securitySeal: db.security_seal
+  };
+}
+
+/**
+ * Service to manage Fichas de Filiação in Supabase
+ */
+export const fichasFiliacaoService = {
+  async getFichas(): Promise<FichaFiliacao[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("fichas_filiacao")
+          .select("*")
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.warn("Informação: Tabela fichas_filiacao ausente ou indisponível no Supabase:", error.message);
+          throw error;
+        }
+
+        if (data) {
+          return data.map(fromSupabaseFicha);
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para Fichas de Filiação. Usando localStorage como contingência.", err);
+      }
+    }
+
+    const saved = localStorage.getItem("umesc_fichas_filiacao");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  },
+
+  async submitFicha(ficha: FichaFiliacao): Promise<FichaFiliacao> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = toSupabaseFicha(ficha);
+        
+        const { data, error } = await supabase
+          .from("fichas_filiacao")
+          .upsert([dbRecord], { onConflict: "member_cpf" })
+          .select();
+
+        if (error) {
+          console.warn("Informação: Falha ao salvar no Supabase:", error.message);
+          throw error;
+        }
+
+        if (data && data.length > 0) {
+          return fromSupabaseFicha(data[0]);
+        }
+      } catch (err) {
+        console.warn("Falha de gravação no Supabase para Ficha de Filiação. Gravando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getFichas();
+    const filtered = list.filter(f => f.memberCpf !== ficha.memberCpf);
+    const updated = [...filtered, ficha];
+    localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(updated));
+    return ficha;
+  },
+
+  async deleteFicha(memberCpf: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from("fichas_filiacao")
+          .delete()
+          .eq("member_cpf", memberCpf);
+
+        if (error) {
+          console.warn("Informação: Falha ao deletar no Supabase:", error.message);
+          throw error;
+        }
+        return true;
+      } catch (err) {
+        console.warn("Falha de exclusão no Supabase para Ficha de Filiação. Excluindo localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getFichas();
+    const filtered = list.filter(f => f.memberCpf !== memberCpf);
+    localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(filtered));
     return true;
   }
 };
