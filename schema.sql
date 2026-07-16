@@ -430,6 +430,273 @@ CREATE POLICY "Inserção livre para todos de fichas_filiacao" ON public.fichas_
 CREATE POLICY "Atualização livre para todos de fichas_filiacao" ON public.fichas_filiacao FOR UPDATE USING (true);
 CREATE POLICY "Deleção livre para todos de fichas_filiacao" ON public.fichas_filiacao FOR DELETE USING (true);
 
+-- ====================================================================
+-- 23. TABELA DE COORDENADORES (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.coordinators (
+    id VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    rank VARCHAR(100) NOT NULL,
+    role VARCHAR(255) NOT NULL,
+    region VARCHAR(255) NOT NULL,
+    contact VARCHAR(100) NOT NULL,
+    avatar TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+COMMENT ON TABLE public.coordinators IS 'Gerenciamento de Coordenadores Regionais da UMESC';
+
+-- Permissões
+GRANT ALL ON TABLE public.coordinators TO anon, authenticated, service_role;
+
+-- Configurar RLS (Row Level Security)
+ALTER TABLE public.coordinators ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de coordinators" ON public.coordinators;
+DROP POLICY IF EXISTS "Inserção livre para todos de coordinators" ON public.coordinators;
+DROP POLICY IF EXISTS "Atualização livre para todos de coordinators" ON public.coordinators;
+DROP POLICY IF EXISTS "Deleção livre para todos de coordinators" ON public.coordinators;
+
+CREATE POLICY "Leitura livre para todos de coordinators" ON public.coordinators FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de coordinators" ON public.coordinators FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de coordinators" ON public.coordinators FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de coordinators" ON public.coordinators FOR DELETE USING (true);
+
+-- ====================================================================
+-- 24. ATIVAÇÃO DE REALTIME E IDENTIDADE DE RÉPLICA (NOVO)
+-- ====================================================================
+-- Configura para que atualizações e deleções enviem todos os campos em tempo real
+ALTER TABLE public.coordinators REPLICA IDENTITY FULL;
+
+-- Adiciona a tabela de coordenadores na publicação supabase_realtime de forma segura
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'coordinators'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.coordinators;
+    END IF;
+  END IF;
+END $$;
+
+-- ====================================================================
+-- 25. TABELA DE PROJETOS MISSIONÁRIOS (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.projects (
+    id VARCHAR(100) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL,
+    detailed_needs TEXT,
+    location VARCHAR(255),
+    image TEXT,
+    raised_percent NUMERIC DEFAULT 0,
+    target_amount NUMERIC DEFAULT 0,
+    current_amount NUMERIC DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+GRANT ALL ON TABLE public.projects TO anon, authenticated, service_role;
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de projects" ON public.projects;
+DROP POLICY IF EXISTS "Inserção livre para todos de projects" ON public.projects;
+DROP POLICY IF EXISTS "Atualização livre para todos de projects" ON public.projects;
+DROP POLICY IF EXISTS "Deleção livre para todos de projects" ON public.projects;
+
+CREATE POLICY "Leitura livre para todos de projects" ON public.projects FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de projects" ON public.projects FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de projects" ON public.projects FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de projects" ON public.projects FOR DELETE USING (true);
+
+ALTER TABLE public.projects REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'projects'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
+    END IF;
+  END IF;
+END $$;
+
+-- ====================================================================
+-- 26. TABELA DE ANUNCIOS/MURAL (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.announcements (
+    id VARCHAR(100) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    content TEXT NOT NULL,
+    date VARCHAR(100) NOT NULL,
+    is_important BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+GRANT ALL ON TABLE public.announcements TO anon, authenticated, service_role;
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Inserção livre para todos de announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Atualização livre para todos de announcements" ON public.announcements;
+DROP POLICY IF EXISTS "Deleção livre para todos de announcements" ON public.announcements;
+
+CREATE POLICY "Leitura livre para todos de announcements" ON public.announcements FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de announcements" ON public.announcements FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de announcements" ON public.announcements FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de announcements" ON public.announcements FOR DELETE USING (true);
+
+ALTER TABLE public.announcements REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'announcements'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.announcements;
+    END IF;
+  END IF;
+END $$;
+
+-- ====================================================================
+-- 27. TABELA DE DOCUMENTOS/FICHEIROS (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.documents (
+    id VARCHAR(100) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    file_size VARCHAR(100),
+    published_date VARCHAR(100),
+    download_count INTEGER DEFAULT 0,
+    url TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+GRANT ALL ON TABLE public.documents TO anon, authenticated, service_role;
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de documents" ON public.documents;
+DROP POLICY IF EXISTS "Inserção livre para todos de documents" ON public.documents;
+DROP POLICY IF EXISTS "Atualização livre para todos de documents" ON public.documents;
+DROP POLICY IF EXISTS "Deleção livre para todos de documents" ON public.documents;
+
+CREATE POLICY "Leitura livre para todos de documents" ON public.documents FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de documents" ON public.documents FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de documents" ON public.documents FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de documents" ON public.documents FOR DELETE USING (true);
+
+ALTER TABLE public.documents REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'documents'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.documents;
+    END IF;
+  END IF;
+END $$;
+
+-- ====================================================================
+-- 28. TABELA DE REVISTAS E EDITORIAIS (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.revistas (
+    id VARCHAR(100) PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    volume VARCHAR(100) NOT NULL,
+    published_date VARCHAR(100),
+    description TEXT,
+    cover_image TEXT,
+    download_url TEXT,
+    downloads INTEGER DEFAULT 0,
+    google_drive_url TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+GRANT ALL ON TABLE public.revistas TO anon, authenticated, service_role;
+ALTER TABLE public.revistas ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de revistas" ON public.revistas;
+DROP POLICY IF EXISTS "Inserção livre para todos de revistas" ON public.revistas;
+DROP POLICY IF EXISTS "Atualização livre para todos de revistas" ON public.revistas;
+DROP POLICY IF EXISTS "Deleção livre para todos de revistas" ON public.revistas;
+
+CREATE POLICY "Leitura livre para todos de revistas" ON public.revistas FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de revistas" ON public.revistas FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de revistas" ON public.revistas FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de revistas" ON public.revistas FOR DELETE USING (true);
+
+ALTER TABLE public.revistas REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'revistas'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.revistas;
+    END IF;
+  END IF;
+END $$;
+
+-- ====================================================================
+-- 29. TABELA DE CONFIGURAÇÕES/SETTINGS (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+GRANT ALL ON TABLE public.settings TO anon, authenticated, service_role;
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de settings" ON public.settings;
+DROP POLICY IF EXISTS "Inserção livre para todos de settings" ON public.settings;
+DROP POLICY IF EXISTS "Atualização livre para todos de settings" ON public.settings;
+DROP POLICY IF EXISTS "Deleção livre para todos de settings" ON public.settings;
+
+CREATE POLICY "Leitura livre para todos de settings" ON public.settings FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de settings" ON public.settings FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de settings" ON public.settings FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de settings" ON public.settings FOR DELETE USING (true);
+
+ALTER TABLE public.settings REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'settings'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
+    END IF;
+  END IF;
+END $$;
+
 NOTIFY pgrst, 'reload schema';
 
 

@@ -5,8 +5,11 @@
 
 import React, { useState, useEffect } from "react";
 import { CORE_GOVERNANCE, COORDINATORS_DATA } from "../data";
-import { Users, Scale, MapPin, Phone, Copy, Check, ShieldCheck, Mail } from "lucide-react";
+import { Users, Scale, MapPin, Phone, Copy, Check, ShieldCheck, Mail, MessageCircle } from "lucide-react";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
+import { coordinatorsService } from "../lib/supabase.ts";
+import { getWhatsAppLink } from "../lib/validation.ts";
+
 
 export default function OrganizationalStructure() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -31,12 +34,17 @@ export default function OrganizationalStructure() {
       }
     };
     const loadCoordenadores = () => {
-      const saved = localStorage.getItem("umesc_coordenadores");
-      if (saved) {
-        setCoordenadores(JSON.parse(saved));
-      } else {
-        setCoordenadores(COORDINATORS_DATA);
-      }
+      coordinatorsService.getCoordinators().then((data) => {
+        setCoordenadores(data);
+      }).catch((err) => {
+        console.error("Error loading coordinators:", err);
+        const saved = localStorage.getItem("umesc_coordenadores");
+        if (saved) {
+          setCoordenadores(JSON.parse(saved));
+        } else {
+          setCoordenadores(COORDINATORS_DATA);
+        }
+      });
     };
     loadBoard();
     loadCoordenadores();
@@ -204,15 +212,18 @@ export default function OrganizationalStructure() {
 
                 <div>
                   <div className="flex items-center gap-3.5 mb-4">
-                    <img 
-                      src={getCleanImageUrl(coord.avatar)} 
-                      alt={coord.name} 
-                      className="w-12 h-12 rounded-full object-cover border-2 border-slate-200 group-hover:border-amber-500 transition-colors"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200";
-                      }}
-                    />
+                    {coord.avatar ? (
+                      <img 
+                        src={getCleanImageUrl(coord.avatar)} 
+                        alt={coord.name} 
+                        className="w-12 h-12 rounded-full object-cover border-2 border-slate-200 group-hover:border-amber-500 transition-colors shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 font-bold uppercase text-base shrink-0">
+                        {coord.name ? coord.name.charAt(0) : "C"}
+                      </div>
+                    )}
                     <div>
                       <span className="block text-[11px] font-mono text-amber-700 font-bold uppercase">{coord.rank}</span>
                       <h4 className="font-bold text-slate-900 text-sm leading-snug">{coord.name}</h4>
@@ -232,19 +243,32 @@ export default function OrganizationalStructure() {
                   </div>
                 </div>
 
-                {/* Copyable Telephone CTA Button */}
-                <button
-                  onClick={() => handleCopyContact(coord.contact, idx)}
-                  className="w-full mt-3 flex items-center justify-center gap-2 py-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-xs font-bold text-slate-700 transition-all cursor-pointer"
-                >
-                  <Phone className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{coord.contact}</span>
-                  {copiedIndex === idx ? (
-                    <Check className="w-3.5 h-3.5 text-emerald-600 animate-scale" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-600 ml-auto" />
-                  )}
-                </button>
+                {/* Contact Actions Grid */}
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  <button
+                    onClick={() => handleCopyContact(coord.contact, idx)}
+                    className="flex items-center justify-center gap-1.5 py-2 border border-slate-200 hover:bg-slate-50 rounded-lg text-[11px] font-bold text-slate-700 transition-all cursor-pointer"
+                    title="Copiar número de telefone"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="truncate">{coord.contact}</span>
+                    {copiedIndex === idx && (
+                      <Check className="w-3 h-3 text-emerald-650 shrink-0" />
+                    )}
+                  </button>
+
+                  <a
+                    href={getWhatsAppLink(coord.contact)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs hover:shadow-md"
+                    title="Falar com o coordenador pelo WhatsApp"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>WhatsApp</span>
+                  </a>
+                </div>
+
 
               </div>
             ))}

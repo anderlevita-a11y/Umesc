@@ -17,6 +17,7 @@ export interface Project {
 }
 
 export interface Coordinator {
+  id?: string;
   name: string;
   rank: string; // e.g., "Sargento PM", "Major BM"
   role: string;  // e.g., "Coordenador Regional Norte"

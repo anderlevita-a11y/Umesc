@@ -5,15 +5,16 @@ import {
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
   Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake
 } from "lucide-react";
-import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService } from "../lib/supabase.ts";
+import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService, coordinatorsService, projectsService, announcementsService, documentsService, revistasService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { donationsService } from "../lib/donationService.ts";
-import { MemberRegistration, Project, FichaFiliacao, Donation, MemberContent, CapelaniaService, Announcement, DocumentFile, ApoioFemininoPost } from "../types";
+import { MemberRegistration, Project, FichaFiliacao, Donation, MemberContent, CapelaniaService, Announcement, DocumentFile, ApoioFemininoPost, Coordinator } from "../types";
 import { generateFichaPdf } from "../lib/fichaPdfHelper.ts";
 import { RevistaEdition } from "./RevistasSection.tsx";
 import { PrayerRequest } from "./PrayerRequestsSection.tsx";
 import { DEFAULT_DIRETORIA, COORDINATORS_DATA, INITIAL_PROJECTS, DEFAULT_CAPELANIA_SERVICES, INITIAL_ANNOUNCEMENTS, INITIAL_DOCUMENTS } from "../data.ts";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
+import { getWhatsAppLink } from "../lib/validation.ts";
 import CongressoManager from "./CongressoManager.tsx";
 
 import convite1 from "../assets/images/umesc_convite_1_1779818301691.png";
@@ -373,12 +374,12 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       setMembers(memberList);
 
       // 2. Projects
-      const savedProjs = localStorage.getItem("umesc_projects");
-      setProjects(savedProjs ? JSON.parse(savedProjs) : INITIAL_PROJECTS);
+      const projectsList = await projectsService.getProjects();
+      setProjects(projectsList.length > 0 ? projectsList : INITIAL_PROJECTS);
 
       // 3. Revistas
-      const savedRev = localStorage.getItem("umesc_revistas");
-      setRevistas(savedRev ? JSON.parse(savedRev) : DEFAULT_REVISTAS);
+      const revistasList = await revistasService.getRevistas();
+      setRevistas(revistasList.length > 0 ? revistasList : DEFAULT_REVISTAS);
 
       // 4. Carousel Convites
       const savedConv = localStorage.getItem("umesc_carousel_convites");
@@ -393,8 +394,11 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       setDiretoria(savedDir ? JSON.parse(savedDir) : DEFAULT_DIRETORIA);
 
       // 7. Coordinators
-      const savedCoords = localStorage.getItem("umesc_coordenadores");
-      setCoordenadores(savedCoords ? JSON.parse(savedCoords) : COORDINATORS_DATA);
+      coordinatorsService.getCoordinators().then((data) => {
+        setCoordenadores(data);
+      }).catch((err) => {
+        console.error("Error loading coordinators:", err);
+      });
 
       // 8. Fichas de Filiação
       const fichasData = await fichasFiliacaoService.getFichas();
@@ -409,12 +413,12 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       setCapelaniaServices(savedCapSrv ? JSON.parse(savedCapSrv) : DEFAULT_CAPELANIA_SERVICES);
 
       // 8.7. Quadro de Avisos (Mural)
-      const savedAnnouncements = localStorage.getItem("umesc_announcements");
-      setAnnouncements(savedAnnouncements ? JSON.parse(savedAnnouncements) : INITIAL_ANNOUNCEMENTS);
+      const announcementsList = await announcementsService.getAnnouncements();
+      setAnnouncements(announcementsList.length > 0 ? announcementsList : INITIAL_ANNOUNCEMENTS);
 
       // 8.8. Repositório de Documentos
-      const savedDocs = localStorage.getItem("umesc_documents");
-      setDocuments(savedDocs ? JSON.parse(savedDocs) : INITIAL_DOCUMENTS);
+      const documentsList = await documentsService.getDocuments();
+      setDocuments(documentsList.length > 0 ? documentsList : INITIAL_DOCUMENTS);
 
       // 9. Donations (Doações)
       const donationsList = await donationsService.getDonations();
@@ -622,15 +626,15 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   };
 
   // Projects CRUD Actions
-  const handleSaveProject = (e: React.FormEvent) => {
+  const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectForm) return;
 
-    let updatedList = [...projects];
     const cleanedImage = getCleanImageUrl(projectForm.image);
     if (projectForm.id) {
       // Edit mode
-      updatedList = projects.map((p) => p.id === projectForm.id ? { ...p, ...projectForm, image: cleanedImage } as Project : p);
+      const updatedProj = { ...projectForm, image: cleanedImage } as Project;
+      await projectsService.saveProject(updatedProj);
     } else {
       // Create mode
       const newProj: Project = {
@@ -645,10 +649,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
         targetAmount: Number(projectForm.targetAmount) || 10000,
         currentAmount: ((projectForm.raisedPercent || 0) / 100) * (Number(projectForm.targetAmount) || 10000)
       };
-      updatedList = [newProj, ...projects];
+      await projectsService.saveProject(newProj);
     }
 
-    localStorage.setItem("umesc_projects", JSON.stringify(updatedList));
+    const updatedList = await projectsService.getProjects();
     setProjects(updatedList);
     setProjectForm(null);
     notifyContentChange();
@@ -659,25 +663,25 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     setDeletingProject(p);
   };
 
-  const confirmDeleteProject = () => {
+  const confirmDeleteProject = async () => {
     if (!deletingProject) return;
-    const updated = projects.filter((p) => p.id !== deletingProject.id);
-    localStorage.setItem("umesc_projects", JSON.stringify(updated));
+    await projectsService.deleteProject(deletingProject.id);
+    const updated = await projectsService.getProjects();
     setProjects(updated);
     setDeletingProject(null);
     notifyContentChange();
   };
 
   // Revistas (Magazines) CRUD Actions
-  const handleSaveRevista = (e: React.FormEvent) => {
+  const handleSaveRevista = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!revistaForm) return;
 
-    let updatedList = [...revistas];
     const cleanedCover = getCleanImageUrl(revistaForm.coverImage);
     const cleanedDownload = revistaForm.downloadUrl || "";
     if (revistaForm.id) {
-      updatedList = revistas.map((r) => r.id === revistaForm.id ? { ...r, ...revistaForm, coverImage: cleanedCover, downloadUrl: cleanedDownload } as RevistaEdition : r);
+      const updatedRev = { ...revistaForm, coverImage: cleanedCover, downloadUrl: cleanedDownload } as RevistaEdition;
+      await revistasService.saveRevista(updatedRev);
     } else {
       const newRev: RevistaEdition = {
         id: `rev_${Date.now()}`,
@@ -690,10 +694,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
         downloadUrl: cleanedDownload || "",
         googleDriveUrl: revistaForm.googleDriveUrl || ""
       };
-      updatedList = [newRev, ...revistas];
+      await revistasService.saveRevista(newRev);
     }
 
-    localStorage.setItem("umesc_revistas", JSON.stringify(updatedList));
+    const updatedList = await revistasService.getRevistas();
     setRevistas(updatedList);
     setRevistaForm(null);
     notifyContentChange();
@@ -704,10 +708,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     setDeletingRevista(r);
   };
 
-  const confirmDeleteRevista = () => {
+  const confirmDeleteRevista = async () => {
     if (!deletingRevista) return;
-    const updated = revistas.filter((r) => r.id !== deletingRevista.id);
-    localStorage.setItem("umesc_revistas", JSON.stringify(updated));
+    await revistasService.deleteRevista(deletingRevista.id);
+    const updated = await revistasService.getRevistas();
     setRevistas(updated);
     setDeletingRevista(null);
     notifyContentChange();
@@ -825,48 +829,60 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   };
 
   // Coordinators CRUD Actions
-  const handleSaveCoordenador = (e: React.FormEvent) => {
+  const handleSaveCoordenador = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!coordenadoresForm) return;
 
-    let updatedList = [...coordenadores];
     const cleanedAvatar = getCleanImageUrl(coordenadoresForm.avatar);
-    const avatarFallback = cleanedAvatar || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=200";
+    const avatarVal = cleanedAvatar || ""; // do not assign a link automatically!
 
-    if (coordenadoresForm.id) {
-      updatedList = coordenadores.map((c) => c.id === coordenadoresForm.id || c.name === coordenadoresForm.id ? { ...c, ...coordenadoresForm, avatar: avatarFallback } : c);
-    } else {
-      const newCoord = {
-        id: `coord_${Date.now()}`,
-        name: coordenadoresForm.name,
-        rank: coordenadoresForm.rank,
-        role: coordenadoresForm.role,
-        region: coordenadoresForm.region,
-        contact: coordenadoresForm.contact,
-        avatar: avatarFallback
-      };
-      updatedList = [...coordenadores, newCoord];
+    const coordinatorToSave: Coordinator = {
+      id: coordenadoresForm.id || undefined,
+      name: coordenadoresForm.name,
+      rank: coordenadoresForm.rank,
+      role: coordenadoresForm.role,
+      region: coordenadoresForm.region,
+      contact: coordenadoresForm.contact,
+      avatar: avatarVal
+    };
+
+    try {
+      await coordinatorsService.saveCoordinator(coordinatorToSave);
+      
+      // Reload coordinators
+      const updatedList = await coordinatorsService.getCoordinators();
+      setCoordenadores(updatedList);
+      setCoordenadoresForm(null);
+      
+      // Trigger live updates in other components/users
+      notifyContentChange();
+      window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+      
+      alert("Coordenador regional atualizado com sucesso!");
+    } catch (err: any) {
+      alert("Erro ao salvar coordenador: " + err.message);
     }
-
-    localStorage.setItem("umesc_coordenadores", JSON.stringify(updatedList));
-    setCoordenadores(updatedList);
-    setCoordenadoresForm(null);
-    notifyContentChange();
-    alert("Coordenador regional atualizado com sucesso!");
   };
 
   const handleDeleteCoordenador = (c: any) => {
     setDeletingCoordenador(c);
   };
 
-  const confirmDeleteCoordenador = () => {
+  const confirmDeleteCoordenador = async () => {
     if (!deletingCoordenador) return;
-    const updated = coordenadores.filter((c) => c.id !== deletingCoordenador.id && c.name !== deletingCoordenador.name);
-    localStorage.setItem("umesc_coordenadores", JSON.stringify(updated));
-    setCoordenadores(updated);
-    setDeletingCoordenador(null);
-    notifyContentChange();
-    alert("Coordenador regional removido.");
+    try {
+      const success = await coordinatorsService.deleteCoordinator(deletingCoordenador.id);
+      if (success) {
+        const updated = await coordinatorsService.getCoordinators();
+        setCoordenadores(updated);
+        setDeletingCoordenador(null);
+        notifyContentChange();
+        window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+        alert("Coordenador regional removido.");
+      }
+    } catch (err: any) {
+      alert("Erro ao remover coordenador: " + err.message);
+    }
   };
 
   // Capelania Services CRUD Actions
@@ -986,13 +1002,12 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   };
 
   // Announcements CRUD Actions
-  const handleSaveAnnouncement = (e: React.FormEvent) => {
+  const handleSaveAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!announcementForm) return;
 
-    let updatedList = [...announcements];
     if (announcementForm.id) {
-      updatedList = announcements.map((a) => a.id === announcementForm.id ? { ...a, ...announcementForm } as Announcement : a);
+      await announcementsService.saveAnnouncement(announcementForm);
     } else {
       const newAnn: Announcement = {
         id: `ann_${Date.now()}`,
@@ -1002,10 +1017,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
         date: announcementForm.date || new Date().toISOString().split("T")[0],
         isImportant: !!announcementForm.isImportant
       };
-      updatedList = [newAnn, ...announcements];
+      await announcementsService.saveAnnouncement(newAnn);
     }
 
-    localStorage.setItem("umesc_announcements", JSON.stringify(updatedList));
+    const updatedList = await announcementsService.getAnnouncements();
     setAnnouncements(updatedList);
     setAnnouncementForm(null);
     notifyContentChange();
@@ -1016,10 +1031,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     setDeletingAnnouncement(a);
   };
 
-  const confirmDeleteAnnouncement = () => {
+  const confirmDeleteAnnouncement = async () => {
     if (!deletingAnnouncement) return;
-    const updated = announcements.filter((a) => a.id !== deletingAnnouncement.id);
-    localStorage.setItem("umesc_announcements", JSON.stringify(updated));
+    await announcementsService.deleteAnnouncement(deletingAnnouncement.id);
+    const updated = await announcementsService.getAnnouncements();
     setAnnouncements(updated);
     setDeletingAnnouncement(null);
     notifyContentChange();
@@ -1027,13 +1042,12 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   };
 
   // Documents CRUD Actions
-  const handleSaveDocument = (e: React.FormEvent) => {
+  const handleSaveDocument = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!documentForm) return;
 
-    let updatedList = [...documents];
     if (documentForm.id) {
-      updatedList = documents.map((d) => d.id === documentForm.id ? { ...d, ...documentForm } as DocumentFile : d);
+      await documentsService.saveDocument(documentForm);
     } else {
       const newDoc: DocumentFile = {
         id: `doc_${Date.now()}`,
@@ -1044,20 +1058,20 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
         downloadCount: documentForm.downloadCount || 0,
         url: documentForm.url || "documento_oficial.pdf"
       };
-      updatedList = [newDoc, ...documents];
+      await documentsService.saveDocument(newDoc);
     }
 
-    localStorage.setItem("umesc_documents", JSON.stringify(updatedList));
+    const updatedList = await documentsService.getDocuments();
     setDocuments(updatedList);
     setDocumentForm(null);
     notifyContentChange();
     alert("Documento / Arquivo salvo com sucesso no Repositório!");
   };
 
-  const confirmDeleteDocument = () => {
+  const confirmDeleteDocument = async () => {
     if (!deletingDocument) return;
-    const updated = documents.filter((d) => d.id !== deletingDocument.id);
-    localStorage.setItem("umesc_documents", JSON.stringify(updated));
+    await documentsService.deleteDocument(deletingDocument.id);
+    const updated = await documentsService.getDocuments();
     setDocuments(updated);
     setDeletingDocument(null);
     notifyContentChange();
@@ -1253,8 +1267,6 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
             { id: "termos", label: "Termos & Políticas LGPD", icon: Scale },
             { id: "apoio_feminino", label: `Apoio Feminino (${apoioFemininoPosts.length})`, icon: Heart },
             { id: "oracoes", label: `Pedidos de Oração (${prayerRequests.length})`, icon: MessageCircle },
-            { id: "servicos", label: "Serviços de Capelania", icon: Compass },
-            { id: "voluntarios", label: `Voluntários da Capelania (${volunteers.length})`, icon: Compass },
             { id: "diretoria", label: "Gestão da Diretoria", icon: Users },
             { id: "coordenadores", label: "Coordenadores Regionais", icon: MapPin }
           ].map((tab) => {
@@ -3982,11 +3994,18 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                       className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0d1723]/30 hover:bg-[#0d1723]/70 transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <img
-                          src={coord.avatar || "https://images.unsplash.com/photo-1599566150163-29194dcaad36?auto=format&fit=crop&q=80&w=200"}
-                          alt={coord.name}
-                          className="w-10 h-10 rounded-full object-cover border border-white/15"
-                        />
+                        {coord.avatar ? (
+                          <img
+                            src={getCleanImageUrl(coord.avatar)}
+                            alt={coord.name}
+                            className="w-10 h-10 rounded-full object-cover border border-white/15 shrink-0"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-[#1e293b] border border-white/10 flex items-center justify-center text-slate-300 font-bold uppercase text-xs shrink-0">
+                            {coord.name ? coord.name.charAt(0) : "C"}
+                          </div>
+                        )}
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="px-2 py-0.5 rounded text-[9px] font-bold text-amber-400 uppercase tracking-wider bg-amber-500/10 border border-amber-500/20">
@@ -4001,7 +4020,16 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                       <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                        <a
+                          href={getWhatsAppLink(coord.contact)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-2 rounded-xl bg-emerald-600/10 border border-emerald-500/20 hover:bg-emerald-600 hover:text-white text-emerald-400 transition-all cursor-pointer"
+                          title="Enviar mensagem de WhatsApp"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                        </a>
                         <button
                           onClick={() => setCoordenadoresForm({ ...coord, id: coord.id || coord.name })}
                           className="p-2 rounded-xl bg-[#132031]/55 border border-white/5 hover:border-amber-450 hover:bg-amber-500 hover:text-slate-950 text-slate-300 transition-all cursor-pointer"
@@ -4031,308 +4059,9 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
             </div>
           )}
 
-          {/* TAB: GESTÃO DE SERVIÇOS DE CAPELANIA */}
-          {activeTab === "servicos" && (
-            <div className="space-y-6 text-left">
-              
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-white/5 pb-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
-                    <Compass className="w-5 h-5 text-amber-500 animate-pulse" />
-                    Gerenciamento dos Serviços de Capelania
-                  </h2>
-                  <p className="text-slate-400 text-xs">Utilizado para alterar dinamicamente os três cartões principais de Capelania Voluntária na página inicial.</p>
-                </div>
-                
-                <button
-                  onClick={() => setCapelaniaServiceForm({ title: "", description: "", buttonText: "", emoji: "✓", tabLink: "registration" })}
-                  className="px-4 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center gap-1.5 transition-all shadow-md cursor-pointer self-start md:self-auto"
-                >
-                  <Plus className="w-4 h-4" /> Novo Serviço
-                </button>
-              </div>
 
-              {/* Form panel */}
-              {capelaniaServiceForm && (
-                <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 shadow-xl text-white">
-                  <div className="flex justify-between items-center mb-4 pb-2 border-b border-white/5">
-                    <h3 className="font-bold text-sm text-amber-400 uppercase tracking-wider">
-                      {capelaniaServiceForm.id ? "Editar Serviço de Capelania" : "Novo Serviço de Capelania"}
-                    </h3>
-                    <button 
-                      onClick={() => setCapelaniaServiceForm(null)}
-                      className="p-1 rounded-lg text-slate-400 hover:bg-white/5 hover:text-white"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
 
-                  <form onSubmit={handleSaveCapelaniaService} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Título do Serviço:</label>
-                        <input
-                          type="text"
-                          required
-                          value={capelaniaServiceForm.title || ""}
-                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, title: e.target.value })}
-                          placeholder="Ex: Guarnição e Auxílio"
-                          className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Foto de Visualização (Link do Google Drive):</label>
-                        <input
-                          type="text"
-                          value={capelaniaServiceForm.imageUrl || ""}
-                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, imageUrl: e.target.value })}
-                          placeholder="Cole o link de compartilhamento do Google Drive"
-                          className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
-                        />
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Texto do Botão (CTA):</label>
-                        <input
-                          type="text"
-                          required
-                          value={capelaniaServiceForm.buttonText || ""}
-                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, buttonText: e.target.value })}
-                          placeholder="Ex: Fazer Inscrição / Solicitar Ajuda →"
-                          className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Aba de Redirecionamento (No Painel de Membros):</label>
-                        <select
-                          value={capelaniaServiceForm.tabLink || "registration"}
-                          onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, tabLink: e.target.value as any })}
-                          className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
-                        >
-                          <option value="registration">Inscrição de Membros</option>
-                          <option value="notices">Quadro de Avisos / Circulares</option>
-                          <option value="agenda">Agenda / Eventos</option>
-                          <option value="structure">Corporações / Estatutos</option>
-                          <option value="congressos">Congressos</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Breve Descrição do Serviço:</label>
-                      <textarea
-                        required
-                        value={capelaniaServiceForm.description || ""}
-                        onChange={(e) => setCapelaniaServiceForm({ ...capelaniaServiceForm, description: e.target.value })}
-                        placeholder="Descreva succinctamente a assistência voluntária..."
-                        rows={3}
-                        className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500 resize-none animate-none"
-                      />
-                    </div>
-
-                    <div className="flex justify-end gap-3 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setCapelaniaServiceForm(null)}
-                        className="px-4 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-white/5 hover:bg-white/10 text-white transition-colors"
-                      >
-                        Cancelar
-                      </button>
-                      <button
-                        type="submit"
-                        className="px-5 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition-colors"
-                      >
-                        {capelaniaServiceForm.id ? "Atualizar" : "Salvar"}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              {/* Grid listing of Services */}
-              <div className="bg-[#0b1220]/40 rounded-2xl border border-white/5 overflow-hidden">
-                <div className="p-4 bg-[#0b1220]/60 border-b border-white/5 flex justify-between items-center">
-                  <span className="text-[10px] font-mono uppercase text-slate-400 font-bold">Serviços Cadastrados ({capelaniaServices.length})</span>
-                  <p className="text-[10px] text-slate-500 font-mono">Gerencie os serviços para alterar a visualização no Portal.</p>
-                </div>
-
-                <div className="divide-y divide-white/5">
-                  {capelaniaServices.map((srv, index) => (
-                    <div 
-                      key={srv.id || index} 
-                      className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0d1723]/30 hover:bg-[#0d1723]/70 transition-colors text-left"
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold text-lg shrink-0 border border-amber-500/20 overflow-hidden">
-                          {srv.imageUrl ? (
-                            <img
-                              src={getCleanImageUrl(srv.imageUrl)}
-                              alt="Capelania"
-                              referrerPolicy="no-referrer"
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <span>{srv.emoji || "✓"}</span>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="text-sm font-bold text-slate-100 font-sans tracking-tight">{srv.title}</h4>
-                            <span className="px-2 py-0.5 rounded text-[8px] font-mono font-bold text-teal-400 uppercase tracking-wider bg-teal-500/10 border border-teal-500/20">
-                              Redireciona para: {srv.tabLink.toUpperCase()}
-                            </span>
-                          </div>
-                          <p className="text-xs text-slate-300 leading-relaxed font-sans">{srv.description}</p>
-                          <p className="text-[10px] text-slate-450 font-mono italic">Botão CTA: "{srv.buttonText}"</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                        <button
-                          onClick={() => setCapelaniaServiceForm({ ...srv })}
-                          className="p-2 rounded-xl bg-[#132031]/55 border border-white/5 hover:border-amber-450 hover:bg-amber-500 hover:text-slate-950 text-slate-300 transition-all cursor-pointer"
-                          title="Editar serviço"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCapelaniaService(srv)}
-                          className="p-2 rounded-xl bg-[#132031]/55 border border-white/5 hover:bg-rose-500/15 hover:text-rose-450 text-rose-400 transition-all cursor-pointer"
-                          title="Excluir serviço"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {capelaniaServices.length === 0 && (
-                    <div className="p-8 text-center text-xs text-slate-400 font-mono">
-                      Nenhum serviço de capelania cadastrado. Clique em "Novo Serviço" para começar.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* TAB: LISTAGEM DE VOLUNTÁRIOS DA REPARTIÇÃO DA CAPELANIA */}
-          {activeTab === "voluntarios" && (
-            <div className="space-y-6 text-left animate-fadeIn">
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b border-white/5 pb-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
-                    <Compass className="w-5 h-5 text-amber-500 animate-pulse" />
-                    Voluntários Inscritos - Capelania Voluntária
-                  </h2>
-                  <p className="text-slate-400 text-xs">Candidatos que preencheram o formulário de engajamento do voluntariado regional da Capelania.</p>
-                </div>
-                
-                <div className="text-[10px] font-mono font-bold bg-[#132031] px-3.5 py-2 rounded-xl text-slate-300 border border-white/5 self-start md:self-auto uppercase tracking-wider">
-                  Total de Voluntários: <span className="text-amber-400">{volunteers.length}</span>
-                </div>
-              </div>
-
-              {/* Filters & Statistics Rows */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="p-4 bg-[#0d1723]/60 rounded-xl border border-white/5">
-                  <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest block mb-1">Capacidade Total</span>
-                  <div className="text-xl font-bold text-white">{volunteers.length} Inscritos</div>
-                  <div className="text-[9px] text-slate-400 mt-0.5 uppercase tracking-wider">Base Geral de Apoio</div>
-                </div>
-
-                <div className="p-4 bg-[#0d1723]/60 rounded-xl border border-white/5">
-                  <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest block mb-1">Disponíveis Pelo WhatsApp</span>
-                  <div className="text-xl font-bold text-emerald-400">{volunteers.filter(v => v.whatsapp).length} Contatos</div>
-                  <div className="text-[9px] text-slate-400 mt-0.5 uppercase tracking-wider font-sans">Sincronizados e Ativos</div>
-                </div>
-
-                <div className="p-4 bg-[#0d1723]/60 rounded-xl border border-white/5">
-                  <span className="text-[9px] font-mono text-slate-500 uppercase tracking-widest block mb-1">Cidades Atendidas</span>
-                  <div className="text-xl font-bold text-amber-400">
-                    {Array.from(new Set(volunteers.map(v => (v.city || "").toLowerCase().trim()))).length} Regiões
-                  </div>
-                  <div className="text-[9px] text-slate-400 mt-0.5 uppercase tracking-wider">Distribuição Regional SC</div>
-                </div>
-              </div>
-
-              {/* Volunteers list inside search frame */}
-              <div className="bg-[#0b1220]/40 rounded-2xl border border-white/5 overflow-hidden">
-                <div className="p-4 bg-[#0b1220]/60 border-b border-white/5 flex flex-col sm:flex-row gap-3 justify-between items-center">
-                  <span className="text-[10px] font-mono uppercase text-slate-400 font-bold">Tabela Base de Voluntários ({volunteers.length})</span>
-                  <p className="text-[10px] text-slate-500 font-mono">Controle interno dos cidadãos voluntários engajados na Capelania Militar.</p>
-                </div>
-
-                <div className="overflow-x-auto font-sans">
-                  <table className="w-full text-left text-xs text-slate-200">
-                    <thead className="bg-[#0b1220]/65 text-slate-400 border-b border-white/5 uppercase text-[9px] tracking-wider font-mono">
-                      <tr>
-                        <th className="py-3 px-4">Nome do Voluntário</th>
-                        <th className="py-3 px-3">Serviço Escolhido</th>
-                        <th className="py-3 px-4">WhatsApp / Contato</th>
-                        <th className="py-3 px-4">Cidade de Concentração</th>
-                        <th className="py-3 px-4 text-center">Data e Hora de Registro</th>
-                        <th className="py-3 px-3 text-center">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5 bg-[#0a101b]/20">
-                      {volunteers.map((vol, index) => (
-                        <tr key={vol.id || index} className="hover:bg-white/[0.02] transition-colors">
-                          <td className="py-3.5 px-4 font-bold text-white">{vol.name}</td>
-                          <td className="py-3.5 px-3">
-                            {vol.serviceTitle ? (
-                              <span className="px-2 py-1 rounded text-[9px] font-mono leading-none bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 uppercase font-bold tracking-wide">
-                                {vol.serviceTitle}
-                              </span>
-                            ) : (
-                              <span className="text-slate-500 italic text-[9px]">Geral / Padrão</span>
-                            )}
-                          </td>
-                          <td className="py-3.5 px-4 font-mono">
-                            <div className="flex items-center gap-2">
-                              <span>{vol.whatsapp}</span>
-                              <a
-                                href={`https://wa.me/${vol.whatsapp.replace(/\D/g, "")}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-2 py-1 text-[9px] rounded bg-emerald-500/10 text-emerald-400 border border-emerald-550/20 hover:bg-emerald-500 hover:text-slate-950 transition-all uppercase font-mono font-bold cursor-pointer"
-                              >
-                                Chamar
-                              </a>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 uppercase font-bold text-amber-500">{vol.city}</td>
-                          <td className="py-3.5 px-4 text-center font-mono opacity-80 text-slate-350">
-                            {vol.createdAt ? new Date(vol.createdAt).toLocaleString("pt-BR") : "N/A"}
-                          </td>
-                          <td className="py-3.5 px-3 text-center">
-                            <button
-                              onClick={() => handleDeleteVolunteer(vol)}
-                              className="p-1.5 rounded-lg bg-rose-950/10 border border-rose-900 text-rose-450 hover:bg-rose-600 hover:text-white transition-all cursor-pointer inline-flex items-center"
-                              title="Remover voluntário"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-
-                      {volunteers.length === 0 && (
-                        <tr>
-                          <td colSpan={6} className="py-12 text-center text-slate-400 font-mono text-xs">
-                            Nenhum voluntário da Capelania cadastrado no momento.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
 
         </main>
       </div>

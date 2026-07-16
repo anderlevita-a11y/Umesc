@@ -83,3 +83,15 @@ export function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email.trim()) && email.length <= 100;
 }
+
+/**
+ * Formats a phone number for direct WhatsApp wa.me links
+ */
+export function getWhatsAppLink(phone: string): string {
+  if (!phone) return "";
+  const cleaned = phone.replace(/\D/g, "");
+  // If it doesn't start with 55 (brazilian country code), prepend it
+  const withCountry = cleaned.startsWith("55") ? cleaned : `55${cleaned}`;
+  return `https://wa.me/${withCountry}`;
+}
+

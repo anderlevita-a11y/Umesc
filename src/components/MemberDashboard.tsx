@@ -28,6 +28,7 @@ import {
   ChevronRight, 
   AlertCircle,
   BookOpen,
+  MessageCircle,
   UploadCloud,
   ExternalLink,
   Compass
@@ -38,9 +39,9 @@ import FichaFiliacaoForm from "./FichaFiliacaoForm.tsx";
 import PlanoLeituraBiblica from "./PlanoLeituraBiblica.tsx";
 import CongressoInscricaoMembro from "./CongressoInscricaoMembro.tsx";
 import CapelaniaVolunteeringForm from "./CapelaniaVolunteeringForm.tsx";
-import { membersService, isSupabaseConfigured, fichasFiliacaoService } from "../lib/supabase.ts";
+import { membersService, isSupabaseConfigured, fichasFiliacaoService, coordinatorsService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
-import { sanitizeInput, isValidCPF, formatPhone, isValidPhone, isValidEmail } from "../lib/validation.ts";
+import { sanitizeInput, isValidCPF, formatPhone, isValidPhone, isValidEmail, getWhatsAppLink } from "../lib/validation.ts";
 import { 
   CORE_GOVERNANCE, 
   COORDINATORS_DATA, 
@@ -332,12 +333,17 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
       }
     };
     const loadCoordenadores = () => {
-      const saved = localStorage.getItem("umesc_coordenadores");
-      if (saved) {
-        setCoordenadores(JSON.parse(saved));
-      } else {
-        setCoordenadores(COORDINATORS_DATA);
-      }
+      coordinatorsService.getCoordinators().then((data) => {
+        setCoordenadores(data);
+      }).catch((err) => {
+        console.error("Error loading coordinators:", err);
+        const saved = localStorage.getItem("umesc_coordenadores");
+        if (saved) {
+          setCoordenadores(JSON.parse(saved));
+        } else {
+          setCoordenadores(COORDINATORS_DATA);
+        }
+      });
     };
     const loadAnnouncements = () => {
       const saved = localStorage.getItem("umesc_announcements");
@@ -1908,25 +1914,41 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                       {getFilteredCoordinators().map((co, index) => (
                         <div 
                           key={index}
-                          className="p-4 rounded bg-[#132031] border border-white/5 flex items-center gap-4"
+                          className="p-4 rounded bg-[#132031] border border-white/5 flex items-center justify-between gap-4"
                         >
-                          <img 
-                            src={getCleanImageUrl(co.avatar)} 
-                            alt={co.name}
-                            className="w-10 h-10 rounded-full object-cover border border-white/10"
-                            referrerPolicy="no-referrer"
-                            onError={(e) => {
-                              e.currentTarget.src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=200";
-                            }}
-                          />
-                          <div>
-                            <span className="block text-[9px] font-bold text-amber-400 uppercase tracking-widest leading-none mb-1">{co.rank}</span>
-                            <h5 className="font-bold text-slate-105 text-sm leading-tight text-white font-display">{co.name}</h5>
-                            <p className="text-[10px] text-slate-400 mt-1">{co.role}</p>
-                            <span className="inline-block mt-1 text-[10px] font-mono font-bold text-emerald-400 bg-emerald-900/20 px-1.5 rounded leading-normal border border-emerald-900/30">
-                              📞 {co.contact}
-                            </span>
+                          <div className="flex items-center gap-4">
+                            {co.avatar ? (
+                              <img 
+                                src={getCleanImageUrl(co.avatar)} 
+                                alt={co.name}
+                                className="w-10 h-10 rounded-full object-cover border border-white/10 shrink-0"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-slate-300 font-bold uppercase text-sm shrink-0">
+                                {co.name ? co.name.charAt(0) : "C"}
+                              </div>
+                            )}
+                            <div>
+                              <span className="block text-[9px] font-bold text-amber-400 uppercase tracking-widest leading-none mb-1">{co.rank}</span>
+                              <h5 className="font-bold text-slate-105 text-sm leading-tight text-white font-display">{co.name}</h5>
+                              <p className="text-[10px] text-slate-400 mt-1">{co.role}</p>
+                              <span className="inline-block mt-1 text-[10px] font-mono font-bold text-slate-350 bg-[#0b1320] px-1.5 py-0.5 rounded leading-normal border border-white/5">
+                                📞 {co.contact}
+                              </span>
+                            </div>
                           </div>
+
+                          <a
+                            href={getWhatsAppLink(co.contact)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-bold transition-all cursor-pointer shadow-xs whitespace-nowrap shrink-0"
+                            title="Chamar no WhatsApp"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>WhatsApp</span>
+                          </a>
                         </div>
                       ))}
                     </div>

@@ -4,7 +4,8 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { MemberRegistration, ApoioFemininoPost, FichaFiliacao } from "../types";
+import { MemberRegistration, ApoioFemininoPost, FichaFiliacao, Coordinator } from "../types";
+import { COORDINATORS_DATA } from "../data.ts";
 
 // Read environment variables for Supabase with user credentials as default fallback
 const rawUrl = import.meta.env.VITE_SUPABASE_URL || "https://qndjkphfsejuqopmfgas.supabase.co";
@@ -586,9 +587,22 @@ export const adminService = {
         }
       }
 
+      // 5. Check schema for coordinators
+      const { error: coordsError } = await supabase.from("coordinators").select("id").limit(1);
+      if (coordsError) {
+        const dberr = coordsError.message.toLowerCase();
+        if (coordsError.code === "PGRST116" || dberr.includes("relation") && dberr.includes("does not exist") || dberr.includes("não existe")) {
+          return {
+            active: true,
+            details: "Conectado com sucesso! As tabelas essenciais estão ativas, mas a tabela 'coordinators' está ausente no seu banco de dados Supabase. Execute o script SQL no seu painel.",
+            tablesExist: false
+          };
+        }
+      }
+
       return { 
         active: true, 
-        details: "Conexão estabelecida com sucesso! Todas as tabelas ('members', 'admins', 'donations' e 'fichas_filiacao') estão operando plenamente no Supabase.", 
+        details: "Conexão estabelecida com sucesso! Todas as tabelas ('members', 'admins', 'donations', 'fichas_filiacao' e 'coordinators') estão operando plenamente no Supabase.", 
         tablesExist: true 
       };
     } catch (err: any) {
@@ -1219,5 +1233,542 @@ export const fichasFiliacaoService = {
     return true;
   }
 };
+
+
+/**
+ * Service to manage Coordinators in Supabase
+ */
+export const coordinatorsService = {
+  async getCoordinators(): Promise<Coordinator[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("coordinators")
+          .select("*")
+          .order("name", { ascending: true });
+
+        if (error) {
+          console.warn("Informação: Tabela coordinators ausente ou indisponível no Supabase:", error.message);
+          throw error;
+        }
+
+        if (data && data.length > 0) {
+          const list = data.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            rank: item.rank,
+            role: item.role,
+            region: item.region,
+            contact: item.contact,
+            avatar: item.avatar || ""
+          }));
+          localStorage.setItem("umesc_coordenadores", JSON.stringify(list));
+          return list;
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para Coordenadores. Usando localStorage como contingência.", err);
+      }
+    }
+
+    const saved = localStorage.getItem("umesc_coordenadores");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return COORDINATORS_DATA;
+      }
+    }
+    return COORDINATORS_DATA;
+  },
+
+  async saveCoordinator(coord: Coordinator): Promise<Coordinator> {
+    const prepared: Coordinator = {
+      ...coord,
+      id: coord.id || `coord_${Date.now()}`,
+      avatar: coord.avatar || ""
+    };
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          id: prepared.id,
+          name: prepared.name,
+          rank: prepared.rank,
+          role: prepared.role,
+          region: prepared.region,
+          contact: prepared.contact,
+          avatar: prepared.avatar
+        };
+
+        const { data, error } = await supabase
+          .from("coordinators")
+          .upsert([dbRecord], { onConflict: "id" })
+          .select();
+
+        if (error) {
+          console.warn("Informação: Falha ao salvar coordenador no Supabase:", error.message);
+          throw error;
+        }
+
+        if (data && data.length > 0) {
+          const savedCoord = {
+            id: data[0].id,
+            name: data[0].name,
+            rank: data[0].rank,
+            role: data[0].role,
+            region: data[0].region,
+            contact: data[0].contact,
+            avatar: data[0].avatar || ""
+          };
+          const list = await this.getCoordinators();
+          const filtered = list.filter(c => c.id !== savedCoord.id);
+          const updated = [...filtered, savedCoord];
+          localStorage.setItem("umesc_coordenadores", JSON.stringify(updated));
+          return savedCoord;
+        }
+      } catch (err) {
+        console.warn("Falha de gravação no Supabase para Coordenadores. Gravando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getCoordinators();
+    const filtered = list.filter(c => c.id !== prepared.id);
+    const updated = [...filtered, prepared];
+    localStorage.setItem("umesc_coordenadores", JSON.stringify(updated));
+    return prepared;
+  },
+
+  async deleteCoordinator(id: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from("coordinators")
+          .delete()
+          .eq("id", id);
+
+        if (error) {
+          console.warn("Informação: Falha ao deletar coordenador no Supabase:", error.message);
+          throw error;
+        }
+        
+        const list = await this.getCoordinators();
+        const filtered = list.filter(c => c.id !== id);
+        localStorage.setItem("umesc_coordenadores", JSON.stringify(filtered));
+        return true;
+      } catch (err) {
+        console.warn("Falha de exclusão no Supabase para Coordenador. Excluindo localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getCoordinators();
+    const filtered = list.filter(c => c.id !== id);
+    localStorage.setItem("umesc_coordenadores", JSON.stringify(filtered));
+    return true;
+  }
+};
+
+/**
+ * Service to manage missionary projects (Projetos Missionários) in Supabase (or local fallback)
+ */
+export const projectsService = {
+  async getProjects(): Promise<any[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("projects")
+          .select("*")
+          .order("title", { ascending: true });
+
+        if (!error && data) {
+          const list = data.map((item: any) => ({
+            id: item.id,
+            title: item.title,
+            category: item.category,
+            description: item.description,
+            detailedNeeds: item.detailed_needs || "",
+            location: item.location || "",
+            image: item.image || "",
+            raisedPercent: Number(item.raised_percent || 0),
+            targetAmount: Number(item.target_amount || 0),
+            currentAmount: Number(item.current_amount || 0),
+          }));
+          localStorage.setItem("umesc_projects", JSON.stringify(list));
+          return list;
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para Projetos. Usando local.", err);
+      }
+    }
+    const saved = localStorage.getItem("umesc_projects");
+    return saved ? JSON.parse(saved) : [];
+  },
+
+  async saveProject(proj: any): Promise<any> {
+    const prepared = {
+      ...proj,
+      id: proj.id || `proj_${Date.now()}`,
+    };
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          id: prepared.id,
+          title: prepared.title,
+          category: prepared.category,
+          description: prepared.description,
+          detailed_needs: prepared.detailedNeeds || "",
+          location: prepared.location || "",
+          image: prepared.image || "",
+          raised_percent: prepared.raisedPercent || 0,
+          target_amount: prepared.targetAmount || 0,
+          current_amount: prepared.currentAmount || 0,
+        };
+        const { error } = await supabase
+          .from("projects")
+          .upsert([dbRecord], { onConflict: "id" });
+        if (!error) {
+          const list = await this.getProjects();
+          const filtered = list.filter((p) => p.id !== prepared.id);
+          const updated = [...filtered, prepared];
+          localStorage.setItem("umesc_projects", JSON.stringify(updated));
+          return prepared;
+        }
+      } catch (err) {
+        console.warn("Falha ao salvar no Supabase para Projetos.", err);
+      }
+    }
+    const list = await this.getProjects();
+    const filtered = list.filter((p) => p.id !== prepared.id);
+    const updated = [...filtered, prepared];
+    localStorage.setItem("umesc_projects", JSON.stringify(updated));
+    return prepared;
+  },
+
+  async deleteProject(id: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from("projects").delete().eq("id", id);
+        if (!error) {
+          const list = await this.getProjects();
+          const filtered = list.filter((p) => p.id !== id);
+          localStorage.setItem("umesc_projects", JSON.stringify(filtered));
+          return true;
+        }
+      } catch (err) {
+        console.warn("Falha ao deletar no Supabase para Projetos.", err);
+      }
+    }
+    const list = await this.getProjects();
+    const filtered = list.filter((p) => p.id !== id);
+    localStorage.setItem("umesc_projects", JSON.stringify(filtered));
+    return true;
+  }
+};
+
+/**
+ * Service to manage mural announcements (Avisos do Mural) in Supabase (or local fallback)
+ */
+export const announcementsService = {
+  async getAnnouncements(): Promise<any[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("announcements")
+          .select("*")
+          .order("date", { ascending: false });
+
+        if (!error && data) {
+          const list = data.map((item: any) => ({
+            id: item.id,
+            title: item.title,
+            category: item.category,
+            content: item.content,
+            date: item.date,
+            isImportant: item.is_important ?? false,
+          }));
+          localStorage.setItem("umesc_announcements", JSON.stringify(list));
+          return list;
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para Avisos. Usando local.", err);
+      }
+    }
+    const saved = localStorage.getItem("umesc_announcements");
+    return saved ? JSON.parse(saved) : [];
+  },
+
+  async saveAnnouncement(ann: any): Promise<any> {
+    const prepared = {
+      ...ann,
+      id: ann.id || `ann_${Date.now()}`,
+    };
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          id: prepared.id,
+          title: prepared.title,
+          category: prepared.category,
+          content: prepared.content,
+          date: prepared.date,
+          is_important: prepared.isImportant ?? false,
+        };
+        const { error } = await supabase
+          .from("announcements")
+          .upsert([dbRecord], { onConflict: "id" });
+        if (!error) {
+          const list = await this.getAnnouncements();
+          const filtered = list.filter((a) => a.id !== prepared.id);
+          const updated = [...filtered, prepared];
+          localStorage.setItem("umesc_announcements", JSON.stringify(updated));
+          return prepared;
+        }
+      } catch (err) {
+        console.warn("Falha ao salvar no Supabase para Avisos.", err);
+      }
+    }
+    const list = await this.getAnnouncements();
+    const filtered = list.filter((a) => a.id !== prepared.id);
+    const updated = [...filtered, prepared];
+    localStorage.setItem("umesc_announcements", JSON.stringify(updated));
+    return prepared;
+  },
+
+  async deleteAnnouncement(id: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from("announcements").delete().eq("id", id);
+        if (!error) {
+          const list = await this.getAnnouncements();
+          const filtered = list.filter((a) => a.id !== id);
+          localStorage.setItem("umesc_announcements", JSON.stringify(filtered));
+          return true;
+        }
+      } catch (err) {
+        console.warn("Falha ao deletar no Supabase para Avisos.", err);
+      }
+    }
+    const list = await this.getAnnouncements();
+    const filtered = list.filter((a) => a.id !== id);
+    localStorage.setItem("umesc_announcements", JSON.stringify(filtered));
+    return true;
+  }
+};
+
+/**
+ * Service to manage documents repository (Ficheiros & Arquivos) in Supabase (or local fallback)
+ */
+export const documentsService = {
+  async getDocuments(): Promise<any[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("documents")
+          .select("*")
+          .order("published_date", { ascending: false });
+
+        if (!error && data) {
+          const list = data.map((item: any) => ({
+            id: item.id,
+            title: item.title,
+            category: item.category,
+            fileSize: item.file_size || "",
+            publishedDate: item.published_date || "",
+            downloadCount: Number(item.download_count || 0),
+            url: item.url,
+          }));
+          localStorage.setItem("umesc_documents", JSON.stringify(list));
+          return list;
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para Documentos. Usando local.", err);
+      }
+    }
+    const saved = localStorage.getItem("umesc_documents");
+    return saved ? JSON.parse(saved) : [];
+  },
+
+  async saveDocument(doc: any): Promise<any> {
+    const prepared = {
+      ...doc,
+      id: doc.id || `doc_${Date.now()}`,
+    };
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          id: prepared.id,
+          title: prepared.title,
+          category: prepared.category,
+          file_size: prepared.fileSize || "",
+          published_date: prepared.publishedDate || "",
+          download_count: prepared.downloadCount || 0,
+          url: prepared.url,
+        };
+        const { error } = await supabase
+          .from("documents")
+          .upsert([dbRecord], { onConflict: "id" });
+        if (!error) {
+          const list = await this.getDocuments();
+          const filtered = list.filter((d) => d.id !== prepared.id);
+          const updated = [...filtered, prepared];
+          localStorage.setItem("umesc_documents", JSON.stringify(updated));
+          return prepared;
+        }
+      } catch (err) {
+        console.warn("Falha ao salvar no Supabase para Documentos.", err);
+      }
+    }
+    const list = await this.getDocuments();
+    const filtered = list.filter((d) => d.id !== prepared.id);
+    const updated = [...filtered, prepared];
+    localStorage.setItem("umesc_documents", JSON.stringify(updated));
+    return prepared;
+  },
+
+  async deleteDocument(id: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from("documents").delete().eq("id", id);
+        if (!error) {
+          const list = await this.getDocuments();
+          const filtered = list.filter((d) => d.id !== id);
+          localStorage.setItem("umesc_documents", JSON.stringify(filtered));
+          return true;
+        }
+      } catch (err) {
+        console.warn("Falha ao deletar no Supabase para Documentos.", err);
+      }
+    }
+    const list = await this.getDocuments();
+    const filtered = list.filter((d) => d.id !== id);
+    localStorage.setItem("umesc_documents", JSON.stringify(filtered));
+    return true;
+  }
+};
+
+/**
+ * Service to manage Magazines and Bulletins (Revistas e Boletins) in Supabase (or local fallback)
+ */
+export const revistasService = {
+  async getRevistas(): Promise<any[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("revistas")
+          .select("*")
+          .order("published_date", { ascending: false });
+
+        if (!error && data) {
+          const list = data.map((item: any) => ({
+            id: item.id,
+            title: item.title,
+            volume: item.volume,
+            publishedDate: item.published_date || "",
+            description: item.description || "",
+            coverImage: item.cover_image || "",
+            downloadUrl: item.download_url || "",
+            downloads: Number(item.downloads || 0),
+            googleDriveUrl: item.google_drive_url || "",
+          }));
+          localStorage.setItem("umesc_revistas", JSON.stringify(list));
+          return list;
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para Revistas. Usando local.", err);
+      }
+    }
+    const saved = localStorage.getItem("umesc_revistas");
+    return saved ? JSON.parse(saved) : [];
+  },
+
+  async saveRevista(rev: any): Promise<any> {
+    const prepared = {
+      ...rev,
+      id: rev.id || `rev_${Date.now()}`,
+    };
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          id: prepared.id,
+          title: prepared.title,
+          volume: prepared.volume,
+          published_date: prepared.publishedDate || "",
+          description: prepared.description || "",
+          cover_image: prepared.coverImage || "",
+          download_url: prepared.downloadUrl || "",
+          downloads: prepared.downloads || 0,
+          google_drive_url: prepared.googleDriveUrl || "",
+        };
+        const { error } = await supabase
+          .from("revistas")
+          .upsert([dbRecord], { onConflict: "id" });
+        if (!error) {
+          const list = await this.getRevistas();
+          const filtered = list.filter((r) => r.id !== prepared.id);
+          const updated = [...filtered, prepared];
+          localStorage.setItem("umesc_revistas", JSON.stringify(updated));
+          return prepared;
+        }
+      } catch (err) {
+        console.warn("Falha ao salvar no Supabase para Revistas.", err);
+      }
+    }
+    const list = await this.getRevistas();
+    const filtered = list.filter((r) => r.id !== prepared.id);
+    const updated = [...filtered, prepared];
+    localStorage.setItem("umesc_revistas", JSON.stringify(updated));
+    return prepared;
+  },
+
+  async deleteRevista(id: string): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase.from("revistas").delete().eq("id", id);
+        if (!error) {
+          const list = await this.getRevistas();
+          const filtered = list.filter((r) => r.id !== id);
+          localStorage.setItem("umesc_revistas", JSON.stringify(filtered));
+          return true;
+        }
+      } catch (err) {
+        console.warn("Falha ao deletar no Supabase para Revistas.", err);
+      }
+    }
+    const list = await this.getRevistas();
+    const filtered = list.filter((r) => r.id !== id);
+    localStorage.setItem("umesc_revistas", JSON.stringify(filtered));
+    return true;
+  }
+};
+
+// Real-time subscriptions to sync all major entities in real-time across users
+if (isSupabaseConfigured && supabase) {
+  const tablesToSync = [
+    "coordinators",
+    "projects",
+    "announcements",
+    "documents",
+    "revistas",
+    "settings",
+    "fichas_filiacao",
+    "apoio_feminino",
+    "prayer_requests",
+    "members",
+    "capelania_volunteers"
+  ];
+
+  tablesToSync.forEach((tableName) => {
+    supabase
+      .channel(`${tableName}-realtime-sync`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: tableName },
+        () => {
+          // Emit internal app update event to trigger live refresh
+          window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+        }
+      )
+      .subscribe();
+  });
+}
+
 
 
