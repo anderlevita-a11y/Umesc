@@ -4,8 +4,9 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { MemberRegistration, ApoioFemininoPost, FichaFiliacao, Coordinator } from "../types";
+import { MemberRegistration, ApoioFemininoPost, FichaFiliacao, Coordinator, SecretariaMember } from "../types";
 import { COORDINATORS_DATA } from "../data.ts";
+import { INITIAL_SECRETARIA_MEMBERS } from "../data/secretariaMembersData.ts";
 
 // Read environment variables for Supabase with user credentials as default fallback
 const rawUrl = import.meta.env.VITE_SUPABASE_URL || "https://qndjkphfsejuqopmfgas.supabase.co";
@@ -886,6 +887,275 @@ export const prayerRequestsService = {
 };
 
 /**
+ * Service to manage Secretaria members (membros secretaria)
+ */
+export const secretariaMembersService = {
+  async getMembers(): Promise<SecretariaMember[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        let allData: any[] = [];
+        let from = 0;
+        const limit = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from("secretaria_members")
+            .select("*")
+            .order("nome", { ascending: true })
+            .range(from, from + limit - 1);
+
+          if (error) {
+            console.error("Erro ao buscar membros secretaria no Supabase:", error.message);
+            throw error;
+          }
+
+          if (data && data.length > 0) {
+            allData = [...allData, ...data];
+            from += limit;
+            if (data.length < limit) {
+              hasMore = false;
+            }
+          } else {
+            hasMore = false;
+          }
+        }
+
+        const mapped = allData.map((item: any) => ({
+          id: item.id,
+          matricula: item.matricula || "",
+          nome: item.nome || "",
+          cod: item.cod || "",
+          telefone: item.telefone || "",
+          cidade: item.cidade || "",
+          dataNascimento: item.data_nascimento || "",
+          opm: item.opm || "",
+          grupo: item.grupo || "",
+          createdAt: item.created_at
+        }));
+        localStorage.setItem("umesc_secretaria_members", JSON.stringify(mapped));
+        return mapped;
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para buscar membros secretaria. Usando cache local por contingência.", err);
+      }
+    }
+
+    const local = localStorage.getItem("umesc_secretaria_members");
+    if (local) {
+      return JSON.parse(local);
+    } else {
+      localStorage.setItem("umesc_secretaria_members", JSON.stringify(INITIAL_SECRETARIA_MEMBERS));
+      return INITIAL_SECRETARIA_MEMBERS;
+    }
+  },
+
+  async createMember(member: Omit<SecretariaMember, "id">): Promise<SecretariaMember> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbPayload = {
+          matricula: member.matricula,
+          nome: member.nome,
+          cod: member.cod,
+          telefone: member.telefone,
+          cidade: member.cidade,
+          data_nascimento: member.dataNascimento,
+          opm: member.opm,
+          grupo: member.grupo
+        };
+
+        const { data, error } = await supabase
+          .from("secretaria_members")
+          .upsert([dbPayload], { onConflict: "matricula" })
+          .select();
+
+        if (error) {
+          console.error("Erro ao inserir membro secretaria no Supabase:", error.message);
+          throw error;
+        }
+
+        if (data && data[0]) {
+          const item = data[0];
+          return {
+            id: item.id,
+            matricula: item.matricula || "",
+            nome: item.nome || "",
+            cod: item.cod || "",
+            telefone: item.telefone || "",
+            cidade: item.cidade || "",
+            dataNascimento: item.data_nascimento || "",
+            opm: item.opm || "",
+            grupo: item.grupo || "",
+            createdAt: item.created_at
+          };
+        }
+      } catch (err) {
+        console.warn("Falha de inserção no Supabase para membro secretaria. Salvando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getMembers();
+    const maxId = list.reduce((max, m) => ((m.id || 0) > max ? (m.id || 0) : max), 0);
+    const newMember: SecretariaMember = {
+      ...member,
+      id: maxId + 1,
+      createdAt: new Date().toISOString()
+    };
+    const updated = [...list, newMember];
+    localStorage.setItem("umesc_secretaria_members", JSON.stringify(updated));
+    return newMember;
+  },
+
+  async createMembersBatch(membersList: Omit<SecretariaMember, "id">[]): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbPayloads = membersList.map((m) => ({
+          matricula: m.matricula,
+          nome: m.nome,
+          cod: m.cod,
+          telefone: m.telefone,
+          cidade: m.cidade,
+          data_nascimento: m.dataNascimento,
+          opm: m.opm,
+          grupo: m.grupo
+        }));
+
+        const { error } = await supabase
+          .from("secretaria_members")
+          .upsert(dbPayloads, { onConflict: "matricula" });
+
+        if (error) {
+          console.error("Erro ao inserir lote de membros secretaria no Supabase:", error.message);
+          throw error;
+        }
+        return true;
+      } catch (err) {
+        console.warn("Falha de inserção em lote no Supabase. Caindo para modo individual local.", err);
+      }
+    }
+
+    const list = await this.getMembers();
+    let maxId = list.reduce((max, m) => ((m.id || 0) > max ? (m.id || 0) : max), 0);
+    const newMembers = membersList.map((m) => {
+      maxId += 1;
+      return {
+        ...m,
+        id: maxId,
+        createdAt: new Date().toISOString()
+      };
+    });
+    const updated = [...list, ...newMembers];
+    localStorage.setItem("umesc_secretaria_members", JSON.stringify(updated));
+    return true;
+  },
+
+  async updateMember(id: number, member: Partial<SecretariaMember>): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbPayload: any = {};
+        if (member.matricula !== undefined) dbPayload.matricula = member.matricula;
+        if (member.nome !== undefined) dbPayload.nome = member.nome;
+        if (member.cod !== undefined) dbPayload.cod = member.cod;
+        if (member.telefone !== undefined) dbPayload.telefone = member.telefone;
+        if (member.cidade !== undefined) dbPayload.cidade = member.cidade;
+        if (member.dataNascimento !== undefined) dbPayload.data_nascimento = member.dataNascimento;
+        if (member.opm !== undefined) dbPayload.opm = member.opm;
+        if (member.grupo !== undefined) dbPayload.grupo = member.grupo;
+
+        const { error } = await supabase
+          .from("secretaria_members")
+          .update(dbPayload)
+          .eq("id", id);
+
+        if (error) {
+          console.error("Erro ao atualizar membro secretaria no Supabase:", error.message);
+          throw error;
+        }
+        return true;
+      } catch (err) {
+        console.warn("Falha de atualização no Supabase para membro secretaria. Atualizando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getMembers();
+    const updated = list.map((m) => (m.id === id ? { ...m, ...member } : m));
+    localStorage.setItem("umesc_secretaria_members", JSON.stringify(updated));
+    return true;
+  },
+
+  async deleteMember(id: number): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from("secretaria_members")
+          .delete()
+          .eq("id", id);
+
+        if (error) {
+          console.error("Erro ao deletar membro secretaria no Supabase:", error.message);
+          throw error;
+        }
+        return true;
+      } catch (err) {
+        console.warn("Falha de deleção no Supabase para membro secretaria. Deletando localmente por contingência.", err);
+      }
+    }
+
+    const list = await this.getMembers();
+    const filtered = list.filter((m) => m.id !== id);
+    localStorage.setItem("umesc_secretaria_members", JSON.stringify(filtered));
+    return true;
+  },
+
+  async deleteMembersBatch(ids: number[]): Promise<boolean> {
+    if (ids.length === 0) return true;
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from("secretaria_members")
+          .delete()
+          .in("id", ids);
+
+        if (error) {
+          console.error("Erro ao deletar lote de membros secretaria no Supabase:", error.message);
+          throw error;
+        }
+        return true;
+      } catch (err) {
+        console.warn("Falha de deleção no Supabase para lote. Deletando localmente.", err);
+      }
+    }
+
+    const list = await this.getMembers();
+    const idSet = new Set(ids);
+    const filtered = list.filter((m) => !idSet.has(m.id || 0));
+    localStorage.setItem("umesc_secretaria_members", JSON.stringify(filtered));
+    return true;
+  },
+
+  async deleteAllMembers(): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from("secretaria_members")
+          .delete()
+          .neq("id", 0);
+
+        if (error) {
+          console.error("Erro ao limpar todos os membros secretaria no Supabase:", error.message);
+          throw error;
+        }
+      } catch (err) {
+        console.error("Falha ao remover todos os membros do Supabase:", err);
+        throw err;
+      }
+    }
+
+    localStorage.setItem("umesc_secretaria_members", JSON.stringify([]));
+    return true;
+  }
+};
+
+/**
  * Service to manage Apoio Feminino posts (blog/conteúdos)
  */
 export const apoioFemininoService = {
@@ -1752,7 +2022,8 @@ if (isSupabaseConfigured && supabase) {
     "apoio_feminino",
     "prayer_requests",
     "members",
-    "capelania_volunteers"
+    "capelania_volunteers",
+    "secretaria_members"
   ];
 
   tablesToSync.forEach((tableName) => {

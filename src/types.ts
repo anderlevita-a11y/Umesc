@@ -161,5 +161,19 @@ export interface ApoioFemininoPost {
   createdAt?: string;
 }
 
+export interface SecretariaMember {
+  id?: number;
+  matricula: string;
+  nome: string;
+  cod: string;
+  telefone: string;
+  cidade: string;
+  dataNascimento: string;
+  opm: string;
+  grupo: string;
+  createdAt?: string;
+}
+
+
 
 

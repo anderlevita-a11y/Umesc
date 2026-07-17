@@ -415,3 +415,96 @@ END $$;
 
 -- Recarregar o cache do PostgREST
 NOTIFY pgrst, 'reload schema';
+
+-- ====================================================================
+-- G. GARANTIA DE AUTO-INCREMENTO PARA TABELAS JÁ EXISTENTES (FIX ERRO NOT-NULL)
+-- Finalidade: Garante que as sequências de ID auto-incremento sejam criadas
+--             e corretamente vinculadas às tabelas 'prayer_requests',
+--             'capelania_volunteers' e 'apoio_feminino', mesmo se as tabelas
+--             já existiam anteriormente sem o tipo SERIAL correto.
+-- ====================================================================
+
+DO $$
+BEGIN
+  -- 1. Tabela: prayer_requests
+  BEGIN
+    ALTER TABLE public.prayer_requests ALTER COLUMN id TYPE integer USING (id::integer);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Não foi possível converter id para integer na tabela prayer_requests';
+  END;
+  CREATE SEQUENCE IF NOT EXISTS public.prayer_requests_id_seq;
+  ALTER TABLE public.prayer_requests ALTER COLUMN id SET DEFAULT nextval('public.prayer_requests_id_seq');
+  ALTER SEQUENCE public.prayer_requests_id_seq OWNED BY public.prayer_requests.id;
+  EXECUTE 'SELECT setval(''public.prayer_requests_id_seq'', COALESCE((SELECT MAX(CASE WHEN id::text ~ ''^[0-9]+$'' THEN id::text::integer ELSE 0 END) FROM public.prayer_requests), 0) + 1, false)';
+
+  -- 2. Tabela: capelania_volunteers
+  BEGIN
+    ALTER TABLE public.capelania_volunteers ALTER COLUMN id TYPE integer USING (id::integer);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Não foi possível converter id para integer na tabela capelania_volunteers';
+  END;
+  CREATE SEQUENCE IF NOT EXISTS public.capelania_volunteers_id_seq;
+  ALTER TABLE public.capelania_volunteers ALTER COLUMN id SET DEFAULT nextval('public.capelania_volunteers_id_seq');
+  ALTER SEQUENCE public.capelania_volunteers_id_seq OWNED BY public.capelania_volunteers.id;
+  EXECUTE 'SELECT setval(''public.capelania_volunteers_id_seq'', COALESCE((SELECT MAX(CASE WHEN id::text ~ ''^[0-9]+$'' THEN id::text::integer ELSE 0 END) FROM public.capelania_volunteers), 0) + 1, false)';
+
+  -- 3. Tabela: apoio_feminino
+  BEGIN
+    ALTER TABLE public.apoio_feminino ALTER COLUMN id TYPE integer USING (id::integer);
+  EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Não foi possível converter id para integer na tabela apoio_feminino';
+  END;
+  CREATE SEQUENCE IF NOT EXISTS public.apoio_feminino_id_seq;
+  ALTER TABLE public.apoio_feminino ALTER COLUMN id SET DEFAULT nextval('public.apoio_feminino_id_seq');
+  ALTER SEQUENCE public.apoio_feminino_id_seq OWNED BY public.apoio_feminino.id;
+  EXECUTE 'SELECT setval(''public.apoio_feminino_id_seq'', COALESCE((SELECT MAX(CASE WHEN id::text ~ ''^[0-9]+$'' THEN id::text::integer ELSE 0 END) FROM public.apoio_feminino), 0) + 1, false)';
+END $$;
+
+-- ====================================================================
+-- G2. TABELA DE MEMBROS DA SECRETARIA (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.secretaria_members (
+    id SERIAL PRIMARY KEY,
+    matricula VARCHAR(100) UNIQUE,
+    nome VARCHAR(255) NOT NULL,
+    cod VARCHAR(10),
+    telefone VARCHAR(100),
+    cidade VARCHAR(255),
+    data_nascimento VARCHAR(100),
+    opm VARCHAR(50),
+    grupo VARCHAR(150),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+GRANT ALL ON TABLE public.secretaria_members TO anon, authenticated, service_role;
+ALTER TABLE public.secretaria_members ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de secretaria_members" ON public.secretaria_members;
+DROP POLICY IF EXISTS "Inserção livre para todos de secretaria_members" ON public.secretaria_members;
+DROP POLICY IF EXISTS "Atualização livre para todos de secretaria_members" ON public.secretaria_members;
+DROP POLICY IF EXISTS "Deleção livre para todos de secretaria_members" ON public.secretaria_members;
+
+CREATE POLICY "Leitura livre para todos de secretaria_members" ON public.secretaria_members FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de secretaria_members" ON public.secretaria_members FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de secretaria_members" ON public.secretaria_members FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de secretaria_members" ON public.secretaria_members FOR DELETE USING (true);
+
+ALTER TABLE public.secretaria_members REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'secretaria_members'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.secretaria_members;
+    END IF;
+  END IF;
+END $$;
+
+-- Recarregar o cache novamente após alterações de estrutura
+NOTIFY pgrst, 'reload schema';
+

@@ -16,6 +16,7 @@ import { DEFAULT_DIRETORIA, COORDINATORS_DATA, INITIAL_PROJECTS, DEFAULT_CAPELAN
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
 import { getWhatsAppLink } from "../lib/validation.ts";
 import CongressoManager from "./CongressoManager.tsx";
+import SecretariaMembersSection from "./SecretariaMembersSection.tsx";
 
 import convite1 from "../assets/images/umesc_convite_1_1779818301691.png";
 import convite2 from "../assets/images/umesc_convite_2_1779818318346.png";
@@ -178,7 +179,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas" | "conteudos" | "servicos" | "voluntarios" | "oracoes" | "apoio_feminino">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "membros_secretaria" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas" | "conteudos" | "servicos" | "voluntarios" | "oracoes" | "apoio_feminino">("dashboard");
 
   // Supabase Connection State Diagnostics
   const [dbStatus, setDbStatus] = useState<{
@@ -1258,6 +1259,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
             { id: "dashboard", label: "Dashboard Analítico", icon: BarChart2 },
             { id: "congressos", label: "Gestão de Congressos", icon: QrCode },
             { id: "membros", label: `Membros (${members.length})`, icon: Users },
+            { id: "membros_secretaria", label: "Membros Secretaria", icon: FileText },
             { id: "fichas", label: `Fichas de Filiação (${fichas.length})`, icon: FileCheck },
             { id: "conteudos", label: `Quadro de Avisos (Mural)`, icon: Bell },
             { id: "projetos", label: "Projetos Missionários", icon: Briefcase },
@@ -1447,6 +1449,12 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
           {activeTab === "congressos" && (
             <div className="bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6">
               <CongressoManager />
+            </div>
+          )}
+
+          {activeTab === "membros_secretaria" && (
+            <div className="bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6">
+              <SecretariaMembersSection />
             </div>
           )}
 

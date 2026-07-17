@@ -87,7 +87,7 @@ const MONTHS_LABELS = [
 
 interface MemberDashboardProps {
   onBackToHome?: () => void;
-  initialTab?: "notices" | "structure" | "registration" | "filiacao" | "leitura" | "congressos" | "voluntariado";
+  initialTab?: "notices" | "structure" | "registration" | "filiacao" | "leitura" | "congressos";
   onEnterAdminMode?: () => void;
 }
 
@@ -192,12 +192,14 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   const [forgotSuccess, setForgotSuccess] = useState(false);
 
   // Active dashboard view selection
-  const [activeTab, setActiveTab ] = useState<"notices" | "structure" | "registration" | "profile" | "filiacao" | "leitura" | "congressos" | "voluntariado">(initialTab || "notices");
+  const [activeTab, setActiveTab ] = useState<"notices" | "structure" | "registration" | "profile" | "filiacao" | "leitura" | "congressos">(
+    (initialTab ? initialTab : "notices") as any
+  );
 
   // Sync tab choice
   useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab);
+      setActiveTab(initialTab as any);
     }
   }, [initialTab]);
 
@@ -981,39 +983,9 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
         </div>
       </div>
 
-      {/* 1. PUBLIC GUEST VOLUNTEERING PAGE OR LOGIN SCREEN CARD (GATE) */}
+      {/* 1. PUBLIC GUEST LOGIN SCREEN CARD (GATE) */}
       {!isLoggedIn ? (
-        activeTab === "voluntariado" ? (
-          <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 bg-[radial-gradient(circle_at_center,#15223c,transparent_75%)] relative">
-            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
-            
-            <div className="w-full max-w-xl space-y-6 z-10 animate-fadeIn">
-              <div className="flex justify-between items-center bg-[#131f2e] border border-white/5 px-5 py-3.5 rounded-xl text-xs">
-                <button 
-                  onClick={onBackToHome}
-                  className="text-slate-300 hover:text-white transition-colors flex items-center gap-1 cursor-pointer font-bold bg-transparent border-none"
-                >
-                  ← Retornar ao Início
-                </button>
-                <div className="text-slate-400 font-mono text-[10px] uppercase font-bold tracking-wider text-amber-500">
-                  Inscrição Exclusiva de Voluntários
-                </div>
-                <button 
-                  onClick={() => {
-                    setActiveTab("notices");
-                    setLoginMode("standard");
-                  }}
-                  className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded font-bold cursor-pointer transition-colors"
-                >
-                  Login de Associado
-                </button>
-              </div>
-
-              <CapelaniaVolunteeringForm loggedInUser={null} />
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center px-4 py-16 bg-[radial-gradient(circle_at_center,#15223c,transparent_75%)] relative">
+        <div className="flex-1 flex items-center justify-center px-4 py-16 bg-[radial-gradient(circle_at_center,#15223c,transparent_75%)] relative">
           
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none"></div>
 
@@ -1389,8 +1361,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
             </div>
           )}
 
-          </div>
-        )
+        </div>
       ) : (
         /* 2. LOGGED IN DASHBOARD WORKSPACE */
         <div className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
@@ -1592,28 +1563,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                       Estrutura & Legislação {isRestrictedAccess && <Lock className="w-3 h-3 text-amber-500 shrink-0" />}
                     </span>
                     <span className="block text-[9px] font-normal uppercase tracking-wider opacity-85">Governança & Coordenadores</span>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => {
-                  setActiveTab("voluntariado");
-                }}
-                className={`w-full flex items-center justify-between p-4 rounded text-left border transition-all ${
-                  activeTab === "voluntariado"
-                    ? "bg-amber-500 text-[#0b1329] font-black border-transparent shadow"
-                    : "bg-[#131f2e] text-slate-100 hover:text-white border-white/5 hover:bg-[#1a2a40]"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <Compass className="w-5 h-5 shrink-0 text-amber-500 animate-pulse" />
-                  <div>
-                    <span className="block text-sm flex items-center gap-1">
-                      Voluntariado Capelania
-                    </span>
-                    <span className="block text-[9px] font-normal uppercase tracking-wider opacity-85 text-slate-350">Inscrição de Voluntários</span>
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4" />
@@ -2433,29 +2382,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
               {activeTab === "congressos" && loggedInUser && (
                 <div id="tab-dashboard-congressos" className="animate-fadeIn bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6">
                   <CongressoInscricaoMembro loggedInUser={loggedInUser} />
-                </div>
-              )}
-
-              {/* TAB 10: INSCRIÇÃO DE VOLUNTARIADO DE CAPELANIA */}
-              {activeTab === "voluntariado" && (
-                <div id="tab-dashboard-voluntariado" className="animate-fadeIn bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6 text-left">
-                  <div className="border-b border-white/10 pb-3">
-                    <div className="text-[10px] font-mono tracking-widest text-[#f59e0b] font-black uppercase mb-1.5 flex items-center gap-1.5">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
-                      </span>
-                      PMSC & CBMSC Integrados
-                    </div>
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2 font-display uppercase">
-                      <Compass className="w-5 h-5 text-amber-500 animate-pulse" />
-                      Inscrição de Voluntário da Capelania Voluntária
-                    </h3>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Participe do braço forte de apoio espiritual, ético-social e humanitário da UMESC em hospitais, quartéis, rodovias e comunidades catarinenses.
-                    </p>
-                  </div>
-                  <CapelaniaVolunteeringForm loggedInUser={loggedInUser} />
                 </div>
               )}
 
