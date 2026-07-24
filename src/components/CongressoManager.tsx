@@ -338,8 +338,8 @@ export default function CongressoManager() {
     const tokenClean = checkinTokenInput.trim().toUpperCase();
     const found = inscriptions.find(ins => 
       ins.id === tokenClean || 
-      ins.qrCodeToken.includes(tokenClean) ||
-      ins.memberCpf.replace(/\D/g, "") === tokenClean.replace(/\D/g, "")
+      (ins.qrCodeToken || "").includes(tokenClean) ||
+      (ins.memberCpf || "").replace(/\D/g, "") === tokenClean.replace(/\D/g, "")
     );
 
     if (!found) {

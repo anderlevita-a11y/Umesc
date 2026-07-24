@@ -131,14 +131,17 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
   const updateMyInscriptionState = (congId: string) => {
     if (!congId) return;
     const allIns = congressService.getInscriptions();
-    const found = allIns.find(i => i.congressId === congId && i.memberCpf === loggedInUser.cpf);
+    const userCpf = loggedInUser?.cpf || (loggedInUser as any)?.rawCpf || "";
+    const cleanUserCpf = userCpf.replace(/\D/g, "");
+    const found = allIns.find(
+      i => i.congressId === congId && (i.memberCpf || "").replace(/\D/g, "") === cleanUserCpf
+    );
     
     if (found) {
       setMyInscription(found);
       setChosenWsIds(found.selectedWorkshopIds);
     } else {
-      setMyInscription(null);
-      setChosenWsIds([]);
+      setMyInscription(prev => (prev && prev.congressId === congId ? prev : null));
     }
   };
 
@@ -175,14 +178,21 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
 
     try {
       const rankAndName = `${loggedInUser.rank || "Membro"} ${loggedInUser.name}`;
+      const userCpf = loggedInUser?.cpf || (loggedInUser as any)?.rawCpf || "";
+      const userEmail = loggedInUser?.email || (loggedInUser as any)?.rawEmail || "contato@umesc.org.br";
+      const userPhone = loggedInUser?.phone || (loggedInUser as any)?.rawPhone || "(48) 99999-9999";
+
+      if (!userCpf.trim()) {
+        throw new Error("CPF não identificado para a sua conta de membro. Atualize seu cadastro antes de se inscrever.");
+      }
       
       const created = congressService.addInscription({
         congressId: activeCongress.id,
         congressTitle: activeCongress.title,
-        memberCpf: loggedInUser.cpf,
+        memberCpf: userCpf,
         memberName: loggedInUser.name,
-        memberEmail: loggedInUser.email || "contato@umesc.org.br",
-        memberPhone: loggedInUser.phone || "(48) 99999-9999",
+        memberEmail: userEmail,
+        memberPhone: userPhone,
         memberRank: loggedInUser.rank || "Membro",
         selectedWorkshopIds: chosenWsIds,
         paymentStatus: activeCongress.price === 0 ? "pago" : "pendente",
@@ -332,7 +342,11 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {congresses.map((c) => {
-              const ins = congressService.getInscriptions().find(i => i.congressId === c.id && i.memberCpf === loggedInUser.cpf);
+              const userCpf = loggedInUser?.cpf || (loggedInUser as any)?.rawCpf || "";
+              const cleanUserCpf = userCpf.replace(/\D/g, "");
+              const ins = congressService.getInscriptions().find(
+                i => i.congressId === c.id && (i.memberCpf || "").replace(/\D/g, "") === cleanUserCpf
+              );
               const isSelected = c.id === selectedCongressId;
               
               return (
@@ -629,7 +643,7 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
             {/* Autofill user context callout to give user high comfort design */}
             <div className="p-3 bg-slate-900/45 rounded-lg border border-white/5 text-left text-[11px] text-slate-400 space-y-1 select-none">
               <span className="block text-[8px] font-mono text-amber-550 uppercase tracking-widest font-black">Preenchimento Inteligente</span>
-              <p>Membro identificado como: <strong className="text-slate-100 font-bold">{loggedInUser.name}</strong> • CPF: <strong className="text-slate-100 font-mono font-bold">{loggedInUser.cpf}</strong> ({loggedInUser.rank})</p>
+              <p>Membro identificado como: <strong className="text-slate-100 font-bold">{loggedInUser.name}</strong> • CPF: <strong className="text-slate-100 font-mono font-bold">{loggedInUser.cpf || (loggedInUser as any).rawCpf || "N/A"}</strong> ({loggedInUser.rank})</p>
               <p>Os dados cadastrados na UMESC serão vinculados automaticamente ao seu crachá de credenciamento.</p>
             </div>
 

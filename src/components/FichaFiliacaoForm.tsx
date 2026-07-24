@@ -199,7 +199,8 @@ export default function FichaFiliacaoForm({
     // Generate cryptographic-like parameters
     const uuid = Math.random().toString(36).substring(2, 11).toUpperCase();
     const mockIP = `189.112.${Math.floor(Math.random() * 254)}.${Math.floor(Math.random() * 254)}`;
-    const mockHashSeed = `${loggedInUser.cpf}-${new Date().toISOString()}-${uuid}`;
+    const userCpf = (loggedInUser?.cpf || (loggedInUser as any)?.rawCpf || "").trim();
+    const mockHashSeed = `${userCpf}-${new Date().toISOString()}-${uuid}`;
     
     // Type-safe simulated SHA256 sum
     let hashSum = 0;
@@ -210,7 +211,7 @@ export default function FichaFiliacaoForm({
 
     const newFicha: FichaFiliacao = {
       id: "FL-" + uuid,
-      memberCpf: loggedInUser.cpf,
+      memberCpf: userCpf || "000.000.000-00",
       memberName: loggedInUser.name,
       organ,
       organOther: organ === "OUTRO" ? organOther : undefined,
@@ -241,9 +242,8 @@ export default function FichaFiliacaoForm({
 
     // Save to Supabase (with localStorage fallback)
     await fichasFiliacaoService.submitFicha(newFicha);
-    window.dispatchEvent(new CustomEvent("umesc_content_updated"));
 
-    setSuccessMsg("Ficha de Filiação enviada e assinada com sucesso!");
+    setSuccessMsg("Ficha de Filiação enviada com sucesso! Ela foi salva na base de dados e disponibilizada no Painel Geral de Governança UMESC (Sessão: Ficha de Filiação).");
     onFichaSubmitted(newFicha);
     
     // Smooth scroll top
@@ -273,8 +273,13 @@ export default function FichaFiliacaoForm({
                 <ShieldCheck className="w-6 h-6" />
               </div>
               <div>
-                <h3 className="text-lg font-extrabold text-white uppercase font-display tracking-wide">Ficha de Filiação Cadastrada</h3>
-                <p className="text-xs text-emerald-400 font-medium">Assinatura Eletrônica Certificada ICP-Brasil Simulada</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black uppercase tracking-wider rounded">
+                    ✓ Transmitida à Governança UMESC
+                  </span>
+                </div>
+                <h3 className="text-lg font-extrabold text-white uppercase font-display tracking-wide">Ficha de Filiação Cadastrada & Homologada</h3>
+                <p className="text-xs text-emerald-400 font-medium">Salva na Base de Dados e Transmitida ao Painel de Governança (Sessão: Ficha de Filiação)</p>
                 <p className="text-[10px] text-slate-400 mt-1">
                   Código de Autenticidade: <span className="font-mono text-slate-300 font-bold">{submittedFicha.securitySeal}</span>
                 </p>

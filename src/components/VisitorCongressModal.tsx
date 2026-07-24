@@ -54,20 +54,26 @@ export default function VisitorCongressModal({ isOpen, onClose, initialCongressI
         }
       }
 
+      const allInscriptions = congressService.getInscriptions();
+
       // If already queried, refresh query results to reflect payment updates / check-ins in real-time
       if (searched && queryInput) {
         const term = queryInput.replace(/\D/g, "").trim();
         if (term) {
-          const allInscriptions = congressService.getInscriptions();
           const matches = allInscriptions.filter(ins => {
-            const matchCpf = ins.memberCpf.replace(/\D/g, "") === term;
-            const matchPhone = ins.memberPhone.replace(/\D/g, "").includes(term);
+            const matchCpf = (ins.memberCpf || "").replace(/\D/g, "") === term;
+            const matchPhone = (ins.memberPhone || "").replace(/\D/g, "").includes(term);
             return matchCpf || matchPhone;
           });
           setQueryResult(matches);
           if (matches.length === 1) {
             setSelectedQueriedIns(matches[0]);
           }
+        }
+      } else if (selectedQueriedIns) {
+        const updated = allInscriptions.find(i => i.id === selectedQueriedIns.id);
+        if (updated) {
+          setSelectedQueriedIns(updated);
         }
       }
     };
@@ -127,7 +133,7 @@ export default function VisitorCongressModal({ isOpen, onClose, initialCongressI
     const allInscriptions = congressService.getInscriptions();
     const cleanCpf = cpf.replace(/\D/g, "");
     const alreadyRegistered = allInscriptions.some(
-      ins => ins.congressId === selectedCongressId && ins.memberCpf.replace(/\D/g, "") === cleanCpf
+      ins => ins.congressId === selectedCongressId && (ins.memberCpf || "").replace(/\D/g, "") === cleanCpf
     );
 
     if (alreadyRegistered) {
@@ -174,8 +180,8 @@ export default function VisitorCongressModal({ isOpen, onClose, initialCongressI
 
     const allInscriptions = congressService.getInscriptions();
     const matches = allInscriptions.filter(ins => {
-      const matchCpf = ins.memberCpf.replace(/\D/g, "") === term;
-      const matchPhone = ins.memberPhone.replace(/\D/g, "").includes(term);
+      const matchCpf = (ins.memberCpf || "").replace(/\D/g, "") === term;
+      const matchPhone = (ins.memberPhone || "").replace(/\D/g, "").includes(term);
       return matchCpf || matchPhone;
     });
 

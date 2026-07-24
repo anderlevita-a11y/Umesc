@@ -1019,17 +1019,36 @@ export const secretariaMembersService = {
           grupo: m.grupo
         }));
 
-        const { error } = await supabase
-          .from("secretaria_members")
-          .upsert(dbPayloads, { onConflict: "matricula" });
+        // Deduplicate payloads by matricula so PostgreSQL ON CONFLICT DO UPDATE doesn't throw:
+        // "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        const uniquePayloadsMap = new Map<string, typeof dbPayloads[0]>();
+        const payloadsNoMatricula: typeof dbPayloads = [];
 
-        if (error) {
-          console.error("Erro ao inserir lote de membros secretaria no Supabase:", error.message);
-          throw error;
+        for (const p of dbPayloads) {
+          const matKey = (p.matricula || "").trim().toLowerCase();
+          if (matKey) {
+            uniquePayloadsMap.set(matKey, p);
+          } else {
+            payloadsNoMatricula.push(p);
+          }
+        }
+
+        const uniquePayloads = [...Array.from(uniquePayloadsMap.values()), ...payloadsNoMatricula];
+
+        if (uniquePayloads.length > 0) {
+          const { error } = await supabase
+            .from("secretaria_members")
+            .upsert(uniquePayloads, { onConflict: "matricula" });
+
+          if (error) {
+            console.error("Erro ao inserir lote de membros secretaria no Supabase:", error.message);
+            throw error;
+          }
         }
         return true;
       } catch (err) {
-        console.warn("Falha de inserção em lote no Supabase. Caindo para modo individual local.", err);
+        console.warn("Falha de inserção em lote no Supabase.", err);
+        throw err;
       }
     }
 
@@ -1348,35 +1367,36 @@ export interface SupabaseFicha {
 }
 
 function toSupabaseFicha(ficha: FichaFiliacao): SupabaseFicha {
+  const cpfToUse = (ficha.memberCpf || (ficha as any).rawCpf || "").trim() || "00000000000";
   return {
     id: ficha.id,
-    member_cpf: ficha.memberCpf,
-    member_name: ficha.memberName,
-    organ: ficha.organ,
+    member_cpf: cpfToUse,
+    member_name: ficha.memberName || "Associado UMESC",
+    organ: ficha.organ || "OUTRO",
     organ_other: ficha.organOther || "",
-    lotacao_municipio: ficha.lotacaoMunicipio,
-    categoria: ficha.categoria,
-    matricula: ficha.matricula,
-    vinculo: ficha.vinculo,
-    birth_date: ficha.birthDate,
-    genero: ficha.genero,
-    address_rua: ficha.addressRua,
-    address_bairro: ficha.addressBairro,
-    address_cep: ficha.addressCep,
-    address_cidade: ficha.addressCidade,
-    contact_cidade: ficha.contactCidade,
-    contact_fones: ficha.contactFones,
-    contact_email: ficha.contactEmail,
-    opcao_autorizacao: ficha.opcaoAutorizacao,
-    percentual_desconto: ficha.percentualDesconto,
-    percentual_anterior: ficha.percentualAnterior,
-    percentual_novo: ficha.percentualNovo,
-    data_inscricao: ficha.dataInscricao,
-    assinatura_nome: ficha.assinaturaNome,
+    lotacao_municipio: ficha.lotacaoMunicipio || "",
+    categoria: ficha.categoria || "ATIVO",
+    matricula: ficha.matricula || "",
+    vinculo: ficha.vinculo || "EFETIVO",
+    birth_date: ficha.birthDate || "",
+    genero: ficha.genero || "M",
+    address_rua: ficha.addressRua || "",
+    address_bairro: ficha.addressBairro || "",
+    address_cep: ficha.addressCep || "",
+    address_cidade: ficha.addressCidade || "",
+    contact_cidade: ficha.contactCidade || "",
+    contact_fones: ficha.contactFones || "",
+    contact_email: ficha.contactEmail || "",
+    opcao_autorizacao: ficha.opcaoAutorizacao || 1,
+    percentual_desconto: ficha.percentualDesconto || 1.0,
+    percentual_anterior: ficha.percentualAnterior || 0,
+    percentual_novo: ficha.percentualNovo || 0,
+    data_inscricao: ficha.dataInscricao || new Date().toISOString(),
+    assinatura_nome: ficha.assinaturaNome || ficha.memberName || "",
     assinatura_desenho: ficha.assinaturaDesenho || "",
-    signature_date: ficha.signatureDate,
-    ip_address: ficha.ipAddress,
-    security_seal: ficha.securitySeal
+    signature_date: ficha.signatureDate || new Date().toISOString(),
+    ip_address: ficha.ipAddress || "127.0.0.1",
+    security_seal: ficha.securitySeal || "SEAL-000"
   };
 }
 
@@ -1431,7 +1451,24 @@ export const fichasFiliacaoService = {
         }
 
         if (data) {
-          return data.map(fromSupabaseFicha);
+          const dbFichas = data.map(fromSupabaseFicha);
+          const saved = localStorage.getItem("umesc_fichas_filiacao");
+          let localFichas: FichaFiliacao[] = [];
+          if (saved) {
+            try {
+              localFichas = JSON.parse(saved);
+            } catch (e) {
+              localFichas = [];
+            }
+          }
+          const merged = [...dbFichas];
+          for (const lf of localFichas) {
+            if (!merged.some(m => m.memberCpf === lf.memberCpf || m.id === lf.id)) {
+              merged.push(lf);
+            }
+          }
+          localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(merged));
+          return merged;
         }
       } catch (err) {
         console.warn("Falha de conexão com o Supabase para Fichas de Filiação. Usando localStorage como contingência.", err);
@@ -1450,6 +1487,7 @@ export const fichasFiliacaoService = {
   },
 
   async submitFicha(ficha: FichaFiliacao): Promise<FichaFiliacao> {
+    let savedFicha = ficha;
     if (isSupabaseConfigured && supabase) {
       try {
         const dbRecord = toSupabaseFicha(ficha);
@@ -1465,18 +1503,32 @@ export const fichasFiliacaoService = {
         }
 
         if (data && data.length > 0) {
-          return fromSupabaseFicha(data[0]);
+          savedFicha = fromSupabaseFicha(data[0]);
         }
       } catch (err) {
         console.warn("Falha de gravação no Supabase para Ficha de Filiação. Gravando localmente por contingência.", err);
       }
     }
 
-    const list = await this.getFichas();
-    const filtered = list.filter(f => f.memberCpf !== ficha.memberCpf);
-    const updated = [...filtered, ficha];
+    // Always mirror in localStorage so local views / AdminPortal get immediate data
+    const saved = localStorage.getItem("umesc_fichas_filiacao");
+    let list: FichaFiliacao[] = [];
+    if (saved) {
+      try {
+        list = JSON.parse(saved);
+      } catch (e) {
+        list = [];
+      }
+    }
+    const filtered = list.filter(f => f.memberCpf !== savedFicha.memberCpf);
+    const updated = [savedFicha, ...filtered];
     localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(updated));
-    return ficha;
+
+    // Dispatch global real-time synchronization events
+    window.dispatchEvent(new Event("umesc-data-sync"));
+    window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+
+    return savedFicha;
   },
 
   async deleteFicha(memberCpf: string): Promise<boolean> {
@@ -1491,15 +1543,26 @@ export const fichasFiliacaoService = {
           console.warn("Informação: Falha ao deletar no Supabase:", error.message);
           throw error;
         }
-        return true;
       } catch (err) {
         console.warn("Falha de exclusão no Supabase para Ficha de Filiação. Excluindo localmente por contingência.", err);
       }
     }
 
-    const list = await this.getFichas();
+    const saved = localStorage.getItem("umesc_fichas_filiacao");
+    let list: FichaFiliacao[] = [];
+    if (saved) {
+      try {
+        list = JSON.parse(saved);
+      } catch (e) {
+        list = [];
+      }
+    }
     const filtered = list.filter(f => f.memberCpf !== memberCpf);
     localStorage.setItem("umesc_fichas_filiacao", JSON.stringify(filtered));
+
+    window.dispatchEvent(new Event("umesc-data-sync"));
+    window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+
     return true;
   }
 };

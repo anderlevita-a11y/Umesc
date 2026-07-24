@@ -241,11 +241,11 @@ export async function fetchAllFromSupabaseAndSync() {
         id: ins.id,
         congressId: ins.congress_id,
         congressTitle: ins.congress_title,
-        memberCpf: ins.member_cpf,
-        memberName: ins.member_name,
-        memberEmail: ins.member_email,
-        memberPhone: ins.member_phone,
-        memberRank: ins.member_rank,
+        memberCpf: ins.member_cpf || "",
+        memberName: ins.member_name || "",
+        memberEmail: ins.member_email || "",
+        memberPhone: ins.member_phone || "",
+        memberRank: ins.member_rank || "",
         selectedWorkshopIds,
         paymentStatus: ins.payment_status as any,
         paymentProofUrl: ins.payment_proof_url || "",
@@ -258,9 +258,27 @@ export async function fetchAllFromSupabaseAndSync() {
       };
     });
 
+    // Merge with local inscriptions so unsynced local creations are retained
+    const rawLocalIns = localStorage.getItem("umesc_congress_inscriptions");
+    let localInscriptions: CongressInscription[] = [];
+    if (rawLocalIns) {
+      try {
+        localInscriptions = JSON.parse(rawLocalIns);
+      } catch (e) {
+        localInscriptions = [];
+      }
+    }
+
+    const mergedInscriptions = [...assembledInscriptions];
+    for (const loc of localInscriptions) {
+      if (!mergedInscriptions.some(m => m.id === loc.id)) {
+        mergedInscriptions.push(loc);
+      }
+    }
+
     // Save to LocalStorage and dispatch event
     localStorage.setItem("umesc_congress_list", JSON.stringify(assembledCongresses));
-    localStorage.setItem("umesc_congress_inscriptions", JSON.stringify(assembledInscriptions));
+    localStorage.setItem("umesc_congress_inscriptions", JSON.stringify(mergedInscriptions));
     
     // Dispatch window event so components re-render immediately
     window.dispatchEvent(new Event("umesc-data-sync"));
@@ -493,11 +511,18 @@ export const congressService = {
     const code = Math.random().toString(36).substring(2, 7).toUpperCase();
     const id = "INS-" + code;
     
+    const cpfToUse = (ins.memberCpf || "").trim() || "00000000000";
+    
     const created: CongressInscription = {
       ...ins,
       id,
+      memberCpf: cpfToUse,
+      memberName: ins.memberName || "Associado UMESC",
+      memberEmail: ins.memberEmail || "contato@umesc.org.br",
+      memberPhone: ins.memberPhone || "(48) 99999-9999",
+      memberRank: ins.memberRank || "Membro",
       registrationDate: new Date().toISOString(),
-      qrCodeToken: `UMESC-${ins.congressId.replace("cong-", "")}-${code}-${ins.paymentStatus}`,
+      qrCodeToken: `UMESC-${(ins.congressId || "").replace("cong-", "")}-${code}-${ins.paymentStatus}`,
       checkedIn: false
     };
 
@@ -540,7 +565,7 @@ export const congressService = {
             is_visitor: created.memberRank === "Visitante"
           };
 
-          const { error } = await supabase.from("inscriptions").insert([dbRecord]);
+          const { error } = await supabase.from("inscriptions").upsert([dbRecord], { onConflict: "id" });
           if (error) {
             console.error("Erro ao gravar inscrição no Supabase:", error.message);
           }
