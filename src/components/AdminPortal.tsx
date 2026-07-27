@@ -4247,19 +4247,8 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1 text-slate-400">Meta Financeira (R$):</label>
-                    <input type="number" required value={projectForm.targetAmount || ""} onChange={(e) => setProjectForm({ ...projectForm, targetAmount: Number(e.target.value) })} placeholder="15000" className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
                     <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1 text-slate-400">Localização Base SC:</label>
                     <input type="text" required value={projectForm.location || ""} onChange={(e) => setProjectForm({ ...projectForm, location: e.target.value })} placeholder="Florianópolis e Serra" className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white" />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1 text-slate-400">Semente Progresso (%):</label>
-                    <input type="number" min="0" max="100" required value={projectForm.raisedPercent || 0} onChange={(e) => setProjectForm({ ...projectForm, raisedPercent: Number(e.target.value) })} className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white" />
                   </div>
                 </div>
 
@@ -4302,12 +4291,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
                 <div>
                   <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1 text-slate-400">Descrição Básica:</label>
-                  <textarea rows={2} required value={projectForm.description || ""} onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })} className="w-full bg-[#121c2d] border border-white/10 rounded p-3 text-xs text-white" />
-                </div>
-
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-450 uppercase mb-1 text-slate-400">Necessidades Detalhadas prioritárias:</label>
-                  <textarea rows={2} required value={projectForm.detailedNeeds || ""} onChange={(e) => setProjectForm({ ...projectForm, detailedNeeds: e.target.value })} className="w-full bg-[#121c2d] border border-white/10 rounded p-3 text-xs text-white" />
+                  <textarea rows={3} required value={projectForm.description || ""} onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })} className="w-full bg-[#121c2d] border border-white/10 rounded p-3 text-xs text-white" />
                 </div>
               </div>
 

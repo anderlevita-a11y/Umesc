@@ -163,7 +163,7 @@ export default function ProjectsList({ selectedPreloadProj }: ProjectsListProps)
           </h2>
           <div className="w-16 h-1 bg-amber-500 mx-auto rounded-full mb-4"></div>
           <p className="text-slate-650 text-xs sm:text-sm font-semibold max-w-2xl mx-auto">
-            O alcance prático da UMESC avança na proporção do voluntariado e das semeaduras altruístas. Veja abaixo nossas frentes de socorro emergencial e capelania e apoie de forma rastreável.
+            O alcance prático da UMESC avança através de ações dedicadas ao fortalecimento espiritual e apoio institucional. Veja abaixo nossas frentes de atuação.
           </p>
         </div>
 
@@ -204,23 +204,14 @@ export default function ProjectsList({ selectedPreloadProj }: ProjectsListProps)
               <div className="p-6 flex-1 flex flex-col justify-between">
                 <div>
                   <h3 className="text-lg sm:text-xl font-bold text-[#1a2a40] mb-2 leading-snug font-display">{project.title}</h3>
-                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed mb-4 font-medium">{project.description}</p>
+                  <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium">{project.description}</p>
                   
-                  <div className="p-3.5 rounded bg-slate-50 border border-slate-250/60 text-xs mb-5">
-                    <span className="block font-black text-amber-700 uppercase tracking-widest text-[9px] mb-1">Necessidade Primária:</span>
-                    <span className="text-slate-600 font-semibold">{project.detailedNeeds}</span>
-                  </div>
-                   {/* Buttons */}
-                  <div className="w-full">
-                    <button
-                      id={`project-btn-volunteer-${project.id}`}
-                      onClick={() => triggerVolunteer(project)}
-                      className="w-full flex items-center justify-center gap-2 py-3 rounded bg-[#1a2a40] hover:bg-[#131f2e] text-white font-bold text-xs transition-colors tracking-widest uppercase cursor-pointer"
-                    >
-                      <UserCheck className="w-4 h-4 text-amber-400" />
-                      Quero me Voluntariar
-                    </button>
-                  </div>
+                  {project.detailedNeeds && (
+                    <div className="p-3.5 rounded bg-slate-50 border border-slate-250/60 text-xs mt-4">
+                      <span className="block font-black text-amber-700 uppercase tracking-widest text-[9px] mb-1">Necessidade Primária:</span>
+                      <span className="text-slate-600 font-semibold">{project.detailedNeeds}</span>
+                    </div>
+                  )}
                 </div>
 
               </div>
@@ -228,145 +219,6 @@ export default function ProjectsList({ selectedPreloadProj }: ProjectsListProps)
             </div>
           ))}
         </div>
-
-        {/* Inline Active Volunteering Module wizard (only visible when a project is chosen) */}
-        {volunteeringProject && (
-          <div id="volunteer-form-container" className="mt-12 bg-slate-950 border border-amber-500/20 rounded-2xl p-6 sm:p-8 relative scroll-mt-24">
-            
-            <button 
-              onClick={() => setVolunteeringProject(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 rounded-full hover:bg-slate-900"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            {!volunteerSuccess ? (
-              <form onSubmit={handleConfirmVolunteer} className="space-y-6 max-w-3xl">
-                <div>
-                  <span className="px-2 py-0.5 rounded text-[9px] font-black bg-amber-500 text-slate-950 uppercase tracking-widest">
-                    Inscrição Rápida Voluntariado
-                  </span>
-                  <h3 className="text-xl font-bold mt-2">Quero Apoiar como Voluntário:</h3>
-                  <p className="text-sm text-amber-400 font-semibold">{volunteeringProject.title}</p>
-                  <p className="text-xs text-slate-400 mt-1">Inscreva-se informando dados básicos de contato. Alinhado estritamente com a LGPD, seus dados serão guardados de forma segura exclusiva para este contato.</p>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Nome Completo (Conforme RG):</label>
-                    <input 
-                      type="text" 
-                      required 
-                      value={volunteerName}
-                      onChange={(e) => setVolunteerName(e.target.value)}
-                      placeholder="Ex: Sargento Anderson Alves" 
-                      className="w-full bg-slate-900 border border-slate-800 focus:border-amber-400 rounded-xl px-4 py-2.5 text-sm outline-none text-white placeholder-slate-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">E-mail de Contato Seguro:</label>
-                    <input 
-                      type="email" 
-                      required 
-                      value={volunteerEmail}
-                      onChange={(e) => setVolunteerEmail(e.target.value)}
-                      placeholder="seu.email@exemplo.com" 
-                      className="w-full bg-slate-900 border border-slate-800 focus:border-amber-400 rounded-xl px-4 py-2.5 text-sm outline-none text-white placeholder-slate-600"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Como você deseja ajudar nesse projeto? (Selecione):</label>
-                    <select 
-                      required
-                      value={volunteerSkill}
-                      onChange={(e) => setVolunteerSkill(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-800 focus:border-amber-400 rounded-xl px-4 py-2.5 text-sm outline-none text-white"
-                    >
-                      <option value="">-- Selecione uma opção --</option>
-                      <option value="capelania">Capelania e Assistência Religiosa Presencial</option>
-                      <option value="logistica">Transporte de Materiais / Logística de Doação</option>
-                      <option value="cozinha">Arrecadação e Preparo dos Alimentos / Cobertores</option>
-                      <option value="comunicacao">Divulgação de Avisos e Comunicação de Suporte</option>
-                      <option value="outros">Outros apoios de acordo com a necessidade</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* LGPD Consent box */}
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input 
-                      type="checkbox" 
-                      required
-                      checked={lgpdVolConsent}
-                      onChange={(e) => setLgpdVolConsent(e.target.checked)}
-                      className="mt-1 accent-amber-500 rounded"
-                    />
-                    <span className="text-xs text-slate-400 leading-normal">
-                      <strong>Termo de Consentimento Voluntário (LGPD):</strong> Autorizo expressamente o tratamento e uso limitado dos meus dados básicos para fins de intermediação, contato e alocação em escala voluntária do UMESC, sabendo que posso solicitar a exclusão de tais registros a qualquer tempo.
-                    </span>
-                  </label>
-                </div>
-
-                <div className="flex gap-4">
-                  <button 
-                    type="submit"
-                    className="px-6 py-3 bg-amber-500 text-slate-950 font-bold rounded-xl text-xs uppercase tracking-wider hover:bg-amber-400 cursor-pointer"
-                  >
-                    Confirmar Voluntariado
-                  </button>
-                  <button 
-                    type="button" 
-                    onClick={() => setVolunteeringProject(null)}
-                    className="px-6 py-3 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-400 font-bold rounded-xl text-xs uppercase tracking-wider cursor-pointer"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <div className="text-center py-6 max-w-xl mx-auto space-y-4">
-                <div className="w-16 h-16 bg-emerald-900/50 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center text-3xl mx-auto shadow-md">
-                  ✓
-                </div>
-                <h3 className="text-2xl font-black text-white">Inscrição de Voluntário Concluída!</h3>
-                <p className="text-sm text-slate-350 leading-relaxed">
-                  Obrigado, <strong>{volunteerSummary?.name}</strong>! Seus dados foram salvos com criptografia ponta-a-ponta na listagem de contato do projeto <strong>{volunteerSummary?.projectTitle}</strong>.
-                </p>
-
-                <div className="p-4 bg-slate-900 rounded-xl border border-slate-850 font-mono text-xs text-left text-slate-300 space-y-1.5 max-w-md mx-auto">
-                  <div className="text-[10px] text-amber-500 font-bold uppercase pb-1 border-b border-slate-800">Criptografia de Segurança (LGPD)</div>
-                  <div>ID Voluntário: {volunteerSummary?.id}</div>
-                  <div>Data Registro: {volunteerSummary?.date}</div>
-                  <div className="truncate">Chave de Integridade: {volunteerSummary?.authCode}</div>
-                  <div className="text-[10px] text-emerald-400 mt-1 uppercase">✓ Confidencialidade Protegida</div>
-                </div>
-
-                <div className="flex justify-center gap-3 pt-4">
-                  <button
-                    onClick={() => {
-                      setVolunteeringProject(null);
-                      setVolunteerSuccess(false);
-                    }}
-                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs uppercase cursor-pointer"
-                  >
-                    Voltar para Projetos
-                  </button>
-                  <a 
-                    href={`data:text/plain;charset=utf-8,${encodeURIComponent(`DADOS DE VOLUNTARIO UMESC\nID: ${volunteerSummary?.id}\nNome: ${volunteerName}\nProjeto: ${volunteerSummary?.projectTitle}\nHash LGPD: ${volunteerSummary?.authCode}\nData: ${volunteerSummary?.date}`)}`} 
-                    download={`comprovante_voluntariado_${volunteerSummary?.id}.txt`}
-                    className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold rounded-lg text-xs uppercase flex items-center gap-1.5 cursor-pointer"
-                  >
-                    Baixar Comprovante
-                  </a>
-                </div>
-              </div>
-            )}
-
-          </div>
-        )}
 
       </div>
 

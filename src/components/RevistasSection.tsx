@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { BookOpen, Search, Download, HelpCircle, Eye, ShieldCheck, Check, Cloud, ExternalLink } from "lucide-react";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
+import { revistasService } from "../lib/supabase.ts";
 
 export interface RevistaEdition {
   id: string;
@@ -151,33 +152,34 @@ export default function RevistasSection() {
   const [downloadTracker, setDownloadTracker] = useState<Record<string, boolean>>({});
   const [activeDownloadId, setActiveDownloadId] = useState<string | null>(null);
 
-  // Listen to admin additions/deletions/edits
+  // Load from Supabase and listen to real-time additions/deletions/edits
   useEffect(() => {
-    const handleReload = () => {
+    const loadRevistas = async () => {
       try {
-        const saved = localStorage.getItem("umesc_revistas");
-        setRevistas(saved ? JSON.parse(saved) : INITIAL_REVISTAS);
+        const list = await revistasService.getRevistas();
+        setRevistas(list);
       } catch (err) {
-        console.error("Error reloading revistas:", err);
+        console.error("Error loading revistas:", err);
       }
     };
-    window.addEventListener("umesc_content_updated", handleReload);
-    return () => window.removeEventListener("umesc_content_updated", handleReload);
+    loadRevistas();
+
+    window.addEventListener("umesc_content_updated", loadRevistas);
+    return () => window.removeEventListener("umesc_content_updated", loadRevistas);
   }, []);
 
   const handleDownload = (id: string, name: string, downloadUrl?: string) => {
-    // Increment local counter
-    const updated = revistas.map((rev) => {
-      if (rev.id === id) {
-        return { ...rev, downloads: rev.downloads + 1 };
-      }
-      return rev;
-    });
-    setRevistas(updated);
-    localStorage.setItem("umesc_revistas", JSON.stringify(updated));
-
-    // Dispatch update notification
-    window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+    // Increment download counter
+    const matchedRev = revistas.find((r) => r.id === id);
+    if (matchedRev) {
+      const updatedRev = { ...matchedRev, downloads: (matchedRev.downloads || 0) + 1 };
+      revistasService.saveRevista(updatedRev).catch(console.warn);
+      
+      const updated = revistas.map((rev) => (rev.id === id ? updatedRev : rev));
+      setRevistas(updated);
+      localStorage.setItem("umesc_revistas", JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+    }
 
     // Track state to show dynamic visual check icon
     setDownloadTracker((prev) => ({ ...prev, [id]: true }));
@@ -185,7 +187,6 @@ export default function RevistasSection() {
       setDownloadTracker((prev) => ({ ...prev, [id]: false }));
     }, 2500);
 
-    const matchedRev = revistas.find((r) => r.id === id);
     const description = matchedRev?.description || "";
     const volume = matchedRev?.volume || "Edicao Oficial";
     const date = matchedRev?.publishedDate || new Date().toISOString().split("T")[0];
