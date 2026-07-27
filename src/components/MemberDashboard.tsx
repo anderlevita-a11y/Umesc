@@ -39,6 +39,7 @@ import FichaFiliacaoForm from "./FichaFiliacaoForm.tsx";
 import PlanoLeituraBiblica from "./PlanoLeituraBiblica.tsx";
 import CongressoInscricaoMembro from "./CongressoInscricaoMembro.tsx";
 import CapelaniaVolunteeringForm from "./CapelaniaVolunteeringForm.tsx";
+import CarouselsSection from "./CarouselsSection.tsx";
 import { membersService, isSupabaseConfigured, fichasFiliacaoService, coordinatorsService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { sanitizeInput, isValidCPF, formatPhone, isValidPhone, isValidEmail, getWhatsAppLink } from "../lib/validation.ts";
@@ -1699,6 +1700,11 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         <p className="text-xs text-slate-350 leading-relaxed mt-1 font-semibold">{ann.content}</p>
                       </div>
                     ))}
+                  </div>
+
+                  {/* Carrossel de Convites e Eventos Estaduais Integrado */}
+                  <div className="pt-6 border-t border-white/10">
+                    <CarouselsSection />
                   </div>
 
                   {/* Central de Downloads inside the restricted dashboard as requested */}

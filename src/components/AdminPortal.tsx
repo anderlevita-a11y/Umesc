@@ -18,18 +18,10 @@ import { getWhatsAppLink } from "../lib/validation.ts";
 import CongressoManager from "./CongressoManager.tsx";
 import SecretariaMembersSection from "./SecretariaMembersSection.tsx";
 
-import convite1 from "../assets/images/umesc_convite_1_1779818301691.png";
-import convite2 from "../assets/images/umesc_convite_2_1779818318346.png";
-import evento1 from "../assets/images/umesc_evento_1_1779818334743.png";
-import evento2 from "../assets/images/umesc_evento_2_1779818351705.png";
+import { getStoredConvites, getStoredEventos, DEFAULT_CONVITES, DEFAULT_EVENTOS } from "../data/carouselData.ts";
 
 // Fallbacks matching INITIAL_REVISTAS
 const DEFAULT_REVISTAS: any[] = [];
-
-// Fallbacks matching carousels slides
-const DEFAULT_CONVITES: any[] = [];
-
-const DEFAULT_EVENTOS: any[] = [];
 
 const DEFAULT_MEMBER_CONTENTS: MemberContent[] = [];
 
@@ -383,12 +375,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       setRevistas(revistasList.length > 0 ? revistasList : DEFAULT_REVISTAS);
 
       // 4. Carousel Convites
-      const savedConv = localStorage.getItem("umesc_carousel_convites");
-      setConvites(savedConv ? JSON.parse(savedConv) : DEFAULT_CONVITES);
+      setConvites(getStoredConvites());
 
       // 5. Carousel Eventos
-      const savedEve = localStorage.getItem("umesc_carousel_eventos");
-      setEventos(savedEve ? JSON.parse(savedEve) : DEFAULT_EVENTOS);
+      setEventos(getStoredEventos());
 
       // 6. Diretoria Board
       const savedDir = localStorage.getItem("umesc_diretoria");

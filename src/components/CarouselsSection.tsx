@@ -2,39 +2,12 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight, Megaphone, Calendar, Eye, Play, Pause } from "lucide-react";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
-
-import convite1 from "../assets/images/umesc_convite_1_1779818301691.png";
-import convite2 from "../assets/images/umesc_convite_2_1779818318346.png";
-import convite3 from "../assets/images/umesc_convite_3_1779818368346.png";
-import evento1 from "../assets/images/umesc_evento_1_1779818334743.png";
-import evento2 from "../assets/images/umesc_evento_2_1779818351705.png";
-import evento3 from "../assets/images/umesc_evento_3_1779818385804.png";
-
-// Default Fallback Slide Data for UMESC Invitations
-const INITIAL_CONVITES: any[] = [];
-
-// Default Fallback Slide Data for UMESC Events & Social Actions
-const INITIAL_EVENTOS: any[] = [];
+import { getStoredConvites, getStoredEventos, ConviteSlide, EventoSlide } from "../data/carouselData.ts";
 
 export default function CarouselsSection() {
-  // Load dynamic content
-  const [convites, setConvites] = useState(() => {
-    try {
-      const saved = localStorage.getItem("umesc_carousel_convites");
-      return saved ? JSON.parse(saved) : INITIAL_CONVITES;
-    } catch {
-      return INITIAL_CONVITES;
-    }
-  });
-
-  const [eventos, setEventos] = useState(() => {
-    try {
-      const saved = localStorage.getItem("umesc_carousel_eventos");
-      return saved ? JSON.parse(saved) : INITIAL_EVENTOS;
-    } catch {
-      return INITIAL_EVENTOS;
-    }
-  });
+  // Load dynamic content with fallback to default official UMESC slides
+  const [convites, setConvites] = useState<ConviteSlide[]>(getStoredConvites);
+  const [eventos, setEventos] = useState<EventoSlide[]>(getStoredEventos);
 
   // Carousel State for Convites
   const [convitesIndex, setConvitesIndex] = useState(0);
@@ -53,50 +26,36 @@ export default function CarouselsSection() {
   useEffect(() => {
     const handleReload = () => {
       try {
-        const savedConvites = localStorage.getItem("umesc_carousel_convites");
-        setConvites(savedConvites ? JSON.parse(savedConvites) : INITIAL_CONVITES);
+        setConvites(getStoredConvites());
         setConvitesIndex(0);
         
-        const savedEventos = localStorage.getItem("umesc_carousel_eventos");
-        setEventos(savedEventos ? JSON.parse(savedEventos) : INITIAL_EVENTOS);
+        setEventos(getStoredEventos());
         setEventosIndex(0);
       } catch (err) {
         console.error("Error reloading carousels:", err);
       }
     };
+
     window.addEventListener("umesc_content_updated", handleReload);
-    return () => window.removeEventListener("umesc_content_updated", handleReload);
+    window.addEventListener("storage", handleReload);
+    return () => {
+      window.removeEventListener("umesc_content_updated", handleReload);
+      window.removeEventListener("storage", handleReload);
+    };
   }, []);
 
   // Safeguard index transitions when slide array size changes
   useEffect(() => {
-    if (convitesIndex >= convites.length) {
+    if (convitesIndex >= convites.length && convites.length > 0) {
       setConvitesIndex(0);
     }
   }, [convites, convitesIndex]);
 
   useEffect(() => {
-    if (eventosIndex >= eventos.length) {
+    if (eventosIndex >= eventos.length && eventos.length > 0) {
       setEventosIndex(0);
     }
   }, [eventos, eventosIndex]);
-
-  // Auto Play Loops
-  useEffect(() => {
-    if (!convitesPlaying || convites.length <= 1) return;
-    const interval = setInterval(() => {
-      handleNextConvite();
-    }, 4500);
-    return () => clearInterval(interval);
-  }, [convitesIndex, convitesPlaying, convites]);
-
-  useEffect(() => {
-    if (!eventosPlaying || eventos.length <= 1) return;
-    const interval = setInterval(() => {
-      handleNextEvento();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [eventosIndex, eventosPlaying, eventos]);
 
   // Handlers for Convites Navigation
   const handlePrevConvite = () => {
@@ -134,6 +93,23 @@ export default function CarouselsSection() {
     setEventosIndex(index);
   };
 
+  // Auto Play Loops
+  useEffect(() => {
+    if (!convitesPlaying || convites.length <= 1) return;
+    const interval = setInterval(() => {
+      handleNextConvite();
+    }, 4500);
+    return () => clearInterval(interval);
+  }, [convitesIndex, convitesPlaying, convites]);
+
+  useEffect(() => {
+    if (!eventosPlaying || eventos.length <= 1) return;
+    const interval = setInterval(() => {
+      handleNextEvento();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [eventosIndex, eventosPlaying, eventos]);
+
   // Variants for slide transition inside limited boxes
   const slideVariants = {
     enter: (direction: number) => ({
@@ -159,7 +135,7 @@ export default function CarouselsSection() {
   const currentEvento = eventos[eventosIndex];
 
   return (
-    <section id="mural" className="py-16 bg-[#070c18] border-t border-white/5 relative">
+    <section id="mural" className="py-12 sm:py-16 bg-[#070c18] border-t border-white/5 relative">
       
       {/* Absolute top grid divider lines */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,#1e293b/30,transparent_55%)] pointer-events-none" />
@@ -167,11 +143,11 @@ export default function CarouselsSection() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
         
         {/* Module Header */}
-        <div className="max-w-3xl mx-auto mb-12">
+        <div className="max-w-3xl mx-auto mb-8 sm:mb-12">
           <span className="text-[10px] uppercase font-black tracking-widest text-amber-500 font-mono">
             Mural Informativo Geral UMESC SC
           </span>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white mt-1 uppercase tracking-tight font-display">
+          <h2 className="text-xl sm:text-3xl font-extrabold text-white mt-1 uppercase tracking-tight font-display">
             Avisos de Uniforme e Socorros Regionais
           </h2>
           <p className="text-slate-400 text-xs mt-2 max-w-xl mx-auto leading-relaxed">
@@ -180,22 +156,22 @@ export default function CarouselsSection() {
         </div>
 
         {/* Dual Carousels Grid Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-start">
           
           {/* CAROUSEL 1: CONVITES (INVITATIONS) */}
-          <div className="bg-[#0b1220] rounded-2xl border border-white/5 p-4 sm:p-5 flex flex-col justify-between min-h-[420px] sm:h-[450px]">
+          <div className="bg-[#0b1220] rounded-2xl border border-white/5 p-4 sm:p-5 flex flex-col justify-between min-h-[380px] sm:min-h-[440px]">
             
             {/* Carousel title block */}
-            <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4 gap-2">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-3 sm:mb-4 gap-2">
               <div className="flex items-center gap-2 text-amber-500 min-w-0 flex-1">
-                <Megaphone className="w-5 h-5 shrink-0" />
-                <span className="font-extrabold text-[10px] sm:text-xs uppercase text-white tracking-wider font-display break-words">
+                <Megaphone className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="font-extrabold text-xs sm:text-xs uppercase text-white tracking-wider font-display break-words text-left">
                   Convites Estaduais & Campanhas
                 </span>
               </div>
               <button 
                 onClick={() => setConvitesPlaying(!convitesPlaying)} 
-                className="text-slate-400 hover:text-white transition-colors shrink-0 p-1 rounded hover:bg-white/5"
+                className="text-slate-400 hover:text-white transition-colors shrink-0 p-1.5 rounded hover:bg-white/5 cursor-pointer"
                 title={convitesPlaying ? "Pausar Reprodução Automática" : "Iniciar Reprodução Automática"}
               >
                 {convitesPlaying ? <Pause className="w-4 h-4 shrink-0" /> : <Play className="w-4 h-4 shrink-0" />}
@@ -203,7 +179,7 @@ export default function CarouselsSection() {
             </div>
 
             {/* Slider visual frame */}
-            <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5 min-h-[250px] sm:min-h-[300px]">
+            <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5 min-h-[260px] sm:min-h-[300px]">
               
               {convites.length > 0 && currentConvite ? (
                 <AnimatePresence initial={false} custom={convitesDirection} mode="popLayout">
@@ -226,32 +202,32 @@ export default function CarouselsSection() {
                       }}
                     />
                     
-                    {/* Subtle dark gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-black/20" />
+                    {/* Dark gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-black/30" />
 
                     {/* Top-left design tag badge */}
-                    <span className="absolute top-3 left-3 bg-amber-500 text-slate-950 font-black text-[9px] uppercase tracking-widest px-2.5 py-1 rounded shadow-md font-mono">
+                    <span className="absolute top-3 left-3 bg-amber-500 text-slate-950 font-black text-[9px] uppercase tracking-widest px-2.5 py-1 rounded shadow-md font-mono z-10">
                       {currentConvite.tag}
                     </span>
 
-                    {/* Top-right zoom action button */}
+                    {/* Top-right zoom action button - ALWAYS visible on mobile for touch accessibility */}
                     <button
-                      onClick={() => setLightboxImage(currentConvite.image)}
+                      onClick={() => setLightboxImage(getCleanImageUrl(currentConvite.image))}
                       title="Visualizar Imagem Completa"
-                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[#070c18]/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity active:scale-90"
+                      className="absolute top-3 right-3 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-[#070c18]/85 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity active:scale-90 z-10 cursor-pointer shadow-lg"
                     >
                       <Eye className="w-4 h-4 text-amber-400" />
                     </button>
 
                     {/* Text Details absolute bottom */}
-                    <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 text-left bg-gradient-to-t from-slate-950 to-transparent">
+                    <div className="absolute bottom-0 inset-x-0 p-3.5 sm:p-5 text-left bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent">
                       <span className="text-[10px] text-amber-400 font-mono font-bold block mb-1">
                         🔔 {currentConvite.date}
                       </span>
-                      <h4 className="text-sm sm:text-base font-extrabold text-white uppercase tracking-tight line-clamp-1">
+                      <h4 className="text-xs sm:text-base font-extrabold text-white uppercase tracking-tight line-clamp-1">
                         {currentConvite.title}
                       </h4>
-                      <p className="text-[11px] text-slate-300 leading-relaxed mt-1 line-clamp-2">
+                      <p className="text-[10.5px] sm:text-[11px] text-slate-300 leading-snug mt-1 line-clamp-2">
                         {currentConvite.description}
                       </p>
                     </div>
@@ -270,15 +246,15 @@ export default function CarouselsSection() {
                 <>
                   <button 
                     onClick={handlePrevConvite}
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/60 backdrop-blur-sm border border-white/5 hover:bg-slate-900 flex items-center justify-center text-slate-200 active:scale-95 transition-all z-10"
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-slate-950/75 backdrop-blur-sm border border-white/10 hover:bg-slate-900 flex items-center justify-center text-slate-200 active:scale-95 transition-all z-20 cursor-pointer shadow-md"
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <ChevronLeft className="w-5 h-5 sm:w-4 sm:h-4" />
                   </button>
                   <button 
                     onClick={handleNextConvite}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/60 backdrop-blur-sm border border-white/5 hover:bg-slate-900 flex items-center justify-center text-slate-200 active:scale-95 transition-all z-10"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-slate-950/75 backdrop-blur-sm border border-white/10 hover:bg-slate-900 flex items-center justify-center text-slate-200 active:scale-95 transition-all z-20 cursor-pointer shadow-md"
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4" />
                   </button>
                 </>
               )}
@@ -286,17 +262,17 @@ export default function CarouselsSection() {
 
             {/* Pagination elements */}
             {convites.length > 0 && (
-              <div className="flex items-center justify-between mt-4">
+              <div className="flex items-center justify-between mt-3 sm:mt-4">
                 <span className="text-[10px] text-slate-400 font-mono bg-white/5 px-2 py-0.5 rounded">
                   SLIDE {convitesIndex + 1} DE {convites.length}
                 </span>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-1.5 sm:gap-2">
                   {convites.map((_, i) => (
                     <button
                       key={i}
                       onClick={() => setConvitesSlideDirect(i)}
-                      className={`h-2 rounded-full transition-all duration-300 ${
+                      className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
                         convitesIndex === i ? "w-6 bg-amber-500" : "w-2 bg-white/10 hover:bg-white/20"
                       }`}
                       title={`Ir para slide ${i + 1}`}
@@ -309,17 +285,19 @@ export default function CarouselsSection() {
           </div>
 
           {/* CAROUSEL 2: EVENTOS (EVENTS) */}
-          <div className="bg-[#0b1220] rounded-2xl border border-white/5 p-4 sm:p-5 flex flex-col justify-between min-h-[420px] sm:h-[450px]">
+          <div className="bg-[#0b1220] rounded-2xl border border-white/5 p-4 sm:p-5 flex flex-col justify-between min-h-[380px] sm:min-h-[440px]">
             
             {/* Carousel title block */}
-            <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-4 gap-2">
+            <div className="flex items-center justify-between border-b border-white/5 pb-3 mb-3 sm:mb-4 gap-2">
               <div className="flex items-center gap-2 text-teal-400 min-w-0 flex-1">
-                <Calendar className="w-5 h-5 shrink-0" />
-                <span className="font-extrabold text-[10px] sm:text-xs uppercase text-white tracking-wider font-display break-words">Ações Sociais & Atividades</span>
+                <Calendar className="w-4 h-4 sm:w-5 sm:h-5 shrink-0" />
+                <span className="font-extrabold text-xs sm:text-xs uppercase text-white tracking-wider font-display break-words text-left">
+                  Ações Sociais & Atividades
+                </span>
               </div>
               <button 
                 onClick={() => setEventosPlaying(!eventosPlaying)} 
-                className="text-slate-400 hover:text-white transition-colors shrink-0 p-1 rounded hover:bg-white/5"
+                className="text-slate-400 hover:text-white transition-colors shrink-0 p-1.5 rounded hover:bg-white/5 cursor-pointer"
                 title={eventosPlaying ? "Pausar Reprodução" : "Iniciar Reprodução"}
               >
                 {eventosPlaying ? <Pause className="w-4 h-4 shrink-0" /> : <Play className="w-4 h-4 shrink-0" />}
@@ -327,7 +305,7 @@ export default function CarouselsSection() {
             </div>
 
             {/* Slider visual frame */}
-            <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5 min-h-[250px] sm:min-h-[300px]">
+            <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5 min-h-[260px] sm:min-h-[300px]">
               
               {eventos.length > 0 && currentEvento ? (
                 <AnimatePresence initial={false} custom={eventosDirection} mode="popLayout">
@@ -350,32 +328,32 @@ export default function CarouselsSection() {
                       }}
                     />
                     
-                    {/* Subtle dark gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-black/20" />
+                    {/* Dark gradient overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-black/30" />
 
                     {/* Top-left design tag badge */}
-                    <span className="absolute top-3 left-3 bg-teal-500 text-slate-950 font-black text-[9px] uppercase tracking-widest px-2.5 py-1 rounded shadow-md font-mono">
+                    <span className="absolute top-3 left-3 bg-teal-500 text-slate-950 font-black text-[9px] uppercase tracking-widest px-2.5 py-1 rounded shadow-md font-mono z-10">
                       {currentEvento.tag}
                     </span>
 
-                    {/* Top-right zoom action button */}
+                    {/* Top-right zoom action button - ALWAYS visible on mobile */}
                     <button
-                      onClick={() => setLightboxImage(currentEvento.image)}
+                      onClick={() => setLightboxImage(getCleanImageUrl(currentEvento.image))}
                       title="Visualizar Imagem Completa"
-                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[#070c18]/80 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity active:scale-90"
+                      className="absolute top-3 right-3 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-[#070c18]/85 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity active:scale-90 z-10 cursor-pointer shadow-lg"
                     >
                       <Eye className="w-4 h-4 text-teal-400" />
                     </button>
 
                     {/* Text Details absolute bottom */}
-                    <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 text-left bg-gradient-to-t from-slate-950 to-transparent">
+                    <div className="absolute bottom-0 inset-x-0 p-3.5 sm:p-5 text-left bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent">
                       <span className="text-[10px] text-teal-400 font-mono font-bold block mb-1">
                         📍 {currentEvento.place}
                       </span>
-                      <h4 className="text-sm sm:text-base font-extrabold text-white uppercase tracking-tight line-clamp-1">
+                      <h4 className="text-xs sm:text-base font-extrabold text-white uppercase tracking-tight line-clamp-1">
                         {currentEvento.title}
                       </h4>
-                      <p className="text-[11px] text-slate-300 leading-relaxed mt-1 line-clamp-2">
+                      <p className="text-[10.5px] sm:text-[11px] text-slate-300 leading-snug mt-1 line-clamp-2">
                         {currentEvento.description}
                       </p>
                     </div>
@@ -394,15 +372,15 @@ export default function CarouselsSection() {
                 <>
                   <button 
                     onClick={handlePrevEvento}
-                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/60 backdrop-blur-sm border border-white/5 hover:bg-slate-900 flex items-center justify-center text-slate-200 active:scale-95 transition-all z-10"
+                    className="absolute left-2.5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-slate-950/75 backdrop-blur-sm border border-white/10 hover:bg-slate-900 flex items-center justify-center text-slate-200 active:scale-95 transition-all z-20 cursor-pointer shadow-md"
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <ChevronLeft className="w-5 h-5 sm:w-4 sm:h-4" />
                   </button>
                   <button 
                     onClick={handleNextEvento}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-950/60 backdrop-blur-sm border border-white/5 hover:bg-slate-900 flex items-center justify-center text-slate-200 active:scale-95 transition-all z-10"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-slate-950/75 backdrop-blur-sm border border-white/10 hover:bg-slate-900 flex items-center justify-center text-slate-200 active:scale-95 transition-all z-20 cursor-pointer shadow-md"
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-5 h-5 sm:w-4 sm:h-4" />
                   </button>
                 </>
               )}
@@ -410,17 +388,17 @@ export default function CarouselsSection() {
 
             {/* Pagination elements */}
             {eventos.length > 0 && (
-              <div className="flex items-center justify-between mt-4">
+              <div className="flex items-center justify-between mt-3 sm:mt-4">
                 <span className="text-[10px] text-slate-400 font-mono bg-white/5 px-2 py-0.5 rounded">
                   REGISTRO {eventosIndex + 1} DE {eventos.length}
                 </span>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-1.5 sm:gap-2">
                   {eventos.map((_, i) => (
                     <button
                       key={i}
                       onClick={() => setEventosSlideDirect(i)}
-                      className={`h-2 rounded-full transition-all duration-300 ${
+                      className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
                         eventosIndex === i ? "w-6 bg-teal-400" : "w-2 bg-white/10 hover:bg-white/20"
                       }`}
                       title={`Ir para slide ${i + 1}`}
@@ -456,7 +434,7 @@ export default function CarouselsSection() {
               <img
                 src={lightboxImage}
                 alt="Fullscreen View"
-                className="max-w-full max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl"
+                className="max-w-full max-h-[80vh] sm:max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl"
                 referrerPolicy="no-referrer"
               />
               <button
