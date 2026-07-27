@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { 
   Calendar, Users, BookOpen, Layers, Plus, Trash2, Edit, Check, X,
   Search, ShieldAlert, BarChart2, DollarSign, Award, CheckCircle2, AlertTriangle,
-  QrCode, UserCheck, Inbox, UploadCloud, Info, RefreshCw, FileText, Star
+  QrCode, UserCheck, Inbox, UploadCloud, Info, RefreshCw, FileText, Star, ShieldCheck, AlertCircle
 } from "lucide-react";
 import { congressService, Congress, CongressInscription, Workshop, AgendaItem } from "../lib/congressService.ts";
 
@@ -19,6 +19,10 @@ export default function CongressoManager() {
   const [statusFilter, setStatusFilter] = useState<string>("todos");
   const [selectedIns, setSelectedIns] = useState<CongressInscription | null>(null);
   const [selectedReceiptForPreview, setSelectedReceiptForPreview] = useState<CongressInscription | null>(null);
+
+  // Duplicate verification modal state
+  const [isDupModalOpen, setIsDupModalOpen] = useState(false);
+  const [dupTab, setDupTab] = useState<"todos" | "cpf" | "nome">("todos");
 
   // Custom confirmation modal state for accidental clicks
   const [confirmModal, setConfirmModal] = useState<{
@@ -329,6 +333,89 @@ export default function CongressoManager() {
     });
   };
 
+  // Helper to handle deleting a duplicate inscription record
+  const handleDeleteDuplicateEntry = (insId: string, memberName: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Excluir Inscrição Duplicada?",
+      message: `Tem certeza que deseja excluir permanentemente esta inscrição duplicada de "${memberName}" (${insId}) deste evento? Os workshops vinculados serão atualizados.`,
+      actionLabel: "Sim, Excluir Duplicada",
+      onConfirm: () => {
+        const filtered = inscriptions.filter(i => i.id !== insId);
+        const targetIns = inscriptions.find(i => i.id === insId);
+        if (targetIns) {
+          const cong = congresses.find(c => c.id === targetIns.congressId);
+          if (cong) {
+            cong.workshops = cong.workshops.map(ws => {
+              if (targetIns.selectedWorkshopIds.includes(ws.id)) {
+                return { ...ws, registeredCount: Math.max(0, ws.registeredCount - 1) };
+              }
+              return ws;
+            });
+            congressService.updateCongress(cong);
+          }
+        }
+        congressService.saveInscriptions(filtered);
+        loadData();
+        if (selectedIns?.id === insId) setSelectedIns(null);
+        setConfirmModal(null);
+      }
+    });
+  };
+
+  // Analyze duplicates strictly for the active selected congress
+  const getCongressDuplicates = (congressId: string) => {
+    const congressInscriptions = inscriptions.filter(i => i.congressId === congressId);
+    
+    // Group by cleaned CPF (digits only)
+    const cpfMap: Record<string, CongressInscription[]> = {};
+    // Group by normalized Name (lowercase, trimmed)
+    const nameMap: Record<string, CongressInscription[]> = {};
+
+    congressInscriptions.forEach(ins => {
+      const cleanCpf = ins.memberCpf ? ins.memberCpf.replace(/\D/g, "") : "";
+      if (cleanCpf && cleanCpf.length >= 8 && cleanCpf !== "00000000000") {
+        if (!cpfMap[cleanCpf]) cpfMap[cleanCpf] = [];
+        cpfMap[cleanCpf].push(ins);
+      }
+
+      const cleanName = ins.memberName ? ins.memberName.trim().toLowerCase().replace(/\s+/g, " ") : "";
+      if (cleanName && cleanName.length >= 3) {
+        if (!nameMap[cleanName]) nameMap[cleanName] = [];
+        nameMap[cleanName].push(ins);
+      }
+    });
+
+    const cpfGroups = Object.entries(cpfMap)
+      .filter(([_, list]) => list.length > 1)
+      .map(([key, list]) => ({
+        type: "cpf" as const,
+        key,
+        displayValue: list[0].memberCpf,
+        inscriptions: list
+      }));
+
+    const nameGroups = Object.entries(nameMap)
+      .filter(([_, list]) => list.length > 1)
+      .map(([key, list]) => ({
+        type: "nome" as const,
+        key,
+        displayValue: list[0].memberName,
+        inscriptions: list
+      }));
+
+    const dupIds = new Set<string>();
+    cpfGroups.forEach(g => g.inscriptions.forEach(i => dupIds.add(i.id)));
+    nameGroups.forEach(g => g.inscriptions.forEach(i => dupIds.add(i.id)));
+
+    return {
+      cpfGroups,
+      nameGroups,
+      totalDuplicateEntries: dupIds.size,
+      dupIds
+    };
+  };
+
   // Manual Check-in Simulator by Input Token
   const handleCheckinByToken = (e: React.FormEvent) => {
     e.preventDefault();
@@ -559,15 +646,41 @@ export default function CongressoManager() {
             
             <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
               
-              <div className="relative w-full md:max-w-xs">
-                <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-500" />
-                <input
-                  type="text"
-                  placeholder="Pesquisar inscrito por Nome ou CPF..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 bg-[#09101a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-amber-500"
-                />
+              <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center w-full md:w-auto">
+                <div className="relative w-full sm:w-56">
+                  <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Pesquisar por Nome ou CPF..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 bg-[#09101a] border border-white/10 rounded-lg text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                {(() => {
+                  const dupStats = getCongressDuplicates(selectedCongressId);
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setIsDupModalOpen(true)}
+                      className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 border ${
+                        dupStats.totalDuplicateEntries > 0
+                          ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border-amber-500/40 shadow-sm"
+                          : "bg-[#09101a] hover:bg-slate-800 text-slate-300 border-white/10"
+                      }`}
+                      title="Verificar duplicidades de Nome e CPF no evento"
+                    >
+                      <ShieldAlert className={`w-3.5 h-3.5 ${dupStats.totalDuplicateEntries > 0 ? "text-amber-400 animate-pulse" : "text-slate-400"}`} />
+                      <span>Verificar Duplicidades</span>
+                      {dupStats.totalDuplicateEntries > 0 && (
+                        <span className="px-1.5 py-0.2 bg-amber-500 text-slate-950 rounded-full text-[10px] font-black">
+                          {dupStats.totalDuplicateEntries}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })()}
               </div>
 
               {/* Status Filter pill group */}
@@ -1671,6 +1784,237 @@ export default function CongressoManager() {
               </div>
 
             </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: VERIFICAR DUPLICIDADES (NOME E CPF) */}
+      {isDupModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#0b1220] border border-amber-500/30 rounded-2xl p-5 sm:p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl space-y-5 text-left">
+            
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-white/5 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0 border border-amber-500/20">
+                  <ShieldAlert className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-white uppercase tracking-tight font-display">
+                    Auditoria de Duplicidades por Nome e CPF
+                  </h3>
+                  <p className="text-xs text-amber-400 font-medium">
+                    Evento: <strong className="text-white">{activeCongress?.title || "Selecionado"}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDupModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Rules Info banner */}
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-slate-300 space-y-1">
+              <div className="flex items-center gap-2 font-bold text-amber-400">
+                <Info className="w-4 h-4 shrink-0" />
+                <span>Regras de Auditoria de Duplicidades:</span>
+              </div>
+              <ul className="list-disc pl-5 space-y-1 text-[11px] text-slate-300 leading-relaxed">
+                <li>O mesmo número de <strong>telefone É PERMITIDO</strong> para realizar múltiplas inscrições.</li>
+                <li>A verificação busca exclusivamente por <strong>Nomes ou CPFs idênticos</strong> na lista de inscritos do <strong>evento selecionado</strong>.</li>
+                <li>Inscrições com o mesmo Nome ou CPF em <em>outros congressos</em> não são consideradas duplicadas.</li>
+              </ul>
+            </div>
+
+            {/* Filter Tabs and Groups */}
+            {(() => {
+              const dupData = getCongressDuplicates(selectedCongressId);
+              return (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 border-b border-white/5 pb-2 overflow-x-auto">
+                    <button
+                      type="button"
+                      onClick={() => setDupTab("todos")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer ${
+                        dupTab === "todos"
+                          ? "bg-amber-500 text-slate-950"
+                          : "bg-slate-900 text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      Todos ({dupData.totalDuplicateEntries})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDupTab("cpf")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer ${
+                        dupTab === "cpf"
+                          ? "bg-amber-500 text-slate-950"
+                          : "bg-slate-900 text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      CPF Duplicado ({dupData.cpfGroups.length} grupos)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDupTab("nome")}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all cursor-pointer ${
+                        dupTab === "nome"
+                          ? "bg-amber-500 text-slate-950"
+                          : "bg-slate-900 text-slate-400 hover:text-white"
+                      }`}
+                    >
+                      Nome Duplicado ({dupData.nameGroups.length} grupos)
+                    </button>
+                  </div>
+
+                  {/* Empty state */}
+                  {dupData.totalDuplicateEntries === 0 ? (
+                    <div className="p-8 text-center bg-[#09101a] rounded-2xl border border-teal-500/20 space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-teal-500/10 text-teal-400 flex items-center justify-center mx-auto">
+                        <ShieldCheck className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-sm font-bold text-teal-400 uppercase tracking-wide">
+                        Nenhuma duplicidade encontrada!
+                      </h4>
+                      <p className="text-xs text-slate-300 max-w-md mx-auto">
+                        Não existem nomes ou CPFs duplicados na lista de inscritos deste evento. Todas as inscrições para <strong className="text-white">{activeCongress?.title}</strong> são únicas.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* CPF Groups */}
+                      {(dupTab === "todos" || dupTab === "cpf") && dupData.cpfGroups.map(group => (
+                        <div key={`cpf-${group.key}`} className="p-4 bg-[#0d1626] rounded-xl border border-amber-500/20 space-y-3">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 font-mono text-[10px] font-bold rounded uppercase">
+                                CPF Duplicado
+                              </span>
+                              <span className="font-mono font-bold text-white text-sm">
+                                {group.displayValue}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-400 font-semibold">
+                              {group.inscriptions.length} inscrições com este CPF
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            {group.inscriptions.map((ins) => (
+                              <div key={ins.id} className="p-3 bg-[#060c16] rounded-lg border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono text-amber-500 font-bold">{ins.id}</span>
+                                    <span className="font-bold text-white">{ins.memberName}</span>
+                                    <span className="text-[10px] text-slate-400">({ins.memberRank})</span>
+                                    <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase ${
+                                      ins.paymentStatus === "pago"
+                                        ? "bg-teal-500/10 text-teal-400"
+                                        : ins.paymentStatus === "em_analise"
+                                          ? "bg-amber-500/15 text-amber-400"
+                                          : "bg-slate-800 text-slate-400"
+                                    }`}>
+                                      {ins.paymentStatus}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 flex flex-wrap gap-x-4">
+                                    <span>Fone: {ins.memberPhone}</span>
+                                    <span>E-mail: {ins.memberEmail}</span>
+                                    <span>Data: {new Date(ins.registrationDate).toLocaleDateString("pt-BR")}</span>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDuplicateEntry(ins.id, ins.memberName)}
+                                  className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 self-start sm:self-center"
+                                  title="Excluir este registro duplicado"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Excluir Inscrição Duplicada</span>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Name Groups */}
+                      {(dupTab === "todos" || dupTab === "nome") && dupData.nameGroups.map(group => (
+                        <div key={`nome-${group.key}`} className="p-4 bg-[#0d1626] rounded-xl border border-indigo-500/20 space-y-3">
+                          <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 bg-indigo-500/20 text-indigo-400 font-mono text-[10px] font-bold rounded uppercase">
+                                Nome Duplicado
+                              </span>
+                              <span className="font-bold text-white text-sm uppercase">
+                                {group.displayValue}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-slate-400 font-semibold">
+                              {group.inscriptions.length} inscrições com este nome
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            {group.inscriptions.map((ins) => (
+                              <div key={ins.id} className="p-3 bg-[#060c16] rounded-lg border border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-mono text-indigo-400 font-bold">{ins.id}</span>
+                                    <span className="font-bold text-white">{ins.memberName}</span>
+                                    <span className="text-[10px] text-slate-400">({ins.memberRank})</span>
+                                    <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold uppercase ${
+                                      ins.paymentStatus === "pago"
+                                        ? "bg-teal-500/10 text-teal-400"
+                                        : ins.paymentStatus === "em_analise"
+                                          ? "bg-amber-500/15 text-amber-400"
+                                          : "bg-slate-800 text-slate-400"
+                                    }`}>
+                                      {ins.paymentStatus}
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 flex flex-wrap gap-x-4">
+                                    <span>CPF: {ins.memberCpf}</span>
+                                    <span>Fone: {ins.memberPhone}</span>
+                                    <span>Data: {new Date(ins.registrationDate).toLocaleDateString("pt-BR")}</span>
+                                  </div>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteDuplicateEntry(ins.id, ins.memberName)}
+                                  className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0 self-start sm:self-center"
+                                  title="Excluir este registro duplicado"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span>Excluir Inscrição Duplicada</span>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setIsDupModalOpen(false)}
+                      className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-xs rounded-xl border border-white/5 cursor-pointer"
+                    >
+                      Fechar Auditoria
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
           </div>
         </div>

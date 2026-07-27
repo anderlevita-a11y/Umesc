@@ -2,10 +2,131 @@ import React, { useState, useEffect } from "react";
 import { 
   Users, Search, Plus, Edit, Trash2, ShieldCheck, RefreshCw, X, Check, Filter, 
   MapPin, Hash, Phone, Calendar, Group, Briefcase, FileSpreadsheet, PlusCircle,
-  ShieldAlert, AlertTriangle, Layers, Upload
+  ShieldAlert, AlertTriangle, Layers, Upload, Gift, Cake
 } from "lucide-react";
 import { SecretariaMember } from "../types";
 import { secretariaMembersService } from "../lib/supabase";
+
+// Helper functions for birthday filtering and card links
+const parseBirthDate = (dateStr: string) => {
+  if (!dateStr) return null;
+  const dateOnly = dateStr.split("T")[0].trim();
+  const parts = dateOnly.split(/[-/.\s]+/);
+  if (parts.length < 2) return null;
+
+  let yearIndex = -1;
+  for (let i = 0; i < parts.length; i++) {
+    if (parts[i].length === 4 && !isNaN(Number(parts[i]))) {
+      yearIndex = i;
+      break;
+    }
+  }
+
+  let day = NaN;
+  let month = NaN; // 0-indexed
+
+  if (yearIndex === 0) {
+    month = parseInt(parts[1], 10) - 1;
+    day = parseInt(parts[2], 10);
+  } else if (yearIndex === 2 || (parts.length >= 3 && yearIndex === parts.length - 1)) {
+    day = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10) - 1;
+  } else {
+    const p0 = parseInt(parts[0], 10);
+    const p1 = parseInt(parts[1], 10);
+    if (p0 > 12) {
+      day = p0;
+      month = p1 - 1;
+    } else if (p1 > 12) {
+      day = p1;
+      month = p0 - 1;
+    } else {
+      day = p0;
+      month = p1 - 1;
+    }
+  }
+
+  if (isNaN(day) || isNaN(month) || month < 0 || month > 11 || day < 1 || day > 31) {
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        if (dateStr.includes("T") || dateStr.includes("Z")) {
+          return { month: d.getUTCMonth(), day: d.getUTCDate() };
+        } else {
+          return { month: d.getMonth(), day: d.getDate() };
+        }
+      }
+    } catch (e) {
+      return null;
+    }
+    return null;
+  }
+
+  return { month, day };
+};
+
+const isBirthdayThisMonth = (birthDateStr: string | undefined) => {
+  if (!birthDateStr) return false;
+  const parsed = parseBirthDate(birthDateStr);
+  if (!parsed) return false;
+  const now = new Date();
+  return parsed.month === now.getMonth();
+};
+
+const isBirthdayThisWeek = (birthDateStr: string | undefined) => {
+  if (!birthDateStr) return false;
+  const parsed = parseBirthDate(birthDateStr);
+  if (!parsed) return false;
+  
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  
+  const startOfWeek = new Date(now);
+  const dayOfWeek = now.getDay();
+  startOfWeek.setDate(now.getDate() - dayOfWeek);
+  startOfWeek.setHours(0, 0, 0, 0);
+  
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 6);
+  endOfWeek.setHours(23, 59, 59, 999);
+  
+  const bdayThisYear = new Date(currentYear, parsed.month, parsed.day);
+  if (bdayThisYear >= startOfWeek && bdayThisYear <= endOfWeek) return true;
+  
+  const bdayPrevYear = new Date(currentYear - 1, parsed.month, parsed.day);
+  if (bdayPrevYear >= startOfWeek && bdayPrevYear <= endOfWeek) return true;
+  
+  const bdayNextYear = new Date(currentYear + 1, parsed.month, parsed.day);
+  if (bdayNextYear >= startOfWeek && bdayNextYear <= endOfWeek) return true;
+  
+  return false;
+};
+
+const formatBirthDate = (dateStr: string | undefined) => {
+  if (!dateStr) return "Não cadastrado";
+  const parsed = parseBirthDate(dateStr);
+  if (!parsed) return dateStr;
+  const months = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+  return `${parsed.day} de ${months[parsed.month]}`;
+};
+
+const getBirthdayWhatsAppLinkSec = (m: SecretariaMember) => {
+  const cleanCod = m.cod ? m.cod.replace(/\D/g, "") : "";
+  const cleanPhone = m.telefone ? m.telefone.replace(/\D/g, "") : "";
+  if (!cleanPhone) return "";
+  
+  let fullNumber = `${cleanCod}${cleanPhone}`;
+  if (!fullNumber.startsWith("55") && fullNumber.length >= 10) {
+    fullNumber = `55${fullNumber}`;
+  }
+  
+  const msg = `Olá, *${m.nome}*! 🎉\n\nA diretoria da *UMESC* (União de Militares Evangélicos de Santa Catarina) deseja a você um feliz aniversário! 🎂\n\nQue o Senhor Deus o abençoe ricamente, fortalecendo sua fé, sua família e sua honrada caminhada ministerial e militar. 🛡️✨\n\nReceba o nosso carinho e este cartão especial de felicitações:\nhttps://qndjkphfsejuqopmfgas.supabase.co/storage/v1/object/public/bennes%20convites%20e%20eventos/feliz%20aniversario%202026.jpeg`;
+  
+  return `https://api.whatsapp.com/send?phone=${fullNumber}&text=${encodeURIComponent(msg)}`;
+};
 
 // @ts-ignore
 import rawOcrText from "../data/raw_ocr.txt?raw";
@@ -217,6 +338,18 @@ export default function SecretariaMembersSection() {
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [opmFilter, setOpmFilter] = useState<string>("all");
   const [cityFilter, setCityFilter] = useState<string>("all");
+  const [bdayFilter, setBdayFilter] = useState<"all" | "bday_week" | "bday_month">("all");
+
+  const [sentBdayCards, setSentBdayCards] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem("umesc_sent_bday_cards_sec");
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const toggleBdayCardSent = (matricula: string) => {
+    const updated = { ...sentBdayCards, [matricula]: !sentBdayCards[matricula] };
+    setSentBdayCards(updated);
+    localStorage.setItem("umesc_sent_bday_cards_sec", JSON.stringify(updated));
+  };
   
   // Custom batch register & bulk delete states
   const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
@@ -716,13 +849,19 @@ export default function SecretariaMembersSection() {
 
   // Filtered members list
   const filteredMembers = members.filter((m) => {
-    const searchString = `${m.nome} ${m.matricula} ${m.cidade} ${m.grupo} ${m.telefone}`.toLowerCase();
+    const searchString = `${m.nome} ${m.matricula} ${m.cidade} ${m.grupo} ${m.telefone} ${m.cod} ${m.opm} ${m.dataNascimento}`.toLowerCase();
     const matchesSearch = searchString.includes(searchTerm.toLowerCase());
     
     const matchesOpm = opmFilter === "all" || m.opm === opmFilter;
     const matchesCity = cityFilter === "all" || m.cidade === cityFilter;
+    const matchesBday =
+      bdayFilter === "all"
+        ? true
+        : bdayFilter === "bday_week"
+          ? isBirthdayThisWeek(m.dataNascimento)
+          : isBirthdayThisMonth(m.dataNascimento);
 
-    return matchesSearch && matchesOpm && matchesCity;
+    return matchesSearch && matchesOpm && matchesCity && matchesBday;
   });
 
   return (
@@ -740,40 +879,12 @@ export default function SecretariaMembersSection() {
 
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
           <button
-            onClick={fetchMembers}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold uppercase rounded-xl transition-all cursor-pointer border border-white/5"
-            title="Atualizar dados"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-amber-500" : ""}`} />
-            Sincronizar
-          </button>
-
-          <button
-            onClick={() => setIsDupModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-amber-500 hover:text-amber-400 text-xs font-bold uppercase rounded-xl transition-all cursor-pointer border border-amber-550/30"
-            title="Verificar duplicidades e comparar com o PDF"
-          >
-            <ShieldAlert className="w-4 h-4 text-amber-500" />
-            Verificar Duplicidades
-          </button>
-
-          <button
             onClick={() => setIsBatchModalOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-950/40 hover:bg-indigo-900/50 text-indigo-400 hover:text-indigo-300 text-xs font-bold uppercase rounded-xl transition-all cursor-pointer border border-indigo-500/20"
             title="Cadastrar múltiplos membros em lote"
           >
             <Layers className="w-4 h-4" />
             Cadastrar em Lote
-          </button>
-
-          <button
-            onClick={handleDeleteAll}
-            disabled={isDeletingAll || members.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 bg-rose-950/40 hover:bg-rose-900/50 text-rose-450 hover:text-rose-400 text-xs font-bold uppercase rounded-xl transition-all cursor-pointer border border-rose-550/20 disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Remover permanentemente todos os registros da base de dados"
-          >
-            <Trash2 className="w-4 h-4" />
-            Remover Todos
           </button>
 
           <button
@@ -833,109 +944,99 @@ export default function SecretariaMembersSection() {
         </div>
       </div>
 
-      {/* Import / Sync OCR Data Box */}
-      {members.length < 2000 && (
-        <div className="bg-amber-500/5 border border-amber-500/20 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 text-left">
-          <div className="space-y-1">
-            <h4 className="text-sm font-bold text-amber-500 uppercase tracking-wider flex items-center gap-2">
-              <FileSpreadsheet className="w-4 h-4 text-amber-500" /> Carga de Dados Disponível (PDF de Cadastros)
-            </h4>
-            <p className="text-slate-300 text-xs max-w-2xl leading-relaxed">
-              Detectamos que a base de dados possui apenas {members.length} membros. O arquivo de cadastro consolidado possui <strong className="text-amber-400">783 membros</strong> prontos para serem importados e vinculados ao seu painel.
-            </p>
-            {importStatus.importing && (
-              <div className="w-full bg-slate-800 h-2.5 rounded-full mt-3 overflow-hidden relative border border-white/5">
-                <div 
-                  className="bg-amber-500 h-full rounded-full transition-all duration-300"
-                  style={{ width: `${importStatus.progress}%` }}
-                ></div>
-              </div>
-            )}
-            {importStatus.success && (
-              <p className="text-emerald-400 text-xs font-bold mt-2 flex items-center gap-1.5">
-                <Check className="w-4 h-4" /> Importação de {importStatus.parsed || 783} membros realizada com sucesso!
-              </p>
-            )}
-            {importStatus.error && (
-              <p className="text-rose-400 text-xs font-bold mt-2">
-                Erro ao importar: {importStatus.error}
-              </p>
-            )}
-          </div>
-
-          <button
-            onClick={handleBulkImport}
-            disabled={importStatus.importing}
-            className={`px-5 py-3 rounded-xl text-xs font-black uppercase transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
-              importStatus.importing
-                ? "bg-slate-800 text-slate-500 border border-white/5"
-                : "bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-lg shadow-amber-500/10"
-            }`}
-          >
-            {importStatus.importing ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Processando ({importStatus.progress}%)
-              </>
-            ) : (
-              <>
-                <PlusCircle className="w-4 h-4" />
-                Importar 783 Cadastros do PDF
-              </>
-            )}
-          </button>
-        </div>
-      )}
 
       {/* Filtering and Search Header */}
-      <div className="bg-[#0b1220]/40 border border-white/5 p-4 rounded-2xl flex flex-col md:flex-row items-stretch md:items-center gap-4">
-        {/* Search */}
-        <div className="flex-1 relative">
-          <Search className="w-4 h-4 text-slate-450 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Buscar por nome, matrícula, cidade, grupo ou telefone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-900/60 border border-white/5 rounded-xl text-xs text-white placeholder-slate-550 focus:outline-none focus:border-amber-500/40 transition-all"
-          />
+      <div className="bg-[#0b1220]/40 border border-white/5 p-4 rounded-2xl space-y-3">
+        {/* Birthday Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2 pb-1 border-b border-white/5">
+          <button
+            type="button"
+            onClick={() => setBdayFilter("all")}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all cursor-pointer ${
+              bdayFilter === "all"
+                ? "bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/10"
+                : "bg-slate-900/60 text-slate-400 hover:text-white border border-white/5"
+            }`}
+          >
+            Todos ({members.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBdayFilter(bdayFilter === "bday_week" ? "all" : "bday_week")}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+              bdayFilter === "bday_week"
+                ? "bg-pink-500/20 text-pink-300 border-pink-500/40 font-black shadow-md shadow-pink-500/10"
+                : "bg-slate-900/60 text-pink-400 hover:bg-pink-500/10 border-white/5 hover:border-pink-500/30"
+            }`}
+          >
+            <Gift className="w-3.5 h-3.5 text-pink-400" />
+            Aniversariantes da Semana ({members.filter(m => isBirthdayThisWeek(m.dataNascimento)).length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBdayFilter(bdayFilter === "bday_month" ? "all" : "bday_month")}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+              bdayFilter === "bday_month"
+                ? "bg-pink-500/20 text-pink-300 border-pink-500/40 font-black shadow-md shadow-pink-500/10"
+                : "bg-slate-900/60 text-pink-400 hover:bg-pink-500/10 border-white/5 hover:border-pink-500/30"
+            }`}
+          >
+            <Cake className="w-3.5 h-3.5 text-pink-400" />
+            Aniversariantes do Mês ({members.filter(m => isBirthdayThisMonth(m.dataNascimento)).length})
+          </button>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row items-stretch gap-2.5 shrink-0">
-          {/* OPM */}
-          <div className="flex items-center gap-1.5 bg-slate-900/40 border border-white/5 rounded-xl px-3 py-1.5">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-[10px] uppercase font-bold text-slate-400">Corporação:</span>
-            <select
-              value={opmFilter}
-              onChange={(e) => setOpmFilter(e.target.value)}
-              className="bg-transparent text-xs text-white border-none focus:ring-0 focus:outline-none cursor-pointer"
-            >
-              <option value="all" className="bg-[#0b1220] text-white">Todos</option>
-              <option value="PM" className="bg-[#0b1220] text-white">PMSC (PM)</option>
-              <option value="BM" className="bg-[#0b1220] text-white">CBMSC (BM)</option>
-              <option value="Civil" className="bg-[#0b1220] text-white">Civil</option>
-              <option value="PC" className="bg-[#0b1220] text-white">Polícia Civil</option>
-            </select>
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 pt-1">
+          {/* Search */}
+          <div className="flex-1 relative">
+            <Search className="w-4 h-4 text-slate-450 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Buscar por nome, matrícula, cidade, grupo ou telefone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-slate-900/60 border border-white/5 rounded-xl text-xs text-white placeholder-slate-550 focus:outline-none focus:border-amber-500/40 transition-all"
+            />
           </div>
 
-          {/* City */}
-          <div className="flex items-center gap-1.5 bg-slate-900/40 border border-white/5 rounded-xl px-3 py-1.5">
-            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-[10px] uppercase font-bold text-slate-400">Cidade:</span>
-            <select
-              value={cityFilter}
-              onChange={(e) => setCityFilter(e.target.value)}
-              className="bg-transparent text-xs text-white border-none focus:ring-0 focus:outline-none cursor-pointer max-w-[150px]"
-            >
-              <option value="all" className="bg-[#0b1220] text-white">Todas</option>
-              {uniqueCities.map((city) => (
-                <option key={city} value={city} className="bg-[#0b1220] text-white">
-                  {city}
-                </option>
-              ))}
-            </select>
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row items-stretch gap-2.5 shrink-0">
+            {/* OPM */}
+            <div className="flex items-center gap-1.5 bg-slate-900/40 border border-white/5 rounded-xl px-3 py-1.5">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-[10px] uppercase font-bold text-slate-400">Corporação:</span>
+              <select
+                value={opmFilter}
+                onChange={(e) => setOpmFilter(e.target.value)}
+                className="bg-transparent text-xs text-white border-none focus:ring-0 focus:outline-none cursor-pointer"
+              >
+                <option value="all" className="bg-[#0b1220] text-white">Todos</option>
+                <option value="PM" className="bg-[#0b1220] text-white">PMSC (PM)</option>
+                <option value="BM" className="bg-[#0b1220] text-white">CBMSC (BM)</option>
+                <option value="Civil" className="bg-[#0b1220] text-white">Civil</option>
+                <option value="PC" className="bg-[#0b1220] text-white">Polícia Civil</option>
+              </select>
+            </div>
+
+            {/* City */}
+            <div className="flex items-center gap-1.5 bg-slate-900/40 border border-white/5 rounded-xl px-3 py-1.5">
+              <MapPin className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-[10px] uppercase font-bold text-slate-400">Cidade:</span>
+              <select
+                value={cityFilter}
+                onChange={(e) => setCityFilter(e.target.value)}
+                className="bg-transparent text-xs text-white border-none focus:ring-0 focus:outline-none cursor-pointer max-w-[150px]"
+              >
+                <option value="all" className="bg-[#0b1220] text-white">Todas</option>
+                {uniqueCities.map((city) => (
+                  <option key={city} value={city} className="bg-[#0b1220] text-white">
+                    {city}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -1015,8 +1116,21 @@ export default function SecretariaMembersSection() {
                     </td>
 
                     {/* D. Nascimento */}
-                    <td className="px-4 py-3 text-xs font-mono text-slate-400 whitespace-nowrap">
-                      {member.dataNascimento}
+                    <td className="px-4 py-3 text-xs whitespace-nowrap">
+                      <div className="flex flex-col">
+                        <span className="font-mono text-slate-300 font-bold">{member.dataNascimento || "Não informado"}</span>
+                        {member.dataNascimento && (
+                          <div className="flex items-center gap-1 text-[9.5px] font-mono text-slate-400 mt-0.5">
+                            <Cake className="w-3 h-3 text-pink-400 shrink-0" />
+                            <span className="text-pink-300 font-semibold">{formatBirthDate(member.dataNascimento)}</span>
+                            {isBirthdayThisWeek(member.dataNascimento) && (
+                              <span className="ml-1 inline-block px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[7px] font-bold uppercase tracking-tight animate-pulse font-sans">
+                                Esta Semana! 🎉
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
 
                     {/* OPM / Corporacao */}
@@ -1040,6 +1154,41 @@ export default function SecretariaMembersSection() {
                     {/* Acoes */}
                     <td className="px-4 py-3 text-xs text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Birthday card tracking sent state checkbox */}
+                        {member.dataNascimento && (
+                          <label 
+                            title={sentBdayCards[member.matricula] ? "Cartão de aniversário já enviado" : "Marcar cartão de aniversário como enviado"}
+                            className={`p-1.5 rounded transition-all cursor-pointer flex items-center justify-center border gap-1 text-[9px] font-bold uppercase font-sans tracking-tight shrink-0 select-none ${
+                              sentBdayCards[member.matricula]
+                                ? "bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/30"
+                                : "bg-slate-800 hover:bg-slate-700 text-pink-400 border-white/5 hover:border-pink-500/30"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!sentBdayCards[member.matricula]}
+                              onChange={() => toggleBdayCardSent(member.matricula)}
+                              className="accent-pink-500 w-3 h-3 cursor-pointer rounded bg-slate-950 border-white/10"
+                            />
+                            <span className="hidden xl:inline">
+                              {sentBdayCards[member.matricula] ? "Enviado" : "Pendente"}
+                            </span>
+                          </label>
+                        )}
+
+                        {/* Send Happy Birthday Card WhatsApp Button */}
+                        {member.dataNascimento && (isBirthdayThisWeek(member.dataNascimento) || isBirthdayThisMonth(member.dataNascimento)) && getBirthdayWhatsAppLinkSec(member) && (
+                          <a
+                            href={getBirthdayWhatsAppLinkSec(member)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`Enviar Cartão de Aniversário WhatsApp para ${member.nome}`}
+                            className="p-1.5 rounded bg-pink-500/20 hover:bg-pink-500/30 text-pink-400 hover:text-pink-300 transition-colors cursor-pointer flex items-center justify-center border border-pink-500/30 gap-1 text-[9px] font-bold uppercase font-sans tracking-tight shrink-0"
+                          >
+                            <Gift className="w-3.5 h-3.5 text-pink-400 animate-pulse" />
+                            <span className="hidden xl:inline">Cartão 🎉</span>
+                          </a>
+                        )}
                         {member.telefone && (
                           <a
                             href={getWhatsAppUrl(member.cod, member.telefone)}

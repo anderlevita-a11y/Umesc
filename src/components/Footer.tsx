@@ -49,6 +49,19 @@ export default function Footer({ onScrollToSection, onEnterAdminMode }: FooterPr
                 <strong>LGPD Ativa:</strong> Proteção estrita de dados cadastrais de agentes públicos e cooperadores.
               </p>
             </div>
+
+            {/* Link do Site Legado de Consulta */}
+            <div className="pt-1">
+              <a 
+                href="https://umesc.com.br/site/" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-slate-900/90 hover:bg-slate-850 text-sky-400 hover:text-sky-300 border border-sky-500/30 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md hover:border-sky-400/50 group"
+              >
+                <ExternalLink className="w-4 h-4 text-sky-400 shrink-0 group-hover:scale-110 transition-transform" />
+                <span>Site Legado de consulta: <strong className="underline text-sky-300">https://umesc.com.br/site/</strong></span>
+              </a>
+            </div>
           </div>
 
           {/* Quick Shortcuts */}
@@ -97,6 +110,17 @@ export default function Footer({ onScrollToSection, onEnterAdminMode }: FooterPr
                   </button>
                 </li>
               )}
+              <li>
+                <a 
+                  href="https://umesc.com.br/site/" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-sky-400 hover:text-sky-300 hover:underline transition-all text-left font-bold flex items-center gap-1.5 uppercase tracking-wider text-[10px]"
+                >
+                  <ExternalLink className="w-3 h-3 text-sky-400 shrink-0" />
+                  Site Legado de Consulta
+                </a>
+              </li>
             </ul>
           </div>
 
