@@ -6,38 +6,42 @@ export function getCleanImageUrl(url: string | undefined | null): string {
   if (!url) return "";
   
   const trimmed = url.trim();
+
+  // If already base64 or blob URL, return as is
+  if (trimmed.startsWith("data:") || trimmed.startsWith("blob:")) {
+    return trimmed;
+  }
   
-  // Patterns for match Google Drive file IDs
-  // 1. https://drive.google.com/file/d/FILE_ID/view...
+  // Patterns for matching Google Drive file IDs across various URL structures
   const driveFilePattern = /drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i;
-  // 2. https://drive.google.com/open?id=FILE_ID
-  const driveOpenPattern = /drive\.google\.com\/open\?.*?id=([a-zA-Z0-9_-]+)/i;
-  // 3. https://docs.google.com/file/d/FILE_ID/...
+  const driveOpenPattern = /[?&]id=([a-zA-Z0-9_-]+)/i;
   const docsFilePattern = /docs\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i;
-  // 4. https://drive.google.com/uc?id=FILE_ID...
-  const driveUcPattern = /drive\.google\.com\/uc\?.*?id=([a-zA-Z0-9_-]+)/i;
+  const lh3Pattern = /googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/i;
 
   let fileId = "";
 
-  const ucMatch = trimmed.match(driveUcPattern);
-  const fileMatch = trimmed.match(driveFilePattern);
-  const openMatch = trimmed.match(driveOpenPattern);
-  const docsMatch = trimmed.match(docsFilePattern);
+  if (trimmed.includes("google.com") || trimmed.includes("googleusercontent.com")) {
+    const fileMatch = trimmed.match(driveFilePattern);
+    const docsMatch = trimmed.match(docsFilePattern);
+    const lh3Match = trimmed.match(lh3Pattern);
+    const idMatch = trimmed.match(driveOpenPattern);
 
-  if (fileMatch && fileMatch[1]) {
-    fileId = fileMatch[1];
-  } else if (openMatch && openMatch[1]) {
-    fileId = openMatch[1];
-  } else if (docsMatch && docsMatch[1]) {
-    fileId = docsMatch[1];
-  } else if (ucMatch && ucMatch[1]) {
-    fileId = ucMatch[1];
+    if (fileMatch && fileMatch[1]) {
+      fileId = fileMatch[1];
+    } else if (docsMatch && docsMatch[1]) {
+      fileId = docsMatch[1];
+    } else if (lh3Match && lh3Match[1]) {
+      fileId = lh3Match[1];
+    } else if (idMatch && idMatch[1]) {
+      fileId = idMatch[1];
+    }
   }
 
   if (fileId) {
-    // Returning the most reliable Google Drive direct image hosting link
+    // Return high-capacity CDN direct image hosting link
     return `https://lh3.googleusercontent.com/d/${fileId}`;
   }
 
   return trimmed;
 }
+

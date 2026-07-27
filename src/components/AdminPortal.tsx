@@ -5,7 +5,7 @@ import {
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
   Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake
 } from "lucide-react";
-import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService, coordinatorsService, projectsService, announcementsService, documentsService, revistasService } from "../lib/supabase.ts";
+import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService, coordinatorsService, projectsService, announcementsService, documentsService, revistasService, settingsService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { donationsService } from "../lib/donationService.ts";
 import { MemberRegistration, Project, FichaFiliacao, Donation, MemberContent, CapelaniaService, Announcement, DocumentFile, ApoioFemininoPost, Coordinator } from "../types";
@@ -18,7 +18,7 @@ import { getWhatsAppLink } from "../lib/validation.ts";
 import CongressoManager from "./CongressoManager.tsx";
 import SecretariaMembersSection from "./SecretariaMembersSection.tsx";
 
-import { getStoredConvites, getStoredEventos, DEFAULT_CONVITES, DEFAULT_EVENTOS } from "../data/carouselData.ts";
+import { getStoredConvites, getStoredEventos, fetchConvitesAsync, fetchEventosAsync, saveConvitesAsync, saveEventosAsync, DEFAULT_CONVITES, DEFAULT_EVENTOS } from "../data/carouselData.ts";
 
 // Fallbacks matching INITIAL_REVISTAS
 const DEFAULT_REVISTAS: any[] = [];
@@ -375,14 +375,16 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       setRevistas(revistasList.length > 0 ? revistasList : DEFAULT_REVISTAS);
 
       // 4. Carousel Convites
-      setConvites(getStoredConvites());
+      const convList = await fetchConvitesAsync();
+      setConvites(convList);
 
       // 5. Carousel Eventos
-      setEventos(getStoredEventos());
+      const eveList = await fetchEventosAsync();
+      setEventos(eveList);
 
       // 6. Diretoria Board
-      const savedDir = localStorage.getItem("umesc_diretoria");
-      setDiretoria(savedDir ? JSON.parse(savedDir) : DEFAULT_DIRETORIA);
+      const dirList = await settingsService.getSetting("umesc_diretoria", DEFAULT_DIRETORIA);
+      setDiretoria(dirList);
 
       // 7. Coordinators
       coordinatorsService.getCoordinators().then((data) => {
@@ -396,12 +398,12 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       setFichas(fichasData);
 
       // 8.5. Envio de Conteúdos para Membros
-      const savedContents = localStorage.getItem("umesc_member_contents");
-      setMemberContents(savedContents ? JSON.parse(savedContents) : DEFAULT_MEMBER_CONTENTS);
+      const contentsList = await settingsService.getSetting("umesc_member_contents", DEFAULT_MEMBER_CONTENTS);
+      setMemberContents(contentsList);
 
       // 8.6. Serviços de Capelania
-      const savedCapSrv = localStorage.getItem("umesc_capelania_services");
-      setCapelaniaServices(savedCapSrv ? JSON.parse(savedCapSrv) : DEFAULT_CAPELANIA_SERVICES);
+      const capSrvList = await settingsService.getSetting("umesc_capelania_services", DEFAULT_CAPELANIA_SERVICES);
+      setCapelaniaServices(capSrvList);
 
       // 8.7. Quadro de Avisos (Mural)
       const announcementsList = await announcementsService.getAnnouncements();
@@ -709,7 +711,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   };
 
   // Carousel Convites CRUD Actions
-  const handleSaveConvite = (e: React.FormEvent) => {
+  const handleSaveConvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!conviteForm) return;
 
@@ -729,23 +731,23 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       updatedList = [...convites, newSlide];
     }
 
-    localStorage.setItem("umesc_carousel_convites", JSON.stringify(updatedList));
+    await saveConvitesAsync(updatedList);
     setConvites(updatedList);
     setConviteForm(null);
     notifyContentChange();
     alert("Carrossel de Convites reconstruído com sucesso!");
   };
 
-  const handleDeleteConvite = (id: any) => {
+  const handleDeleteConvite = async (id: any) => {
     const updated = convites.filter((c) => c.id !== id);
-    localStorage.setItem("umesc_carousel_convites", JSON.stringify(updated));
+    await saveConvitesAsync(updated);
     setConvites(updated);
     notifyContentChange();
     alert("Item removido do carrossel.");
   };
 
   // Carousel Eventos CRUD Actions
-  const handleSaveEvento = (e: React.FormEvent) => {
+  const handleSaveEvento = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventoForm) return;
 
@@ -765,23 +767,23 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       updatedList = [...eventos, newSlide];
     }
 
-    localStorage.setItem("umesc_carousel_eventos", JSON.stringify(updatedList));
+    await saveEventosAsync(updatedList);
     setEventos(updatedList);
     setEventoForm(null);
     notifyContentChange();
     alert("Carrossel de Eventos e Ações Sociais atualizado com sucesso!");
   };
 
-  const handleDeleteEvento = (id: any) => {
+  const handleDeleteEvento = async (id: any) => {
     const updated = eventos.filter((c) => c.id !== id);
-    localStorage.setItem("umesc_carousel_eventos", JSON.stringify(updated));
+    await saveEventosAsync(updated);
     setEventos(updated);
     notifyContentChange();
     alert("Item removido.");
   };
 
   // Diretoria Board CRUD Actions
-  const handleSaveDiretoria = (e: React.FormEvent) => {
+  const handleSaveDiretoria = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!diretoriaForm) return;
 
@@ -798,7 +800,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       updatedList = [...diretoria, newDir];
     }
 
-    localStorage.setItem("umesc_diretoria", JSON.stringify(updatedList));
+    await settingsService.saveSetting("umesc_diretoria", updatedList);
     setDiretoria(updatedList);
     setDiretoriaForm(null);
     notifyContentChange();
@@ -809,10 +811,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     setDeletingDiretoria(d);
   };
 
-  const confirmDeleteDiretoria = () => {
+  const confirmDeleteDiretoria = async () => {
     if (!deletingDiretoria) return;
     const updated = diretoria.filter((d) => d.id !== deletingDiretoria.id);
-    localStorage.setItem("umesc_diretoria", JSON.stringify(updated));
+    await settingsService.saveSetting("umesc_diretoria", updated);
     setDiretoria(updated);
     setDeletingDiretoria(null);
     notifyContentChange();
@@ -877,7 +879,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   };
 
   // Capelania Services CRUD Actions
-  const handleSaveCapelaniaService = (e: React.FormEvent) => {
+  const handleSaveCapelaniaService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!capelaniaServiceForm) return;
 
@@ -897,7 +899,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       updatedList = [...capelaniaServices, newService];
     }
 
-    localStorage.setItem("umesc_capelania_services", JSON.stringify(updatedList));
+    await settingsService.saveSetting("umesc_capelania_services", updatedList);
     setCapelaniaServices(updatedList);
     setCapelaniaServiceForm(null);
     notifyContentChange();
@@ -908,10 +910,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     setDeletingCapelaniaService(s);
   };
 
-  const confirmDeleteCapelaniaService = () => {
+  const confirmDeleteCapelaniaService = async () => {
     if (!deletingCapelaniaService) return;
     const updated = capelaniaServices.filter((s) => s.id !== deletingCapelaniaService.id);
-    localStorage.setItem("umesc_capelania_services", JSON.stringify(updated));
+    await settingsService.saveSetting("umesc_capelania_services", updated);
     setCapelaniaServices(updated);
     setDeletingCapelaniaService(null);
     notifyContentChange();
@@ -951,7 +953,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   };
 
   // Member Contents CRUD Actions
-  const handleSaveContent = (e: React.FormEvent) => {
+  const handleSaveContent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contentForm) return;
 
@@ -971,7 +973,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       updatedList = [newContent, ...memberContents];
     }
 
-    localStorage.setItem("umesc_member_contents", JSON.stringify(updatedList));
+    await settingsService.saveSetting("umesc_member_contents", updatedList);
     setMemberContents(updatedList);
     setContentForm(null);
     notifyContentChange();
@@ -982,10 +984,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     setDeletingContent(c);
   };
 
-  const confirmDeleteContent = () => {
+  const confirmDeleteContent = async () => {
     if (!deletingContent) return;
     const updated = memberContents.filter((c) => c.id !== deletingContent.id);
-    localStorage.setItem("umesc_member_contents", JSON.stringify(updated));
+    await settingsService.saveSetting("umesc_member_contents", updated);
     setMemberContents(updated);
     setDeletingContent(null);
     notifyContentChange();

@@ -2072,6 +2072,261 @@ export const revistasService = {
   }
 };
 
+/**
+ * Generic Settings / Governance Key-Value Service in Supabase with Real-Time & LocalStorage fallback
+ */
+export const settingsService = {
+  async getSetting<T>(key: string, defaultValue: T): Promise<T> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("settings")
+          .select("value")
+          .eq("key", key)
+          .maybeSingle();
+
+        if (!error && data && data.value) {
+          try {
+            const parsed = JSON.parse(data.value);
+            localStorage.setItem(key, data.value);
+            return parsed;
+          } catch {
+            return defaultValue;
+          }
+        }
+      } catch (err) {
+        console.warn(`Falha de conexão no Supabase para setting '${key}'. Usando local.`, err);
+      }
+    }
+    const saved = localStorage.getItem(key);
+    if (!saved) return defaultValue;
+    try {
+      return JSON.parse(saved);
+    } catch {
+      return defaultValue;
+    }
+  },
+
+  async saveSetting<T>(key: string, value: T): Promise<boolean> {
+    const jsonStr = JSON.stringify(value);
+    localStorage.setItem(key, jsonStr);
+
+    // Notify current tab and other tabs via BroadcastChannel
+    window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+    try {
+      const bc = new BroadcastChannel("umesc_realtime_sync");
+      bc.postMessage({ key, action: "update" });
+      bc.close();
+    } catch {
+      // BroadcastChannel optional fallback
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { error } = await supabase
+          .from("settings")
+          .upsert([{ key, value: jsonStr, updated_at: new Date().toISOString() }], { onConflict: "key" });
+        if (!error) return true;
+      } catch (err) {
+        console.warn(`Falha ao salvar setting '${key}' no Supabase.`, err);
+      }
+    }
+    return false;
+  }
+};
+
+/**
+ * Service to manage Carousel Convites in Supabase
+ */
+export const carouselConvitesService = {
+  async getConvites(): Promise<any[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("carousel_convites")
+          .select("*")
+          .order("created_at", { ascending: true });
+
+        if (!error && data) {
+          const list = data.map((item: any) => ({
+            id: item.id,
+            image: item.image,
+            tag: item.tag,
+            title: item.title,
+            description: item.description,
+            date: item.date
+          }));
+          localStorage.setItem("umesc_carousel_convites", JSON.stringify(list));
+          return list;
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para Carousel Convites. Usando fallback.", err);
+      }
+    }
+    return settingsService.getSetting<any[]>("umesc_carousel_convites", []);
+  },
+
+  async saveConvite(item: any): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          id: String(item.id || `conv_${Date.now()}`),
+          image: item.image || "",
+          tag: item.tag || "",
+          title: item.title || "",
+          description: item.description || "",
+          date: item.date || ""
+        };
+        const { error } = await supabase
+          .from("carousel_convites")
+          .upsert([dbRecord], { onConflict: "id" });
+        if (!error) {
+          await settingsService.saveSetting("umesc_carousel_convites", await this.getConvites());
+          return true;
+        }
+      } catch (err) {
+        console.warn("Falha ao salvar no Supabase para Carousel Convites.", err);
+      }
+    }
+    return false;
+  },
+
+  async saveAllConvites(list: any[]): Promise<boolean> {
+    await settingsService.saveSetting("umesc_carousel_convites", list);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        if (list.length > 0) {
+          const dbRecords = list.map((item) => ({
+            id: String(item.id),
+            image: item.image || "",
+            tag: item.tag || "",
+            title: item.title || "",
+            description: item.description || "",
+            date: item.date || ""
+          }));
+          await supabase.from("carousel_convites").upsert(dbRecords, { onConflict: "id" });
+        }
+      } catch (err) {
+        console.warn("Falha ao sincronizar lista de Convites no Supabase.", err);
+      }
+    }
+    return true;
+  },
+
+  async deleteConvite(id: any): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from("carousel_convites").delete().eq("id", String(id));
+      } catch (err) {
+        console.warn("Falha ao deletar no Supabase para Carousel Convites.", err);
+      }
+    }
+    return true;
+  }
+};
+
+/**
+ * Service to manage Carousel Eventos in Supabase
+ */
+export const carouselEventosService = {
+  async getEventos(): Promise<any[]> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from("carousel_eventos")
+          .select("*")
+          .order("created_at", { ascending: true });
+
+        if (!error && data) {
+          const list = data.map((item: any) => ({
+            id: item.id,
+            image: item.image,
+            tag: item.tag,
+            title: item.title,
+            description: item.description,
+            place: item.place
+          }));
+          localStorage.setItem("umesc_carousel_eventos", JSON.stringify(list));
+          return list;
+        }
+      } catch (err) {
+        console.warn("Falha de conexão com o Supabase para Carousel Eventos. Usando fallback.", err);
+      }
+    }
+    return settingsService.getSetting<any[]>("umesc_carousel_eventos", []);
+  },
+
+  async saveEvento(item: any): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        const dbRecord = {
+          id: String(item.id || `eve_${Date.now()}`),
+          image: item.image || "",
+          tag: item.tag || "",
+          title: item.title || "",
+          description: item.description || "",
+          place: item.place || ""
+        };
+        const { error } = await supabase
+          .from("carousel_eventos")
+          .upsert([dbRecord], { onConflict: "id" });
+        if (!error) {
+          await settingsService.saveSetting("umesc_carousel_eventos", await this.getEventos());
+          return true;
+        }
+      } catch (err) {
+        console.warn("Falha ao salvar no Supabase para Carousel Eventos.", err);
+      }
+    }
+    return false;
+  },
+
+  async saveAllEventos(list: any[]): Promise<boolean> {
+    await settingsService.saveSetting("umesc_carousel_eventos", list);
+    if (isSupabaseConfigured && supabase) {
+      try {
+        if (list.length > 0) {
+          const dbRecords = list.map((item) => ({
+            id: String(item.id),
+            image: item.image || "",
+            tag: item.tag || "",
+            title: item.title || "",
+            description: item.description || "",
+            place: item.place || ""
+          }));
+          await supabase.from("carousel_eventos").upsert(dbRecords, { onConflict: "id" });
+        }
+      } catch (err) {
+        console.warn("Falha ao sincronizar lista de Eventos no Supabase.", err);
+      }
+    }
+    return true;
+  },
+
+  async deleteEvento(id: any): Promise<boolean> {
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from("carousel_eventos").delete().eq("id", String(id));
+      } catch (err) {
+        console.warn("Falha ao deletar no Supabase para Carousel Eventos.", err);
+      }
+    }
+    return true;
+  }
+};
+
+// Setup BroadcastChannel listener for instant cross-tab real-time updates
+if (typeof window !== "undefined") {
+  try {
+    const bc = new BroadcastChannel("umesc_realtime_sync");
+    bc.onmessage = () => {
+      window.dispatchEvent(new CustomEvent("umesc_content_updated"));
+    };
+  } catch {
+    // BroadcastChannel unsupported fallback
+  }
+}
+
 // Real-time subscriptions to sync all major entities in real-time across users
 if (isSupabaseConfigured && supabase) {
   const tablesToSync = [
@@ -2086,7 +2341,9 @@ if (isSupabaseConfigured && supabase) {
     "prayer_requests",
     "members",
     "capelania_volunteers",
-    "secretaria_members"
+    "secretaria_members",
+    "carousel_convites",
+    "carousel_eventos"
   ];
 
   tablesToSync.forEach((tableName) => {

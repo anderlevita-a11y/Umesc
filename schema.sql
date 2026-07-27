@@ -784,6 +784,90 @@ BEGIN
   END IF;
 END $$;
 
+-- ====================================================================
+-- 31. TABELA DE CARROSSEL: CONVITES ESTADUAIS (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.carousel_convites (
+    id VARCHAR(100) PRIMARY KEY,
+    image TEXT NOT NULL,
+    tag VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    date VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+GRANT ALL ON TABLE public.carousel_convites TO anon, authenticated, service_role;
+ALTER TABLE public.carousel_convites ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de carousel_convites" ON public.carousel_convites;
+DROP POLICY IF EXISTS "Inserção livre para todos de carousel_convites" ON public.carousel_convites;
+DROP POLICY IF EXISTS "Atualização livre para todos de carousel_convites" ON public.carousel_convites;
+DROP POLICY IF EXISTS "Deleção livre para todos de carousel_convites" ON public.carousel_convites;
+
+CREATE POLICY "Leitura livre para todos de carousel_convites" ON public.carousel_convites FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de carousel_convites" ON public.carousel_convites FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de carousel_convites" ON public.carousel_convites FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de carousel_convites" ON public.carousel_convites FOR DELETE USING (true);
+
+ALTER TABLE public.carousel_convites REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'carousel_convites'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.carousel_convites;
+    END IF;
+  END IF;
+END $$;
+
+-- ====================================================================
+-- 32. TABELA DE CARROSSEL: EVENTOS E CAMPANHAS ESTADUAIS (NOVO)
+-- ====================================================================
+CREATE TABLE IF NOT EXISTS public.carousel_eventos (
+    id VARCHAR(100) PRIMARY KEY,
+    image TEXT NOT NULL,
+    tag VARCHAR(100) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    place VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+GRANT ALL ON TABLE public.carousel_eventos TO anon, authenticated, service_role;
+ALTER TABLE public.carousel_eventos ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Leitura livre para todos de carousel_eventos" ON public.carousel_eventos;
+DROP POLICY IF EXISTS "Inserção livre para todos de carousel_eventos" ON public.carousel_eventos;
+DROP POLICY IF EXISTS "Atualização livre para todos de carousel_eventos" ON public.carousel_eventos;
+DROP POLICY IF EXISTS "Deleção livre para todos de carousel_eventos" ON public.carousel_eventos;
+
+CREATE POLICY "Leitura livre para todos de carousel_eventos" ON public.carousel_eventos FOR SELECT USING (true);
+CREATE POLICY "Inserção livre para todos de carousel_eventos" ON public.carousel_eventos FOR INSERT WITH CHECK (true);
+CREATE POLICY "Atualização livre para todos de carousel_eventos" ON public.carousel_eventos FOR UPDATE USING (true);
+CREATE POLICY "Deleção livre para todos de carousel_eventos" ON public.carousel_eventos FOR DELETE USING (true);
+
+ALTER TABLE public.carousel_eventos REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables 
+      WHERE pubname = 'supabase_realtime' 
+      AND schemaname = 'public' 
+      AND tablename = 'carousel_eventos'
+    ) THEN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.carousel_eventos;
+    END IF;
+  END IF;
+END $$;
+
 NOTIFY pgrst, 'reload schema';
 
 

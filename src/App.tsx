@@ -21,7 +21,7 @@ import { ShieldCheck, Calendar, Users, Scale, UserPlus, Info, Compass, Star, X }
 import { DEFAULT_CAPELANIA_SERVICES } from "./data";
 import { CapelaniaService, ApoioFemininoPost } from "./types";
 import { getCleanImageUrl } from "./lib/imageDriveHelper";
-import { apoioFemininoService } from "./lib/supabase";
+import { apoioFemininoService, settingsService } from "./lib/supabase";
 
 export default function App() {
   const [view, setView] = useState<"public" | "dashboard" | "admin">("public");
@@ -33,6 +33,34 @@ export default function App() {
     const saved = localStorage.getItem("umesc_capelania_services");
     return saved ? JSON.parse(saved) : DEFAULT_CAPELANIA_SERVICES;
   });
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadCapServices = async () => {
+      try {
+        const list = await settingsService.getSetting<CapelaniaService[]>("umesc_capelania_services", DEFAULT_CAPELANIA_SERVICES);
+        if (isMounted && Array.isArray(list)) {
+          setCapelaniaServices(list);
+        }
+      } catch (err) {
+        console.error("Error fetching capelania services in App:", err);
+      }
+    };
+
+    loadCapServices();
+
+    const handleUpdate = () => {
+      loadCapServices();
+    };
+
+    window.addEventListener("umesc_content_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("umesc_content_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
 
   const [apoioFemininoPosts, setApoioFemininoPosts] = useState<ApoioFemininoPost[]>([]);
   const [selectedApoioPost, setSelectedApoioPost] = useState<ApoioFemininoPost | null>(null);

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight, Megaphone, Calendar, Eye, Play, Pause } from "lucide-react";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
-import { getStoredConvites, getStoredEventos, ConviteSlide, EventoSlide } from "../data/carouselData.ts";
+import { getStoredConvites, getStoredEventos, fetchConvitesAsync, fetchEventosAsync, ConviteSlide, EventoSlide } from "../data/carouselData.ts";
 
 export default function CarouselsSection() {
   // Load dynamic content with fallback to default official UMESC slides
@@ -22,23 +22,34 @@ export default function CarouselsSection() {
   // Lightbox for reviewing images in full screen
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
-  // Listen to admin additions/deletions/edits
+  // Listen to admin additions/deletions/edits & Supabase real-time sync
   useEffect(() => {
-    const handleReload = () => {
+    let isMounted = true;
+    const loadData = async () => {
       try {
-        setConvites(getStoredConvites());
-        setConvitesIndex(0);
-        
-        setEventos(getStoredEventos());
-        setEventosIndex(0);
+        const [cList, eList] = await Promise.all([
+          fetchConvitesAsync(),
+          fetchEventosAsync()
+        ]);
+        if (isMounted) {
+          setConvites(cList);
+          setEventos(eList);
+        }
       } catch (err) {
-        console.error("Error reloading carousels:", err);
+        console.error("Error loading carousels async:", err);
       }
+    };
+
+    loadData();
+
+    const handleReload = () => {
+      loadData();
     };
 
     window.addEventListener("umesc_content_updated", handleReload);
     window.addEventListener("storage", handleReload);
     return () => {
+      isMounted = false;
       window.removeEventListener("umesc_content_updated", handleReload);
       window.removeEventListener("storage", handleReload);
     };
