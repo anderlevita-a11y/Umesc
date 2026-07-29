@@ -7,7 +7,7 @@ import React, { useState, useEffect } from "react";
 import { CORE_GOVERNANCE, COORDINATORS_DATA } from "../data";
 import { Users, Scale, MapPin, Phone, Copy, Check, ShieldCheck, Mail, MessageCircle } from "lucide-react";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
-import { coordinatorsService } from "../lib/supabase.ts";
+import { coordinatorsService, settingsService } from "../lib/supabase.ts";
 import { getWhatsAppLink } from "../lib/validation.ts";
 
 
@@ -25,12 +25,20 @@ export default function OrganizationalStructure() {
   });
 
   useEffect(() => {
-    const loadBoard = () => {
-      const saved = localStorage.getItem("umesc_diretoria");
-      if (saved) {
-        setBoard(JSON.parse(saved));
-      } else {
-        setBoard(CORE_GOVERNANCE.board);
+    const loadBoard = async () => {
+      try {
+        const data = await settingsService.getSetting("umesc_diretoria", CORE_GOVERNANCE.board);
+        if (Array.isArray(data) && data.length > 0) {
+          setBoard(data);
+        } else {
+          const saved = localStorage.getItem("umesc_diretoria");
+          if (saved) setBoard(JSON.parse(saved));
+          else setBoard(CORE_GOVERNANCE.board);
+        }
+      } catch {
+        const saved = localStorage.getItem("umesc_diretoria");
+        if (saved) setBoard(JSON.parse(saved));
+        else setBoard(CORE_GOVERNANCE.board);
       }
     };
     const loadCoordenadores = () => {
@@ -117,11 +125,24 @@ export default function OrganizationalStructure() {
               {board.map((director, index) => (
                 <div 
                   key={director.id || index} 
-                  className="p-4 rounded bg-[#182638] border border-white/5 hover:border-amber-400/25 transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2"
+                  className="p-4 rounded-xl bg-[#182638] border border-white/5 hover:border-amber-400/25 transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
                 >
-                  <div>
-                    <span className="block text-amber-400 text-xs font-bold tracking-wider uppercase">{director.role}</span>
-                    <span className="block font-bold text-white text-base mt-0.5">{director.name}</span>
+                  <div className="flex items-center gap-3">
+                    {director.photo ? (
+                      <img
+                        src={getCleanImageUrl(director.photo)}
+                        alt={director.name}
+                        className="w-12 h-12 rounded-full object-cover border-2 border-amber-500/50 shadow-md shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-[#131f2e] border border-white/10 flex items-center justify-center text-amber-400 font-bold text-sm shrink-0 font-display">
+                        {director.name ? director.name.charAt(0).toUpperCase() : "U"}
+                      </div>
+                    )}
+                    <div>
+                      <span className="block text-amber-400 text-xs font-bold tracking-wider uppercase">{director.role}</span>
+                      <span className="block font-bold text-white text-base mt-0.5">{director.name}</span>
+                    </div>
                   </div>
                   {director.church && (
                     <span className="text-xs text-slate-300 bg-[#131f2e] border border-white/10 px-3 py-1.5 rounded font-bold uppercase tracking-wider">

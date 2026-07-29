@@ -72,6 +72,18 @@ export default function App() {
       }).catch(err => {
         console.error("Erro ao buscar publicações do Apoio Feminino:", err);
       });
+
+      // Auto-scroll to congress section if deep linked via hash or search param
+      const hash = window.location.hash;
+      const search = window.location.search;
+      if (hash === "#public-featured-events-banner" || hash === "#congresso" || search.includes("congresso=")) {
+        setTimeout(() => {
+          const el = document.getElementById("public-featured-events-banner");
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }, 500);
+      }
     }
   }, [view]);
 

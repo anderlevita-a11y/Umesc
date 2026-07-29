@@ -339,7 +339,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [deletingCapelaniaService, setDeletingCapelaniaService] = useState<CapelaniaService | null>(null);
 
   const [diretoria, setDiretoria] = useState<any[]>([]);
-  const [diretoriaForm, setDiretoriaForm] = useState<{ id?: string, name: string, role: string, church?: string } | null>(null);
+  const [diretoriaForm, setDiretoriaForm] = useState<{ id?: string, name: string, role: string, church?: string, photo?: string } | null>(null);
 
   const [coordenadores, setCoordenadores] = useState<any[]>([]);
   const [coordenadoresForm, setCoordenadoresForm] = useState<{ id?: string, name: string, rank: string, role: string, region: string, contact: string, avatar: string } | null>(null);
@@ -787,15 +787,18 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     e.preventDefault();
     if (!diretoriaForm) return;
 
+    const cleanedPhoto = getCleanImageUrl(diretoriaForm.photo || "");
+
     let updatedList = [...diretoria];
     if (diretoriaForm.id) {
-      updatedList = diretoria.map((d) => d.id === diretoriaForm.id ? { ...d, ...diretoriaForm } : d);
+      updatedList = diretoria.map((d) => d.id === diretoriaForm.id ? { ...d, ...diretoriaForm, photo: cleanedPhoto } : d);
     } else {
       const newDir = {
         id: `dir_${Date.now()}`,
         name: diretoriaForm.name,
         role: diretoriaForm.role,
-        church: diretoriaForm.church || ""
+        church: diretoriaForm.church || "",
+        photo: cleanedPhoto
       };
       updatedList = [...diretoria, newDir];
     }
@@ -3775,6 +3778,30 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                       </div>
                     </div>
 
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1.5">Foto do Oficial (URL do Google Drive ou Imagem)</label>
+                      <div className="flex gap-3 items-center">
+                        {diretoriaForm.photo ? (
+                          <img
+                            src={getCleanImageUrl(diretoriaForm.photo)}
+                            alt="Preview Foto"
+                            className="w-11 h-11 rounded-full object-cover border-2 border-amber-500/50 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-[#132031] border border-white/10 flex items-center justify-center text-slate-400 font-bold text-xs shrink-0">
+                            <Users className="w-5 h-5 text-slate-500" />
+                          </div>
+                        )}
+                        <input
+                          type="text"
+                          value={diretoriaForm.photo || ""}
+                          onChange={(e) => setDiretoriaForm({ ...diretoriaForm, photo: e.target.value })}
+                          placeholder="Cole a URL da foto (Google Drive ou link direto)"
+                          className="w-full bg-[#132031] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
                     <div className="flex justify-end gap-3 pt-2">
                       <button
                         type="button"
@@ -3807,18 +3834,31 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                       key={dir.id || index} 
                       className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#0d1723]/30 hover:bg-[#0d1723]/70 transition-colors"
                     >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="px-2 py-0.5 rounded text-[9px] font-bold text-amber-400 uppercase tracking-wider bg-amber-500/10 border border-amber-500/20">
-                            {dir.role}
-                          </span>
-                          {dir.church && (
-                            <span className="px-2 py-0.5 rounded text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-white/5 border border-white/10">
-                              {dir.church}
+                      <div className="flex items-center gap-3">
+                        {dir.photo ? (
+                          <img
+                            src={getCleanImageUrl(dir.photo)}
+                            alt={dir.name}
+                            className="w-11 h-11 rounded-full object-cover border border-amber-500/40 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-[#132031] border border-white/10 flex items-center justify-center text-amber-500 font-bold text-xs shrink-0 font-mono">
+                            {dir.name ? dir.name.charAt(0).toUpperCase() : "U"}
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2 py-0.5 rounded text-[9px] font-bold text-amber-400 uppercase tracking-wider bg-amber-500/10 border border-amber-500/20">
+                              {dir.role}
                             </span>
-                          )}
+                            {dir.church && (
+                              <span className="px-2 py-0.5 rounded text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-white/5 border border-white/10">
+                                {dir.church}
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-sm font-bold text-slate-100 font-sans">{dir.name}</h4>
                         </div>
-                        <h4 className="text-sm font-bold text-slate-100 font-sans">{dir.name}</h4>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">

@@ -40,7 +40,7 @@ import PlanoLeituraBiblica from "./PlanoLeituraBiblica.tsx";
 import CongressoInscricaoMembro from "./CongressoInscricaoMembro.tsx";
 import CapelaniaVolunteeringForm from "./CapelaniaVolunteeringForm.tsx";
 import CarouselsSection from "./CarouselsSection.tsx";
-import { membersService, isSupabaseConfigured, fichasFiliacaoService, coordinatorsService } from "../lib/supabase.ts";
+import { membersService, isSupabaseConfigured, fichasFiliacaoService, coordinatorsService, settingsService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { sanitizeInput, isValidCPF, formatPhone, isValidPhone, isValidEmail, getWhatsAppLink } from "../lib/validation.ts";
 import { 
@@ -327,12 +327,20 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   });
 
   useEffect(() => {
-    const loadBoard = () => {
-      const saved = localStorage.getItem("umesc_diretoria");
-      if (saved) {
-        setBoard(JSON.parse(saved));
-      } else {
-        setBoard(CORE_GOVERNANCE.board);
+    const loadBoard = async () => {
+      try {
+        const data = await settingsService.getSetting("umesc_diretoria", CORE_GOVERNANCE.board);
+        if (Array.isArray(data) && data.length > 0) {
+          setBoard(data);
+        } else {
+          const saved = localStorage.getItem("umesc_diretoria");
+          if (saved) setBoard(JSON.parse(saved));
+          else setBoard(CORE_GOVERNANCE.board);
+        }
+      } catch {
+        const saved = localStorage.getItem("umesc_diretoria");
+        if (saved) setBoard(JSON.parse(saved));
+        else setBoard(CORE_GOVERNANCE.board);
       }
     };
     const loadCoordenadores = () => {
@@ -1799,11 +1807,24 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                       {board.map((director, index) => (
                         <div 
                           key={director.id || index}
-                          className="p-4 rounded bg-[#132031] border border-white/5 hover:border-white/15 transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2"
+                          className="p-4 rounded-xl bg-[#132031] border border-white/5 hover:border-amber-400/30 transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
                         >
-                          <div>
-                            <span className="block text-amber-400 text-[10px] font-bold tracking-wider uppercase">{director.role}</span>
-                            <span className="block font-bold text-slate-100 text-sm mt-0.5 font-display">{director.name}</span>
+                          <div className="flex items-center gap-3">
+                            {director.photo ? (
+                              <img
+                                src={getCleanImageUrl(director.photo)}
+                                alt={director.name}
+                                className="w-12 h-12 rounded-full object-cover border-2 border-amber-500/50 shadow-md shrink-0"
+                              />
+                            ) : (
+                              <div className="w-12 h-12 rounded-full bg-[#0e1723] border border-white/10 flex items-center justify-center text-amber-400 font-bold text-sm shrink-0 font-display">
+                                {director.name ? director.name.charAt(0).toUpperCase() : "U"}
+                              </div>
+                            )}
+                            <div>
+                              <span className="block text-amber-400 text-[10px] font-bold tracking-wider uppercase">{director.role}</span>
+                              <span className="block font-bold text-slate-100 text-sm mt-0.5 font-display">{director.name}</span>
+                            </div>
                           </div>
                           {director.church && (
                             <span className="text-[10px] text-slate-300 bg-[#0e1723] border border-white/10 px-3 py-1 rounded font-bold uppercase tracking-wider">

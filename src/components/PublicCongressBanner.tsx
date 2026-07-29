@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   Calendar, MapPin, Clock, ArrowRight, Sparkles, ShieldCheck, 
-  Users, Award, ChevronRight, Lock, Ticket, HelpCircle, UserPlus, Search
+  Users, Award, ChevronRight, Lock, Ticket, HelpCircle, UserPlus, Search, Share2
 } from "lucide-react";
 import { congressService, Congress } from "../lib/congressService.ts";
 import VisitorCongressModal from "./VisitorCongressModal.tsx";
@@ -114,6 +114,39 @@ export default function PublicCongressBanner({ onEnterMemberDashboard }: PublicC
     return () => clearInterval(interval);
   }, [featured]);
 
+  // Deep-link scroll effect when accessing via shared WhatsApp link
+  useEffect(() => {
+    const checkDeepLink = () => {
+      const hash = window.location.hash;
+      const search = window.location.search;
+      if (hash === "#public-featured-events-banner" || hash === "#congresso" || search.includes("congresso=")) {
+        setTimeout(() => {
+          const el = document.getElementById("public-featured-events-banner");
+          if (el) {
+            el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }, 400);
+      }
+    };
+    checkDeepLink();
+    window.addEventListener("hashchange", checkDeepLink);
+    return () => window.removeEventListener("hashchange", checkDeepLink);
+  }, []);
+
+  const handleShareWhatsApp = () => {
+    if (!featured) return;
+    const baseUrl = `${window.location.origin}${window.location.pathname}#public-featured-events-banner`;
+    const message = `*UMESC - ${featured.title}*\n\n` +
+      `🗓 *Data:* ${featured.date}\n` +
+      `📍 *Local:* ${featured.location}\n` +
+      `🎟 *Inscrições:* Inscrições Abertas (${featured.price > 0 ? `R$ ${featured.price.toFixed(2)}` : "Entrada Franca"})\n\n` +
+      `${featured.description.slice(0, 180)}...\n\n` +
+      `👉 *Garanta sua vaga acessando pelo link:* ${baseUrl}`;
+
+    const whatsappUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+  };
+
   // If there are no open events, output nothing or a sleek placeholder to keep page beautiful
   if (activeCongresses.length === 0) {
     return null;
@@ -170,12 +203,21 @@ export default function PublicCongressBanner({ onEnterMemberDashboard }: PublicC
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[10px] font-black uppercase tracking-widest font-mono animate-pulse">
                 <span className="w-2 h-2 rounded-full bg-amber-400 inline-block animate-ping"></span>
-                Inscrições Abertas Gêneras
+                Inscrições Abertas
               </span>
               <span className="px-2.5 py-1 rounded bg-[#0b121e] border border-white/5 text-[9px] text-slate-400 uppercase font-mono tracking-wider font-extrabold flex items-center gap-1">
                 <Award className="w-3 h-3 text-amber-500" />
                 Vaga Oficial Garantida
               </span>
+              <button
+                type="button"
+                onClick={handleShareWhatsApp}
+                className="px-2.5 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-400 text-[9px] font-mono tracking-wider font-extrabold flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                title="Compartilhar informações do Congresso no WhatsApp"
+              >
+                <Share2 className="w-3 h-3 text-emerald-400" />
+                <span>Compartilhar via WhatsApp</span>
+              </button>
             </div>
 
             {/* Title / Description block */}
@@ -314,6 +356,16 @@ export default function PublicCongressBanner({ onEnterMemberDashboard }: PublicC
                   <span>Cadastro de Visitantes</span>
                 </button>
               </div>
+
+              {/* WhatsApp Share Button */}
+              <button
+                type="button"
+                onClick={handleShareWhatsApp}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-400 font-bold text-xs uppercase tracking-wider transition-all hover:-translate-y-0.5 active:scale-95 cursor-pointer"
+              >
+                <Share2 className="w-4 h-4 text-emerald-400" />
+                <span>Compartilhar Congresso no WhatsApp</span>
+              </button>
 
               {/* Status Query Link */}
               <div className="text-center pt-1">
