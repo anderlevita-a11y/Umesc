@@ -3,9 +3,10 @@ import {
   ShieldAlert, ShieldCheck, Shield, Users, Briefcase, BookOpen, Layers, Calendar, 
   Trash2, Edit, Plus, Check, X, LogIn, LogOut, ArrowLeft, RefreshCw, BarChart2, PieChart, Info,
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
-  Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake
+  Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake, Eye, TrendingUp, Globe, Activity
 } from "lucide-react";
 import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService, coordinatorsService, projectsService, announcementsService, documentsService, revistasService, settingsService } from "../lib/supabase.ts";
+import { accessTrackerService, AccessStats, DEFAULT_ACCESS_STATS } from "../lib/accessTracker.ts";
 import { termsService } from "../lib/termsService.ts";
 import { donationsService } from "../lib/donationService.ts";
 import { MemberRegistration, Project, FichaFiliacao, Donation, MemberContent, CapelaniaService, Announcement, DocumentFile, ApoioFemininoPost, Coordinator } from "../types";
@@ -359,6 +360,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [apoioFemininoForm, setApoioFemininoForm] = useState<Partial<ApoioFemininoPost> | null>(null);
   const [deletingApoioFemininoPost, setDeletingApoioFemininoPost] = useState<ApoioFemininoPost | null>(null);
 
+  // Access Analytics state (Contagem de Acessos Mensais e Totais)
+  const [accessStats, setAccessStats] = useState<AccessStats>(DEFAULT_ACCESS_STATS);
+  const [accessViewMode, setAccessViewMode] = useState<"mensal" | "total">("mensal");
+
   // Load Admin databases
   const refreshAllData = async () => {
     try {
@@ -428,6 +433,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       // 12. Apoio Feminino (Blog)
       const afPosts = await apoioFemininoService.getPosts();
       setApoioFemininoPosts(afPosts);
+
+      // 13. Access Statistics (Acessos da Aplicação)
+      const aStats = await accessTrackerService.getStats();
+      setAccessStats(aStats);
     } catch (e) {
       console.error("Error refreshing administrative databases:", e);
     }
@@ -1317,7 +1326,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
               </div>
 
               {/* KPI Scorecard */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
                 
                 <div className="bg-[#0b1220] rounded-xl border border-white/5 p-4 space-y-1">
                   <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold">Membros Ativos</span>
@@ -1326,34 +1335,72 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                 </div>
 
                 <div className="bg-[#0b1220] rounded-xl border border-white/5 p-4 space-y-1">
-                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold">Moderações Pendentes</span>
+                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold">Moderações</span>
                   <div className="text-2xl font-extrabold text-amber-400 font-display">{totalPendentes}</div>
-                  <span className="text-[10px] text-amber-500 block font-bold">{totalPendentes > 0 ? "⚠️ Liberação Exigida" : "✓ Fila liberada"}</span>
+                  <span className="text-[10px] text-amber-500 block font-bold">{totalPendentes > 0 ? "⚠️ Liberação" : "✓ Liberado"}</span>
                 </div>
 
                 <div className="bg-[#0b1220] rounded-xl border border-white/5 p-4 space-y-1">
-                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold">Cadastros Pausados</span>
+                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold">Pausados</span>
                   <div className="text-2xl font-extrabold text-[#f97316] font-display">{totalPausados}</div>
-                  <span className="text-[10px] text-orange-400 block font-bold">Acesso Suspenso</span>
+                  <span className="text-[10px] text-orange-400 block font-bold">Suspenso</span>
                 </div>
 
                 <div className="bg-[#0b1220] rounded-xl border border-white/5 p-4 space-y-1">
                   <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold">Arquivados</span>
-                  <div className="text-2xl font-extrabold text-rose-450 text-rose-400 font-display">{totalArquivados}</div>
-                  <span className="text-[10px] text-rose-450 block font-bold">Pasta Desativada</span>
+                  <div className="text-2xl font-extrabold text-rose-400 font-display">{totalArquivados}</div>
+                  <span className="text-[10px] text-rose-450 block font-bold">Desativado</span>
                 </div>
 
                 <div className="bg-[#0b1220] rounded-xl border border-white/5 p-4 space-y-1">
-                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold font-mono">Projetos Ativos</span>
+                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold font-mono">Projetos</span>
                   <div className="text-2xl font-extrabold text-sky-400 font-display">{projects.length}</div>
-                  <span className="text-[10px] text-slate-400 block font-bold">Frentes de apoio</span>
+                  <span className="text-[10px] text-slate-400 block font-bold">Ativos</span>
                 </div>
 
                 <div className="bg-[#0b1220] rounded-xl border border-white/5 p-4 space-y-1">
-                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold">Fichas de Revista</span>
+                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-mono font-bold">Revistas</span>
                   <div className="text-2xl font-extrabold text-purple-400 font-display">{revistas.length}</div>
-                  <span className="text-[10px] text-slate-450 block font-medium">Acervo digital</span>
+                  <span className="text-[10px] text-slate-450 block font-medium">Acervo</span>
                 </div>
+
+                {/* KPI Card: Contagem de Acessos com Alternância Mensal/Total */}
+                {(() => {
+                  const now = new Date();
+                  const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                  const monthNamesBr: Record<string, string> = {
+                    "01": "Jan", "02": "Fev", "03": "Mar", "04": "Abr", "05": "Mai", "06": "Jun",
+                    "07": "Jul", "08": "Ago", "09": "Set", "10": "Out", "11": "Nov", "12": "Dez"
+                  };
+                  const currentMonthLabel = `${monthNamesBr[String(now.getMonth() + 1).padStart(2, "0")] || ""}/${now.getFullYear()}`;
+                  const currentMonthAccesses = accessStats?.monthly?.[currentMonthKey] || 0;
+
+                  return (
+                    <div className="bg-[#0b1220] rounded-xl border border-amber-500/30 p-3 space-y-1 relative group hover:border-amber-500/50 transition-colors">
+                      <div className="flex justify-between items-center gap-1">
+                        <span className="text-[9px] uppercase tracking-wider text-amber-400 block font-mono font-bold flex items-center gap-1 truncate">
+                          <Eye className="w-3 h-3 text-amber-400 shrink-0" />
+                          {accessViewMode === "mensal" ? "Acessos Mensais" : "Acessos Totais"}
+                        </span>
+                      </div>
+                      <div className="text-2xl font-extrabold text-white font-display">
+                        {accessViewMode === "mensal" ? currentMonthAccesses.toLocaleString("pt-BR") : accessStats.total.toLocaleString("pt-BR")}
+                      </div>
+                      <div className="flex items-center justify-between pt-0.5">
+                        <span className="text-[9px] text-slate-400 font-mono font-bold truncate">
+                          {accessViewMode === "mensal" ? `Mês (${currentMonthLabel})` : "Geral acumulado"}
+                        </span>
+                        <button
+                          onClick={() => setAccessViewMode(accessViewMode === "mensal" ? "total" : "mensal")}
+                          className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-black border border-amber-500/40 transition-all cursor-pointer shrink-0"
+                          title="Clique para alternar entre Acessos Mensais e Totais"
+                        >
+                          {accessViewMode === "mensal" ? "→ Total" : "→ Mensal"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
               </div>
 
@@ -1435,6 +1482,211 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                 </div>
 
               </div>
+
+              {/* PANEL: Relatório Analítico e Controle de Acessos da Aplicação */}
+              {(() => {
+                const now = new Date();
+                const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+                const monthNamesBr: Record<string, string> = {
+                  "01": "Janeiro", "02": "Fevereiro", "03": "Março", "04": "Abril",
+                  "05": "Maio", "06": "Junho", "07": "Julho", "08": "Agosto",
+                  "09": "Setembro", "10": "Outubro", "11": "Novembro", "12": "Dezembro"
+                };
+
+                const formatMonthLabel = (key: string) => {
+                  if (!key) return "";
+                  const parts = key.split("-");
+                  if (parts.length < 2) return key;
+                  const year = parts[0];
+                  const month = parts[1];
+                  const monthName = monthNamesBr[month] || month;
+                  return `${monthName} de ${year}`;
+                };
+
+                const currentMonthAccesses = accessStats?.monthly?.[currentMonthKey] || 0;
+
+                return (
+                  <div className="bg-[#0b1220] rounded-xl border border-white/5 p-5 text-left space-y-5">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-white/5">
+                      <div>
+                        <h3 className="font-extrabold text-xs uppercase text-white tracking-widest font-display flex items-center gap-2">
+                          <Activity className="w-4 h-4 text-amber-400" />
+                          Métricas de Acessos à Aplicação (Tráfego Web)
+                        </h3>
+                        <p className="text-slate-400 text-xs mt-0.5">
+                          Indicação e verificação simples de acessos à página do portal, permitindo alternar entre contagem mensal e acumulada total.
+                        </p>
+                      </div>
+
+                      {/* Selector Toggle: Acessos Mensais vs Acessos Totais */}
+                      <div className="flex items-center gap-1.5 bg-[#121c2d] p-1 rounded-xl border border-white/10 shrink-0">
+                        <button
+                          onClick={() => setAccessViewMode("mensal")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
+                            accessViewMode === "mensal"
+                              ? "bg-amber-500 text-slate-950 font-black shadow-md"
+                              : "text-slate-400 hover:text-white font-bold hover:bg-white/5"
+                          }`}
+                        >
+                          <Calendar className="w-3.5 h-3.5" />
+                          Acessos Mensais
+                        </button>
+                        <button
+                          onClick={() => setAccessViewMode("total")}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer ${
+                            accessViewMode === "total"
+                              ? "bg-amber-500 text-slate-950 font-black shadow-md"
+                              : "text-slate-400 hover:text-white font-bold hover:bg-white/5"
+                          }`}
+                        >
+                          <Globe className="w-3.5 h-3.5" />
+                          Acessos Totais
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Summary Cards Row for Access */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className={`p-4 rounded-xl border transition-all ${accessViewMode === "mensal" ? "bg-amber-500/10 border-amber-500/40" : "bg-[#121c2d] border-white/5"}`}>
+                        <span className="block text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">Acessos Mensais ({monthNamesBr[String(now.getMonth() + 1).padStart(2, "0")]})</span>
+                        <span className="text-2xl font-black text-white font-display mt-1 block">
+                          {currentMonthAccesses.toLocaleString("pt-BR")}
+                        </span>
+                        <span className="text-[10px] font-mono text-amber-400 font-bold block mt-1">
+                          {formatMonthLabel(currentMonthKey)}
+                        </span>
+                      </div>
+
+                      <div className={`p-4 rounded-xl border transition-all ${accessViewMode === "total" ? "bg-amber-500/10 border-amber-500/40" : "bg-[#121c2d] border-white/5"}`}>
+                        <span className="block text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">Acessos Totais</span>
+                        <span className="text-2xl font-black text-white font-display mt-1 block">
+                          {(accessStats?.total || 0).toLocaleString("pt-BR")}
+                        </span>
+                        <span className="text-[10px] font-mono text-teal-400 font-bold block mt-1">
+                          Acumulado no Portal
+                        </span>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-[#121c2d] border border-white/5 text-slate-300">
+                        <span className="block text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">Média Diária Est.</span>
+                        <span className="text-2xl font-black text-white font-display mt-1 block">
+                          ~{Math.max(1, Math.round(currentMonthAccesses / Math.max(1, now.getDate()))).toLocaleString("pt-BR")}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 font-bold block mt-1">
+                          visitas / dia neste mês
+                        </span>
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-[#121c2d] border border-white/5 text-slate-300">
+                        <span className="block text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">Mês de Maior Tráfego</span>
+                        {(() => {
+                          const monthlyEntries = Object.entries(accessStats?.monthly || {});
+                          let maxEntry = ["-", 0];
+                          monthlyEntries.forEach(([k, v]) => {
+                            if (v > maxEntry[1]) maxEntry = [k, Number(v)];
+                          });
+                          return (
+                            <>
+                              <span className="text-lg font-extrabold text-amber-400 font-display mt-1 block truncate">
+                                {maxEntry[0] !== "-" ? formatMonthLabel(maxEntry[0]) : "N/D"}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-400 font-bold block mt-0.5">
+                                {maxEntry[1].toLocaleString("pt-BR")} acessos
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Monthly Breakdown Chart / Bar List */}
+                    <div className="space-y-3 pt-2">
+                      <div className="flex justify-between items-center text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">
+                        <span>{accessViewMode === "mensal" ? "Contagem por Mês (Visão Mensal)" : "Proporção de Acessos por Mês no Histórico Total"}</span>
+                        <span>{Object.keys(accessStats?.monthly || {}).length} Meses Mapeados</span>
+                      </div>
+
+                      <div className="space-y-2.5 max-h-[280px] overflow-y-auto pr-1">
+                        {Object.entries(accessStats?.monthly || {})
+                          .sort((a, b) => b[0].localeCompare(a[0]))
+                          .map(([monthKey, count]) => {
+                            const isCurrent = monthKey === currentMonthKey;
+                            const numCount = Number(count);
+                            const perc = (accessStats?.total || 0) > 0 ? (numCount / accessStats.total) * 100 : 0;
+                            return (
+                              <div
+                                key={monthKey}
+                                className={`p-3 rounded-xl border transition-all flex flex-col gap-1.5 ${
+                                  isCurrent
+                                    ? "bg-[#16253b] border-amber-500/40"
+                                    : "bg-[#121c2d]/70 border-white/5 hover:border-white/10"
+                                }`}
+                              >
+                                <div className="flex justify-between items-center text-xs font-mono">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-white">
+                                      {formatMonthLabel(monthKey)}
+                                    </span>
+                                    {isCurrent && (
+                                      <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-amber-500/20 border border-amber-500/40 text-amber-300">
+                                        Mês Corrente
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="font-black text-amber-400 text-sm">{numCount.toLocaleString("pt-BR")}</span>
+                                    <span className="text-slate-400 text-[10px] ml-1.5 font-bold">acessos ({perc.toFixed(1)}%)</span>
+                                  </div>
+                                </div>
+
+                                <div className="w-full h-2 rounded-full bg-slate-950 overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-700 ${
+                                      isCurrent ? "bg-amber-400" : "bg-teal-500/80"
+                                    }`}
+                                    style={{ width: `${Math.min(100, Math.max(5, (numCount / Math.max(1, (accessStats?.total || 1))) * 250))}%` }}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+
+                    {/* Footer / Realtime Actions */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-white/5 text-xs text-slate-400">
+                      <div className="flex items-center gap-2 font-mono text-[10px]">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>Contador em tempo real • Modo exibição: <strong className="text-amber-400 uppercase">{accessViewMode}</strong></span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={async () => {
+                            const updated = await accessTrackerService.incrementManualAccess();
+                            setAccessStats(updated);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-mono font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Simular Acesso (+1)
+                        </button>
+
+                        <button
+                          onClick={async () => {
+                            const updated = await accessTrackerService.getStats();
+                            setAccessStats(updated);
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 font-mono font-bold text-[10px] uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          Atualizar Dados
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
 
 

@@ -22,6 +22,7 @@ import { DEFAULT_CAPELANIA_SERVICES } from "./data";
 import { CapelaniaService, ApoioFemininoPost } from "./types";
 import { getCleanImageUrl } from "./lib/imageDriveHelper";
 import { apoioFemininoService, settingsService } from "./lib/supabase";
+import { accessTrackerService } from "./lib/accessTracker";
 
 export default function App() {
   const [view, setView] = useState<"public" | "dashboard" | "admin">("public");
@@ -33,6 +34,13 @@ export default function App() {
     const saved = localStorage.getItem("umesc_capelania_services");
     return saved ? JSON.parse(saved) : DEFAULT_CAPELANIA_SERVICES;
   });
+
+  React.useEffect(() => {
+    // Record page access
+    accessTrackerService.recordAccess().catch(err => {
+      console.warn("Error recording page access:", err);
+    });
+  }, []);
 
   React.useEffect(() => {
     let isMounted = true;
