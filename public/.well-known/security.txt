@@ -1,0 +1,8 @@
+# Arquivo de Divulgação de Vulnerabilidades
+# Projeto: Consigna Beauty
+# Mantenedor: Anderson Rodrigues de Morais
+
+Contact: mailto:anderlevita@gmail.com
+Expires: 2127-12-31T23:59:00.000Z
+Preferred-Languages: pt-BR, en
+Canonical: https://umesc.social.br/.well-known/security.txt
