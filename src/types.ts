@@ -174,6 +174,42 @@ export interface SecretariaMember {
   createdAt?: string;
 }
 
+export interface ItemSacola {
+  id: string;
+  descricao: string;
+  precoUnitario: number;
+  qtdRecebida: number;
+  qtdDistribuida: number;
+  qtdDevolvida: number;
+  valorTotalItem: number;
+}
+
+export interface AcertoSacola {
+  id: string;
+  numeroSacola: string;
+  responsavelNome: string;
+  responsavelCpf: string;
+  responsavelRgMilitar?: string;
+  regional: string;
+  dataRetirada: string;
+  dataAcerto: string;
+  status: "pendente" | "homologado" | "em_revisao";
+  itens: ItemSacola[];
+  valorTotalArrecadado: number;
+  valorPix: number;
+  valorDinheiro: number;
+  valorCartao: number;
+  observacoes?: string;
+  comprovantePixUrl?: string;
+  // WebAuthn Biometric Security
+  biometricAuthenticated: boolean;
+  biometricTimestamp?: string;
+  biometricCredentialId?: string;
+  biometricSignatureHash?: string;
+  biometricDeviceType?: string;
+  createdAt?: string;
+}
+
 
 
 

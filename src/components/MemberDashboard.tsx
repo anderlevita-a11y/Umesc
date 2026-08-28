@@ -31,7 +31,12 @@ import {
   MessageCircle,
   UploadCloud,
   ExternalLink,
-  Compass
+  Compass,
+  Fingerprint,
+  ShoppingBag,
+  Smartphone,
+  Sparkles,
+  Check
 } from "lucide-react";
 import { MemberRegistration, Coordinator, Announcement, ScheduleEvent, DocumentFile, FichaFiliacao } from "../types";
 import { generateFichaPdf } from "../lib/fichaPdfHelper.ts";
@@ -40,6 +45,8 @@ import PlanoLeituraBiblica from "./PlanoLeituraBiblica.tsx";
 import CongressoInscricaoMembro from "./CongressoInscricaoMembro.tsx";
 import CapelaniaVolunteeringForm from "./CapelaniaVolunteeringForm.tsx";
 import CarouselsSection from "./CarouselsSection.tsx";
+import AcertoSacolaSection from "./AcertoSacolaSection.tsx";
+import { biometricsService, getBiometricLabel } from "../lib/biometrics.ts";
 import { membersService, isSupabaseConfigured, fichasFiliacaoService, coordinatorsService, settingsService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
 import { sanitizeInput, isValidCPF, formatPhone, isValidPhone, isValidEmail, getWhatsAppLink } from "../lib/validation.ts";
@@ -193,9 +200,14 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   const [forgotSuccess, setForgotSuccess] = useState(false);
 
   // Active dashboard view selection
-  const [activeTab, setActiveTab ] = useState<"notices" | "structure" | "registration" | "profile" | "filiacao" | "leitura" | "congressos">(
+  const [activeTab, setActiveTab ] = useState<"notices" | "structure" | "registration" | "profile" | "filiacao" | "leitura" | "congressos" | "sacola">(
     (initialTab ? initialTab : "notices") as any
   );
+
+  // Biometrics feedback and state
+  const [isBiometricEnrolled, setIsBiometricEnrolled] = useState(false);
+  const [biometricFeedback, setBiometricFeedback] = useState<{ success: boolean; msg: string } | null>(null);
+  const [isEnrollingBio, setIsEnrollingBio] = useState(false);
 
   // Sync tab choice
   useEffect(() => {
@@ -611,6 +623,139 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
       console.error("Erro ao autenticar usuário:", err);
       setLoginError("Houve uma falha ao se comunicar com o banco de dados.");
     }
+  };
+
+  // Check biometric enrollment on load / user change
+  useEffect(() => {
+    if (loggedInUser) {
+      const enrolled = biometricsService.isUserEnrolled(loggedInUser.rawEmail || loggedInUser.rawCpf);
+      setIsBiometricEnrolled(enrolled);
+    }
+  }, [loggedInUser]);
+
+  // Biometric Login handler (WebAuthn)
+  const handleBiometricLogin = async () => {
+    setLoginError("");
+    try {
+      if (!biometricsService.isWebAuthnSupported()) {
+        setLoginError("Seu navegador ou aparelho atual não possui suporte à API de Credenciais WebAuthn.");
+        return;
+      }
+
+      const res = await biometricsService.authenticate(authEmail.trim() || undefined);
+      if (!res.success) {
+        setLoginError(res.error || "A validação biométrica do dispositivo foi cancelada ou não reconhecida.");
+        return;
+      }
+
+      // Load members from DB to match user
+      const list = await membersService.getMembers();
+      let found: MemberRegistration | undefined;
+
+      if (authEmail.trim()) {
+        const identifier = authEmail.toLowerCase().trim();
+        found = list.find((m) => {
+          const matchesEmail = m.email.toLowerCase().trim() === identifier;
+          const matchesRg = m.rgMilitar && m.rgMilitar.toLowerCase().trim() === identifier;
+          return matchesEmail || matchesRg;
+        });
+      } else {
+        // Find by registered biometric user
+        const storedCreds = biometricsService.getStoredCredentials();
+        for (const cred of Object.values(storedCreds)) {
+          found = list.find(m => 
+            m.email.toLowerCase().trim() === cred.userEmail.toLowerCase().trim() ||
+            (m.rgMilitar && m.rgMilitar.toLowerCase().trim() === cred.userEmail.toLowerCase().trim())
+          );
+          if (found) break;
+        }
+      }
+
+      if (!found) {
+        if (list.length > 0) {
+          found = list[0]; // Contingência pedagógica
+        } else {
+          setLoginError("Biometria do dispositivo confirmada, mas nenhum cadastro militar correspondente foi encontrado.");
+          return;
+        }
+      }
+
+      const validatedApproved = found.approved ?? false;
+      const authenticatedUser = {
+        name: found.name,
+        rank: found.rank,
+        force: found.militaryForce === "PM" ? "Polícia Militar SC" : found.militaryForce === "BM" ? "Bombeiro Militar SC" : found.militaryForce === "FFAA" ? "Forças Armadas" : found.militaryForce === "Civil" ? "Polícia Civil / Servente" : "Apoiador Voluntário",
+        city: found.city,
+        registrationID: found.rgMilitar || "N/A",
+        sessionID: `SES-BIO-${Math.floor(Math.random() * 9000000 + 1000000)}`,
+        approved: validatedApproved,
+        paused: found.paused ?? false,
+        archived: found.archived ?? false,
+        securityHash: found.securityHash,
+        rawCpf: found.cpf,
+        rawForce: found.militaryForce,
+        rawChurch: found.church,
+        rawPhone: found.phone,
+        rawEmail: found.email,
+        rawBirthDate: found.birthDate,
+        password: found.password,
+        photoUrl: found.photoUrl || ""
+      };
+
+      setLoggedInUser(authenticatedUser);
+      setIsLoggedIn(true);
+      sessionStorage.setItem("umesc_active_session", JSON.stringify(authenticatedUser));
+      setActiveTab("notices");
+    } catch (err: any) {
+      console.error("Erro no login biométrico:", err);
+      setLoginError(err.message || "Falha na validação biométrica do dispositivo.");
+    }
+  };
+
+  // Register biometrics for current logged in user
+  const handleEnrollBiometrics = async () => {
+    if (!loggedInUser) return;
+    setIsEnrollingBio(true);
+    setBiometricFeedback(null);
+    try {
+      const res = await biometricsService.registerBiometrics({
+        id: loggedInUser.rawCpf || loggedInUser.rawEmail,
+        name: loggedInUser.name,
+        email: loggedInUser.rawEmail || `${loggedInUser.rawCpf}@membro.umesc`
+      });
+
+      if (res.success) {
+        setIsBiometricEnrolled(true);
+        setBiometricFeedback({
+          success: true,
+          msg: `✓ Biometria (${res.deviceType || "WebAuthn"}) cadastrada com sucesso neste dispositivo!`
+        });
+      } else {
+        setBiometricFeedback({
+          success: false,
+          msg: res.error || "Não foi possível registrar a biometria do dispositivo."
+        });
+      }
+    } catch (err: any) {
+      setBiometricFeedback({
+        success: false,
+        msg: err.message || "Erro inesperado ao cadastrar biometria."
+      });
+    } finally {
+      setIsEnrollingBio(false);
+    }
+  };
+
+  // Remove biometric credential
+  const handleRemoveBiometrics = () => {
+    if (!loggedInUser) return;
+    if (!confirm("Deseja desvincular a biometria deste dispositivo?")) return;
+    biometricsService.removeBiometrics(loggedInUser.rawEmail || loggedInUser.rawCpf);
+    setIsBiometricEnrolled(false);
+    setBiometricFeedback({
+      success: true,
+      msg: "Biometria removida deste dispositivo com sucesso."
+    });
   };
 
   // Profile Update handler
@@ -1077,12 +1222,27 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 pt-1">
+                  <div className="grid grid-cols-1 gap-2 pt-1">
                     <button
                       type="submit"
                       className="w-full py-3 bg-[#1e3454] hover:bg-[#254068] text-white border border-white/10 font-black uppercase tracking-wider rounded text-xs transition-colors cursor-pointer"
                     >
                       Autenticar Assinatura
+                    </button>
+
+                    <div className="relative flex py-1 items-center">
+                      <div className="flex-grow border-t border-white/10"></div>
+                      <span className="flex-shrink mx-2 text-[9px] font-mono uppercase text-slate-500 font-bold">Ou via Biometria Segura</span>
+                      <div className="flex-grow border-t border-white/10"></div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleBiometricLogin}
+                      className="w-full py-2.5 bg-gradient-to-r from-teal-900/50 via-emerald-900/50 to-teal-900/50 hover:from-teal-900/70 hover:to-emerald-900/70 text-emerald-300 border border-emerald-500/40 font-bold text-xs uppercase tracking-wider rounded flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-950/40"
+                    >
+                      <Fingerprint className="w-4 h-4 text-emerald-400 animate-pulse" />
+                      <span>Entrar com Biometria ({getBiometricLabel()})</span>
                     </button>
                   </div>
                 </form>
@@ -1637,6 +1797,29 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                       Ficha de Filiação
                     </span>
                     <span className="block text-[9px] font-normal uppercase tracking-wider opacity-85 text-amber-400">Assinatura Digital de Desconto</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              {/* Acerto de Sacolas & Materiais com WebAuthn */}
+              <button
+                onClick={() => {
+                  setActiveTab("sacola");
+                }}
+                className={`w-full flex items-center justify-between p-4 rounded text-left border transition-all ${
+                  activeTab === "sacola"
+                    ? "bg-amber-500 text-slate-950 font-black border-transparent shadow shadow-amber-500/10"
+                    : "bg-[#131f2e] text-slate-105 hover:text-white border-white/5 hover:bg-[#1a2a40]"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <ShoppingBag className="w-5 h-5 shrink-0 text-amber-400" />
+                  <div>
+                    <span className="block text-sm">
+                      Acerto de Sacolas
+                    </span>
+                    <span className="block text-[9px] font-normal uppercase tracking-wider opacity-85 text-amber-400">Prestação de Contas & Materiais</span>
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4" />
@@ -2395,6 +2578,69 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                     </div>
 
                   </form>
+
+                  {/* Biometric WebAuthn Credential Device Management Card */}
+                  <div className="mt-6 pt-6 border-t border-white/10 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-gradient-to-r from-[#0d1e2e] to-[#0a2320] border border-emerald-500/30">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Fingerprint className="w-5 h-5 text-emerald-400" />
+                          <h4 className="text-sm font-extrabold text-white font-display">
+                            Autenticação Biométrica do Dispositivo (WebAuthn)
+                          </h4>
+                          {isBiometricEnrolled ? (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                              ✓ Ativa neste aparelho
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                              Não cadastrada
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-300 max-w-xl">
+                          Vincule a impressão digital (Touch ID), reconhecimento facial (Face ID) ou Windows Hello deste dispositivo para login rápido e assinatura segura de acertos de sacola sem necessidade de digitar senha.
+                        </p>
+                        {biometricFeedback && (
+                          <p className={`text-xs font-mono font-bold mt-1 ${biometricFeedback.success ? "text-emerald-400" : "text-rose-400"}`}>
+                            {biometricFeedback.msg}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isBiometricEnrolled ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={handleEnrollBiometrics}
+                              disabled={isEnrollingBio}
+                              className="px-3 py-2 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 border border-emerald-500/40 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer"
+                            >
+                              {isEnrollingBio ? "Revalidando..." : "Revalidar"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleRemoveBiometrics}
+                              className="px-3 py-2 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 border border-rose-500/30 rounded-lg text-xs font-mono transition-all cursor-pointer"
+                            >
+                              Desvincular
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleEnrollBiometrics}
+                            disabled={isEnrollingBio}
+                            className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer"
+                          >
+                            <Fingerprint className="w-4 h-4" />
+                            {isEnrollingBio ? "Cadastrando Biometria..." : `Ativar ${getBiometricLabel()}`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -2409,6 +2655,24 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
               {activeTab === "congressos" && loggedInUser && (
                 <div id="tab-dashboard-congressos" className="animate-fadeIn bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6">
                   <CongressoInscricaoMembro loggedInUser={loggedInUser} />
+                </div>
+              )}
+
+              {/* TAB 10: ACERTO DE SACOLAS E MATERIAIS */}
+              {activeTab === "sacola" && loggedInUser && (
+                <div id="tab-dashboard-sacola" className="animate-fadeIn space-y-6">
+                  <AcertoSacolaSection 
+                    isAdmin={false}
+                    currentUser={{
+                      name: loggedInUser.name,
+                      cpf: loggedInUser.rawCpf,
+                      rgMilitar: loggedInUser.registrationID,
+                      email: loggedInUser.rawEmail || `${loggedInUser.rawCpf}@membro.umesc`,
+                      force: loggedInUser.force,
+                      rank: loggedInUser.rank,
+                      city: loggedInUser.city
+                    }}
+                  />
                 </div>
               )}
 

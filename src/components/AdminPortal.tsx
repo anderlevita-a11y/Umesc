@@ -3,7 +3,8 @@ import {
   ShieldAlert, ShieldCheck, Shield, Users, Briefcase, BookOpen, Layers, Calendar, 
   Trash2, Edit, Plus, Check, X, LogIn, LogOut, ArrowLeft, RefreshCw, BarChart2, PieChart, Info,
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
-  Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake, Eye, TrendingUp, Globe, Activity
+  Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake, Eye, TrendingUp, Globe, Activity,
+  Fingerprint, ShoppingBag
 } from "lucide-react";
 import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService, coordinatorsService, projectsService, announcementsService, documentsService, revistasService, settingsService } from "../lib/supabase.ts";
 import { accessTrackerService, AccessStats, DEFAULT_ACCESS_STATS } from "../lib/accessTracker.ts";
@@ -18,6 +19,8 @@ import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
 import { getWhatsAppLink } from "../lib/validation.ts";
 import CongressoManager from "./CongressoManager.tsx";
 import SecretariaMembersSection from "./SecretariaMembersSection.tsx";
+import AcertoSacolaSection from "./AcertoSacolaSection.tsx";
+import { biometricsService, getBiometricLabel } from "../lib/biometrics.ts";
 
 import { getStoredConvites, getStoredEventos, fetchConvitesAsync, fetchEventosAsync, saveConvitesAsync, saveEventosAsync, DEFAULT_CONVITES, DEFAULT_EVENTOS } from "../data/carouselData.ts";
 
@@ -172,7 +175,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "membros_secretaria" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas" | "conteudos" | "servicos" | "voluntarios" | "oracoes" | "apoio_feminino">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "membros" | "membros_secretaria" | "projetos" | "revistas" | "convites" | "eventos" | "termos" | "diretoria" | "coordenadores" | "congressos" | "fichas" | "conteudos" | "servicos" | "voluntarios" | "oracoes" | "apoio_feminino" | "sacolas">("dashboard");
 
   // Supabase Connection State Diagnostics
   const [dbStatus, setDbStatus] = useState<{
@@ -500,6 +503,26 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       } else {
         alert("Credencial administrativa inválida! Por favor, utilize os dados corretos.");
       }
+    }
+  };
+
+  // Biometric login for Admin (WebAuthn)
+  const handleAdminBiometricAuth = async () => {
+    try {
+      if (!biometricsService.isWebAuthnSupported()) {
+        alert("Seu navegador ou dispositivo atual não possui suporte à API de Credenciais WebAuthn.");
+        return;
+      }
+
+      const res = await biometricsService.authenticate(adminEmail.trim() || "admin@umesc.org.br");
+      if (res.success) {
+        setIsAdminLoggedIn(true);
+        sessionStorage.setItem("umesc_admin_auth", "true");
+      } else {
+        alert(res.error || "Autenticação biométrica de diretoria não autorizada.");
+      }
+    } catch (err: any) {
+      alert(`Falha no login biométrico do administrador: ${err.message || err}`);
     }
   };
 
@@ -1188,12 +1211,23 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
               )}
             </div>
 
-            <button
-              type="submit"
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-colors cursor-pointer"
-            >
-              <LogIn className="w-4 h-4" /> Entrar no Painel Seguro
-            </button>
+            <div className="space-y-2">
+              <button
+                type="submit"
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-lg shadow-amber-500/20"
+              >
+                <LogIn className="w-4 h-4" /> Entrar com Senha Mestre
+              </button>
+
+              <button
+                type="button"
+                onClick={handleAdminBiometricAuth}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-500/40 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer shadow-md shadow-emerald-950/40"
+              >
+                <Fingerprint className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <span>Entrar com Biometria ({getBiometricLabel()})</span>
+              </button>
+            </div>
           </form>
 
           <button
@@ -1262,6 +1296,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
           {[
             { id: "dashboard", label: "Dashboard Analítico", icon: BarChart2 },
             { id: "congressos", label: "Gestão de Congressos", icon: QrCode },
+            { id: "sacolas", label: "Acerto de Sacolas", icon: ShoppingBag },
             { id: "membros", label: `Membros (${members.length})`, icon: Users },
             { id: "membros_secretaria", label: "Membros Secretaria", icon: FileText },
             { id: "fichas", label: `Fichas de Filiação (${fichas.length})`, icon: FileCheck },
@@ -1581,9 +1616,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                         <span className="block text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">Mês de Maior Tráfego</span>
                         {(() => {
                           const monthlyEntries = Object.entries(accessStats?.monthly || {});
-                          let maxEntry = ["-", 0];
+                          let maxEntry: [string, number] = ["-", 0];
                           monthlyEntries.forEach(([k, v]) => {
-                            if (v > maxEntry[1]) maxEntry = [k, Number(v)];
+                            const val = Number(v) || 0;
+                            if (val > maxEntry[1]) maxEntry = [k, val];
                           });
                           return (
                             <>
@@ -1696,6 +1732,20 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
           {activeTab === "congressos" && (
             <div className="bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6">
               <CongressoManager />
+            </div>
+          )}
+
+          {activeTab === "sacolas" && (
+            <div className="bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6">
+              <AcertoSacolaSection 
+                isAdmin={true} 
+                currentUser={{ 
+                  name: "Administrador Geral UMESC", 
+                  cpf: "000.000.000-00", 
+                  email: "admin@umesc.org.br", 
+                  city: "Florianópolis / Sede Estadual" 
+                }} 
+              />
             </div>
           )}
 

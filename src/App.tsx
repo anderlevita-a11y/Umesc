@@ -15,6 +15,7 @@ import MemberDashboard from "./components/MemberDashboard";
 import AdminPortal from "./components/AdminPortal";
 import PrayerRequestsSection from "./components/PrayerRequestsSection";
 import LgpdPolicyBanner from "./components/LgpdPolicyBanner";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import Footer from "./components/Footer";
 
 import { ShieldCheck, Calendar, Users, Scale, UserPlus, Info, Compass, Star, X } from "lucide-react";
@@ -125,19 +126,25 @@ export default function App() {
 
   if (view === "dashboard") {
     return (
-      <MemberDashboard 
-        initialTab={memberDashboardInitialTab}
-        onBackToHome={() => setView("public")}
-        onEnterAdminMode={() => setView("admin")}
-      />
+      <>
+        <PWAInstallPrompt />
+        <MemberDashboard 
+          initialTab={memberDashboardInitialTab}
+          onBackToHome={() => setView("public")}
+          onEnterAdminMode={() => setView("admin")}
+        />
+      </>
     );
   }
 
   if (view === "admin") {
     return (
-      <AdminPortal 
-        onBackToHome={() => setView("public")}
-      />
+      <>
+        <PWAInstallPrompt />
+        <AdminPortal 
+          onBackToHome={() => setView("public")}
+        />
+      </>
     );
   }
 
@@ -512,6 +519,9 @@ export default function App() {
 
       {/* 6. Floating LGPD Notification Banner to allow fast user approval */}
       <LgpdPolicyBanner />
+
+      {/* PWA Offline & Install Prompt */}
+      <PWAInstallPrompt />
 
       {/* 7. Footer Section with full addresses and legal numbers */}
       <Footer 

@@ -67,7 +67,7 @@ export const COORDINATORS_DATA: Coordinator[] = [
     role: "Coordenador Regional Grande Florianópolis",
     region: "Grande Florianópolis / Litoral",
     contact: "(48) 98822-1920",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200"
+    avatar: ""
   },
   {
     name: "Sargento PM Joel Ferreira",
@@ -75,7 +75,7 @@ export const COORDINATORS_DATA: Coordinator[] = [
     role: "Coordenador Regional Vale do Itajaí",
     region: "Blumenau & Vale Oriental",
     contact: "(47) 99115-3344",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200"
+    avatar: ""
   },
   {
     name: "Capitão BM Roberto Schmidt",
@@ -83,7 +83,7 @@ export const COORDINATORS_DATA: Coordinator[] = [
     role: "Coordenador Regional Norte",
     region: "Joinville & Planalto Norte",
     contact: "(47) 98765-4321",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200"
+    avatar: ""
   },
   {
     name: "Major PM Vanderlei de Lima",
@@ -91,7 +91,7 @@ export const COORDINATORS_DATA: Coordinator[] = [
     role: "Coordenador Regional Oeste",
     region: "Chapecó & Extremo Oeste",
     contact: "(49) 99912-8877",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&q=80&w=200"
+    avatar: ""
   },
   {
     name: "Cabo PM Daniela Souza",
@@ -99,7 +99,7 @@ export const COORDINATORS_DATA: Coordinator[] = [
     role: "Coordenadora Regional Sul",
     region: "Criciúma / Tubarão",
     contact: "(48) 99422-5566",
-    avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200"
+    avatar: ""
   },
   {
     name: "Sargento BM Thiago Luz",
@@ -107,7 +107,7 @@ export const COORDINATORS_DATA: Coordinator[] = [
     role: "Coordenador Regional Planalto Serrano",
     region: "Lages & Planalto Central",
     contact: "(49) 98811-0011",
-    avatar: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&q=80&w=200"
+    avatar: ""
   }
 ];
 

@@ -1,0 +1,57 @@
+{
+  "name": "UMESC - União de Militares Evangélicos de SC",
+  "short_name": "UMESC",
+  "description": "Plataforma oficial da União de Militares Evangélicos de Santa Catarina. Agência missionária de apoio espiritual e social, gestão de membros e acertos de sacolas.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#090f1a",
+  "theme_color": "#0e1726",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "categories": ["social", "lifestyle", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Área do Membro",
+      "short_name": "Membro",
+      "description": "Acesse a área restrita do militar e sua carteira digital",
+      "url": "/?tab=profile",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Acerto de Sacolas",
+      "short_name": "Sacolas",
+      "description": "Prestação de contas e fechamento de materiais institucionais",
+      "url": "/?tab=sacola",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Ficha de Filiação",
+      "short_name": "Filiação",
+      "description": "Formulário oficial de ingresso na UMESC",
+      "url": "/?tab=filiacao",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

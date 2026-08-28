@@ -102,18 +102,14 @@ export default function PrayerRequestsSection() {
             </div>
 
             {/* Praying hands banner visual */}
-            <div className="mt-8 relative h-36 rounded-2xl overflow-hidden border border-white/5">
-              <img 
-                src="https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&q=80&w=800" 
-                alt="Mãos em Oração" 
-                className="w-full h-full object-cover brightness-[0.4] contrast-125"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#09111e] via-transparent to-transparent" />
-              <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
-                <span className="text-[10px] uppercase font-bold text-amber-500/90 tracking-widest font-mono">"Orai sem cessar"</span>
-                <span className="text-[9px] font-mono text-slate-400">1 Tessalonicenses 5:17</span>
+            <div className="mt-8 relative h-36 rounded-2xl overflow-hidden border border-amber-500/20 bg-gradient-to-br from-[#0c1626] via-[#14233c] to-[#0a111e] flex items-center justify-center">
+              <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#f59e0b_1px,transparent_1px)] [background-size:16px_16px]"></div>
+              <div className="relative z-10 flex flex-col items-center text-center px-4">
+                <Heart className="w-8 h-8 text-amber-400 mb-2 animate-pulse opacity-90" />
+                <span className="text-xs uppercase font-extrabold text-amber-400 tracking-widest font-mono">"Orai sem cessar"</span>
+                <span className="text-[10px] font-mono text-slate-400 mt-0.5">1 Tessalonicenses 5:17</span>
               </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-[#09111e] via-transparent to-transparent pointer-events-none" />
             </div>
           </div>
 
