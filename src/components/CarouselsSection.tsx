@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
 import { ChevronLeft, ChevronRight, Megaphone, Calendar, Eye, Play, Pause } from "lucide-react";
 import { getCleanImageUrl } from "../lib/imageDriveHelper.ts";
 import { getStoredConvites, getStoredEventos, fetchConvitesAsync, fetchEventosAsync, ConviteSlide, EventoSlide } from "../data/carouselData.ts";
@@ -11,12 +10,10 @@ export default function CarouselsSection() {
 
   // Carousel State for Convites
   const [convitesIndex, setConvitesIndex] = useState(0);
-  const [convitesDirection, setConvitesDirection] = useState(0);
   const [convitesPlaying, setConvitesPlaying] = useState(true);
 
   // Carousel State for Eventos
   const [eventosIndex, setEventosIndex] = useState(0);
-  const [eventosDirection, setEventosDirection] = useState(0);
   const [eventosPlaying, setEventosPlaying] = useState(true);
 
   // Lightbox for reviewing images in full screen
@@ -60,47 +57,41 @@ export default function CarouselsSection() {
     if (convitesIndex >= convites.length && convites.length > 0) {
       setConvitesIndex(0);
     }
-  }, [convites, convitesIndex]);
+  }, [convites.length, convitesIndex]);
 
   useEffect(() => {
     if (eventosIndex >= eventos.length && eventos.length > 0) {
       setEventosIndex(0);
     }
-  }, [eventos, eventosIndex]);
+  }, [eventos.length, eventosIndex]);
 
   // Handlers for Convites Navigation
   const handlePrevConvite = () => {
     if (convites.length === 0) return;
-    setConvitesDirection(-1);
     setConvitesIndex((prev) => (prev === 0 ? convites.length - 1 : prev - 1));
   };
 
   const handleNextConvite = () => {
     if (convites.length === 0) return;
-    setConvitesDirection(1);
     setConvitesIndex((prev) => (prev === convites.length - 1 ? 0 : prev + 1));
   };
 
   const setConvitesSlideDirect = (index: number) => {
-    setConvitesDirection(index > convitesIndex ? 1 : -1);
     setConvitesIndex(index);
   };
 
   // Handlers for Eventos Navigation
   const handlePrevEvento = () => {
     if (eventos.length === 0) return;
-    setEventosDirection(-1);
     setEventosIndex((prev) => (prev === 0 ? eventos.length - 1 : prev - 1));
   };
 
   const handleNextEvento = () => {
     if (eventos.length === 0) return;
-    setEventosDirection(1);
     setEventosIndex((prev) => (prev === eventos.length - 1 ? 0 : prev + 1));
   };
 
   const setEventosSlideDirect = (index: number) => {
-    setEventosDirection(index > eventosIndex ? 1 : -1);
     setEventosIndex(index);
   };
 
@@ -108,39 +99,18 @@ export default function CarouselsSection() {
   useEffect(() => {
     if (!convitesPlaying || convites.length <= 1) return;
     const interval = setInterval(() => {
-      handleNextConvite();
+      setConvitesIndex((prev) => (prev === convites.length - 1 ? 0 : prev + 1));
     }, 4500);
     return () => clearInterval(interval);
-  }, [convitesIndex, convitesPlaying, convites]);
+  }, [convitesPlaying, convites.length]);
 
   useEffect(() => {
     if (!eventosPlaying || eventos.length <= 1) return;
     const interval = setInterval(() => {
-      handleNextEvento();
+      setEventosIndex((prev) => (prev === eventos.length - 1 ? 0 : prev + 1));
     }, 5000);
     return () => clearInterval(interval);
-  }, [eventosIndex, eventosPlaying, eventos]);
-
-  // Variants for slide transition inside limited boxes
-  const slideVariants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? "100%" : "-100%",
-      opacity: 0
-    }),
-    center: {
-      x: 0,
-      opacity: 1,
-      transition: {
-        x: { type: "spring", stiffness: 300, damping: 30 },
-        opacity: { duration: 0.3 }
-      }
-    },
-    exit: (direction: number) => ({
-      x: direction < 0 ? "100%" : "-100%",
-      opacity: 0,
-      transition: { duration: 0.25 }
-    })
-  };
+  }, [eventosPlaying, eventos.length]);
 
   const currentConvite = convites[convitesIndex];
   const currentEvento = eventos[eventosIndex];
@@ -193,59 +163,52 @@ export default function CarouselsSection() {
             <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5 min-h-[260px] sm:min-h-[300px]">
               
               {convites.length > 0 && currentConvite ? (
-                <AnimatePresence initial={false} custom={convitesDirection} mode="popLayout">
-                  <motion.div
-                    key={convitesIndex}
-                    custom={convitesDirection}
-                    variants={slideVariants}
-                    initial="enter"
-                    animate="center"
-                    exit="exit"
-                    className="absolute inset-0 w-full h-full"
+                <div
+                  key={convitesIndex}
+                  className="absolute inset-0 w-full h-full transition-opacity duration-300"
+                >
+                  <img
+                    src={getCleanImageUrl(currentConvite.image)}
+                    alt={currentConvite.title}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.src = "https://images.unsplash.com/photo-1447069387593-a5de0862481e?auto=format&fit=crop&q=80&w=600";
+                    }}
+                  />
+                  
+                  {/* Dark gradient overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-black/30" />
+
+                  {/* Top-left design tag badge */}
+                  <span className="absolute top-3 left-3 bg-amber-500 text-slate-950 font-black text-[9px] uppercase tracking-widest px-2.5 py-1 rounded shadow-md font-mono z-10">
+                    {currentConvite.tag}
+                  </span>
+
+                  {/* Top-right zoom action button - ALWAYS visible on mobile for touch accessibility */}
+                  <button
+                    onClick={() => setLightboxImage(getCleanImageUrl(currentConvite.image))}
+                    title="Visualizar Imagem Completa"
+                    className="absolute top-3 right-3 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-[#070c18]/85 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity active:scale-90 z-10 cursor-pointer shadow-lg"
                   >
-                    <img
-                      src={getCleanImageUrl(currentConvite.image)}
-                      alt={currentConvite.title}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1447069387593-a5de0862481e?auto=format&fit=crop&q=80&w=600";
-                      }}
-                    />
-                    
-                    {/* Dark gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-black/30" />
+                    <Eye className="w-4 h-4 text-amber-400" />
+                  </button>
 
-                    {/* Top-left design tag badge */}
-                    <span className="absolute top-3 left-3 bg-amber-500 text-slate-950 font-black text-[9px] uppercase tracking-widest px-2.5 py-1 rounded shadow-md font-mono z-10">
-                      {currentConvite.tag}
+                  {/* Text Details absolute bottom */}
+                  <div className="absolute bottom-0 inset-x-0 p-3.5 sm:p-5 text-left bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent">
+                    <span className="text-[10px] text-amber-400 font-mono font-bold block mb-1">
+                      🔔 {currentConvite.date}
                     </span>
-
-                    {/* Top-right zoom action button - ALWAYS visible on mobile for touch accessibility */}
-                    <button
-                      onClick={() => setLightboxImage(getCleanImageUrl(currentConvite.image))}
-                      title="Visualizar Imagem Completa"
-                      className="absolute top-3 right-3 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-[#070c18]/85 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity active:scale-90 z-10 cursor-pointer shadow-lg"
-                    >
-                      <Eye className="w-4 h-4 text-amber-400" />
-                    </button>
-
-                    {/* Text Details absolute bottom */}
-                    <div className="absolute bottom-0 inset-x-0 p-3.5 sm:p-5 text-left bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent">
-                      <span className="text-[10px] text-amber-400 font-mono font-bold block mb-1">
-                        🔔 {currentConvite.date}
-                      </span>
-                      <h4 className="text-xs sm:text-base font-extrabold text-white uppercase tracking-tight line-clamp-1">
-                        {currentConvite.title}
-                      </h4>
-                      <p className="text-[10.5px] sm:text-[11px] text-slate-300 leading-snug mt-1 line-clamp-2">
-                        {currentConvite.description}
-                      </p>
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
+                    <h4 className="text-xs sm:text-base font-extrabold text-white uppercase tracking-tight line-clamp-1">
+                      {currentConvite.title}
+                    </h4>
+                    <p className="text-[10.5px] sm:text-[11px] text-slate-300 leading-snug mt-1 line-clamp-2">
+                      {currentConvite.description}
+                    </p>
+                  </div>
+                </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-slate-550 border border-dashed border-white/10 rounded-lg p-6">
+                <div className="flex flex-col items-center justify-center h-full text-slate-500 border border-dashed border-white/10 rounded-lg p-6">
                   <Megaphone className="w-10 h-10 text-slate-600 mb-2" />
                   <p className="text-xs font-mono uppercase">Nenhum Convite Cadastrado</p>
                   <p className="text-[10px] text-slate-500 mt-1">Alimente este carrossel pela Área Administrativa.</p>
@@ -319,59 +282,52 @@ export default function CarouselsSection() {
             <div className="relative flex-1 rounded-xl overflow-hidden group bg-slate-950 border border-white/5 min-h-[260px] sm:min-h-[300px]">
               
               {eventos.length > 0 && currentEvento ? (
-                <AnimatePresence initial={false} custom={eventosDirection} mode="popLayout">
-                  <motion.div
-                    key={eventosIndex}
-                    custom={eventosDirection}
-                    variants={slideVariants}
-                    initial="enter"
-                    animate="center"
-                    exit="exit"
-                    className="absolute inset-0 w-full h-full"
+                <div
+                  key={eventosIndex}
+                  className="absolute inset-0 w-full h-full transition-opacity duration-300"
+                >
+                  <img
+                    src={getCleanImageUrl(currentEvento.image)}
+                    alt={currentEvento.title}
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.src = "https://images.unsplash.com/photo-1461532252243-85f001ca588a?auto=format&fit=crop&q=80&w=600";
+                    }}
+                  />
+                  
+                  {/* Dark gradient overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-black/30" />
+
+                  {/* Top-left design tag badge */}
+                  <span className="absolute top-3 left-3 bg-teal-500 text-slate-950 font-black text-[9px] uppercase tracking-widest px-2.5 py-1 rounded shadow-md font-mono z-10">
+                    {currentEvento.tag}
+                  </span>
+
+                  {/* Top-right zoom action button - ALWAYS visible on mobile */}
+                  <button
+                    onClick={() => setLightboxImage(getCleanImageUrl(currentEvento.image))}
+                    title="Visualizar Imagem Completa"
+                    className="absolute top-3 right-3 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-[#070c18]/85 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity active:scale-90 z-10 cursor-pointer shadow-lg"
                   >
-                    <img
-                      src={getCleanImageUrl(currentEvento.image)}
-                      alt={currentEvento.title}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                      referrerPolicy="no-referrer"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1461532252243-85f001ca588a?auto=format&fit=crop&q=80&w=600";
-                      }}
-                    />
-                    
-                    {/* Dark gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/50 to-black/30" />
+                    <Eye className="w-4 h-4 text-teal-400" />
+                  </button>
 
-                    {/* Top-left design tag badge */}
-                    <span className="absolute top-3 left-3 bg-teal-500 text-slate-950 font-black text-[9px] uppercase tracking-widest px-2.5 py-1 rounded shadow-md font-mono z-10">
-                      {currentEvento.tag}
+                  {/* Text Details absolute bottom */}
+                  <div className="absolute bottom-0 inset-x-0 p-3.5 sm:p-5 text-left bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent">
+                    <span className="text-[10px] text-teal-400 font-mono font-bold block mb-1">
+                      📍 {currentEvento.place}
                     </span>
-
-                    {/* Top-right zoom action button - ALWAYS visible on mobile */}
-                    <button
-                      onClick={() => setLightboxImage(getCleanImageUrl(currentEvento.image))}
-                      title="Visualizar Imagem Completa"
-                      className="absolute top-3 right-3 w-9 h-9 sm:w-8 sm:h-8 rounded-full bg-[#070c18]/85 backdrop-blur-md border border-white/10 flex items-center justify-center text-slate-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity active:scale-90 z-10 cursor-pointer shadow-lg"
-                    >
-                      <Eye className="w-4 h-4 text-teal-400" />
-                    </button>
-
-                    {/* Text Details absolute bottom */}
-                    <div className="absolute bottom-0 inset-x-0 p-3.5 sm:p-5 text-left bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent">
-                      <span className="text-[10px] text-teal-400 font-mono font-bold block mb-1">
-                        📍 {currentEvento.place}
-                      </span>
-                      <h4 className="text-xs sm:text-base font-extrabold text-white uppercase tracking-tight line-clamp-1">
-                        {currentEvento.title}
-                      </h4>
-                      <p className="text-[10.5px] sm:text-[11px] text-slate-300 leading-snug mt-1 line-clamp-2">
-                        {currentEvento.description}
-                      </p>
-                    </div>
-                  </motion.div>
-                </AnimatePresence>
+                    <h4 className="text-xs sm:text-base font-extrabold text-white uppercase tracking-tight line-clamp-1">
+                      {currentEvento.title}
+                    </h4>
+                    <p className="text-[10.5px] sm:text-[11px] text-slate-300 leading-snug mt-1 line-clamp-2">
+                      {currentEvento.description}
+                    </p>
+                  </div>
+                </div>
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-slate-550 border border-dashed border-white/10 rounded-lg p-6">
+                <div className="flex flex-col items-center justify-center h-full text-slate-500 border border-dashed border-white/10 rounded-lg p-6">
                   <Calendar className="w-10 h-10 text-slate-600 mb-2" />
                   <p className="text-xs font-mono uppercase">Nenhuma Ação Cadastrada</p>
                   <p className="text-[10px] text-slate-500 mt-1">Alimente este carrossel pela Área Administrativa.</p>
@@ -426,38 +382,30 @@ export default function CarouselsSection() {
       </div>
 
       {/* LIGHTBOX / FULL SCREEN MODAL */}
-      <AnimatePresence>
-        {lightboxImage && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setLightboxImage(null)}
-            className="fixed inset-0 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 z-[999] cursor-zoom-out"
+      {lightboxImage && (
+        <div
+          onClick={() => setLightboxImage(null)}
+          className="fixed inset-0 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 z-[999] cursor-zoom-out"
+        >
+          <div
+            className="relative max-w-5xl max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              className="relative max-w-5xl max-h-[90vh]"
-              onClick={(e) => e.stopPropagation()}
+            <img
+              src={lightboxImage}
+              alt="Fullscreen View"
+              className="max-w-full max-h-[80vh] sm:max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl"
+              referrerPolicy="no-referrer"
+            />
+            <button
+              onClick={() => setLightboxImage(null)}
+              className="absolute -top-12 right-0 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-full px-4 py-1.5 text-xs font-mono font-bold active:scale-95 transition-all cursor-pointer"
             >
-              <img
-                src={lightboxImage}
-                alt="Fullscreen View"
-                className="max-w-full max-h-[80vh] sm:max-h-[85vh] object-contain rounded-lg border border-white/10 shadow-2xl"
-                referrerPolicy="no-referrer"
-              />
-              <button
-                onClick={() => setLightboxImage(null)}
-                className="absolute -top-12 right-0 bg-white/10 hover:bg-white/20 border border-white/10 text-white rounded-full px-4 py-1.5 text-xs font-mono font-bold active:scale-95 transition-all cursor-pointer"
-              >
-                FECHAR ✕
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              FECHAR ✕
+            </button>
+          </div>
+        </div>
+      )}
 
     </section>
   );

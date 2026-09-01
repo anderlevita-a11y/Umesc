@@ -1296,7 +1296,6 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
           {[
             { id: "dashboard", label: "Dashboard Analítico", icon: BarChart2 },
             { id: "congressos", label: "Gestão de Congressos", icon: QrCode },
-            { id: "sacolas", label: "Acerto de Sacolas", icon: ShoppingBag },
             { id: "membros", label: `Membros (${members.length})`, icon: Users },
             { id: "membros_secretaria", label: "Membros Secretaria", icon: FileText },
             { id: "fichas", label: `Fichas de Filiação (${fichas.length})`, icon: FileCheck },
@@ -1732,20 +1731,6 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
           {activeTab === "congressos" && (
             <div className="bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6">
               <CongressoManager />
-            </div>
-          )}
-
-          {activeTab === "sacolas" && (
-            <div className="bg-[#131f2f] rounded-xl border border-white/5 p-4 sm:p-6 space-y-6">
-              <AcertoSacolaSection 
-                isAdmin={true} 
-                currentUser={{ 
-                  name: "Administrador Geral UMESC", 
-                  cpf: "000.000.000-00", 
-                  email: "admin@umesc.org.br", 
-                  city: "Florianópolis / Sede Estadual" 
-                }} 
-              />
             </div>
           )}
 
