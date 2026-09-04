@@ -36,7 +36,10 @@ import {
   ShoppingBag,
   Smartphone,
   Sparkles,
-  Check
+  Check,
+  Search,
+  Phone,
+  Mail
 } from "lucide-react";
 import { MemberRegistration, Coordinator, Announcement, ScheduleEvent, DocumentFile, FichaFiliacao } from "../types";
 import { generateFichaPdf } from "../lib/fichaPdfHelper.ts";
@@ -159,8 +162,9 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
 
   // Profile editing fields state
   const [profileName, setProfileName] = useState("");
+  const [profileCpf, setProfileCpf] = useState("");
   const [profileBirthDate, setProfileBirthDate] = useState("");
-  const [profileForce, setProfileForce] = useState<"PM" | "BM" | "FFAA" | "Civil" | "Apoiador">("PM");
+  const [profileForce, setProfileForce] = useState<"PM" | "BM" | "FFAA" | "Civil" | "Apoiador" | "">("");
   const [profileRank, setProfileRank] = useState("");
   const [profileRgMilitar, setProfileRgMilitar] = useState("");
   const [profileChurch, setProfileChurch] = useState("");
@@ -169,6 +173,15 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   const [profileCity, setProfileCity] = useState("");
   const [profilePassword, setProfilePassword] = useState("");
   const [profilePhotoUrl, setProfilePhotoUrl] = useState("");
+  // Address complete fields (obrigatórios)
+  const [profileCep, setProfileCep] = useState("");
+  const [profileAddressRua, setProfileAddressRua] = useState("");
+  const [profileAddressNumero, setProfileAddressNumero] = useState("");
+  const [profileAddressComplemento, setProfileAddressComplemento] = useState("");
+  const [profileAddressBairro, setProfileAddressBairro] = useState("");
+  const [profileState, setProfileState] = useState("SC");
+  const [profileNotes, setProfileNotes] = useState("");
+  const [isSearchingCep, setIsSearchingCep] = useState(false);
   const [isUploadingProfilePhoto, setIsUploadingProfilePhoto ] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState(false);
   const [profileErrorMsg, setProfileErrorMsg] = useState("");
@@ -217,19 +230,29 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   }, [initialTab]);
 
   // Sync profile fields with authenticated user data
+  // Instrução: "Nesta sessão, deixe somente preenchido e-mail e senha; o restante deixe em branco, permitindo que o usuário preencha."
   useEffect(() => {
     if (loggedInUser) {
-      setProfileName(loggedInUser.name || "");
-      setProfileBirthDate(loggedInUser.rawBirthDate || "");
-      setProfileForce((loggedInUser.rawForce as any) || "PM");
-      setProfileRank(loggedInUser.rank || "");
-      setProfileRgMilitar(loggedInUser.registrationID || "");
-      setProfileChurch(loggedInUser.rawChurch || "");
-      setProfilePhone(loggedInUser.rawPhone || "");
       setProfileEmail(loggedInUser.rawEmail || "");
-      setProfileCity(loggedInUser.city || "");
       setProfilePassword(loggedInUser.password || "");
-      setProfilePhotoUrl(loggedInUser.photoUrl || "");
+      // O restante permanece em branco para preenchimento voluntário do associado:
+      setProfileName("");
+      setProfileCpf("");
+      setProfileBirthDate("");
+      setProfileForce("" as any);
+      setProfileRank("");
+      setProfileRgMilitar("");
+      setProfileChurch("");
+      setProfilePhone("");
+      setProfileCity("");
+      setProfilePhotoUrl("");
+      setProfileCep("");
+      setProfileAddressRua("");
+      setProfileAddressNumero("");
+      setProfileAddressComplemento("");
+      setProfileAddressBairro("");
+      setProfileState("SC");
+      setProfileNotes("");
     }
   }, [loggedInUser]);
 
@@ -758,6 +781,43 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
     });
   };
 
+  // Busca automática de endereço por CEP (ViaCEP)
+  const handleFetchAddressByCep = async (rawCep: string) => {
+    const cleanCep = rawCep.replace(/\D/g, "");
+    if (cleanCep.length !== 8) return;
+    setIsSearchingCep(true);
+    try {
+      const resp = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await resp.json();
+      if (!data.erro) {
+        if (data.logradouro) setProfileAddressRua(data.logradouro);
+        if (data.bairro) setProfileAddressBairro(data.bairro);
+        if (data.localidade) setProfileCity(data.localidade);
+        if (data.uf) setProfileState(data.uf);
+      }
+    } catch (e) {
+      console.warn("Erro ao consultar ViaCEP:", e);
+    } finally {
+      setIsSearchingCep(false);
+    }
+  };
+
+  const formatCpfMask = (val: string) => {
+    const clean = val.replace(/\D/g, "").slice(0, 11);
+    if (clean.length <= 3) return clean;
+    if (clean.length <= 6) return `${clean.slice(0, 3)}.${clean.slice(3)}`;
+    if (clean.length <= 9) return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6)}`;
+    return `${clean.slice(0, 3)}.${clean.slice(3, 6)}.${clean.slice(6, 9)}-${clean.slice(9, 11)}`;
+  };
+
+  const formatCepMask = (val: string) => {
+    const clean = val.replace(/\D/g, "").slice(0, 8);
+    if (clean.length > 5) {
+      return `${clean.slice(0, 5)}-${clean.slice(5)}`;
+    }
+    return clean;
+  };
+
   // Profile Update handler
   const handleProfileUpdateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -766,92 +826,160 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
       return;
     }
 
-    // Input validations
-    const cleanEmail = sanitizeInput(profileEmail, 100);
-    const cleanPhone = sanitizeInput(profilePhone, 15);
+    setProfileErrorMsg("");
+    setProfileSuccessMsg(false);
 
+    // Validação de E-mail
+    const cleanEmail = sanitizeInput(profileEmail, 100);
     if (!isValidEmail(cleanEmail)) {
       setProfileErrorMsg("Por favor, informe um endereço de e-mail corporativo ou seguro válido.");
       return;
     }
 
-    if (!isValidPhone(cleanPhone)) {
-      setProfileErrorMsg("Por favor, informe um número de WhatsApp válido com DDD (10 ou 11 dígitos).");
-      return;
-    }
-
+    // Validação de Senha
     const cleanPassword = sanitizeInput(profilePassword, 30);
     if (cleanPassword.length < 6) {
       setProfileErrorMsg("A senha de acesso deve possuir ao menos 6 caracteres.");
       return;
     }
 
-    setProfileErrorMsg("");
-    setProfileSuccessMsg(false);
+    // Validação de CPF (Obrigatório)
+    const cleanCpf = profileCpf.replace(/\D/g, "");
+    if (!cleanCpf) {
+      setProfileErrorMsg("O preenchimento do CPF é obrigatório.");
+      return;
+    }
+    if (!isValidCPF(cleanCpf)) {
+      setProfileErrorMsg("O CPF informado é inválido. Por favor, verifique os dígitos digitados.");
+      return;
+    }
+
+    // Validação de Telefone / WhatsApp (Obrigatório)
+    const cleanPhone = sanitizeInput(profilePhone, 20);
+    if (!cleanPhone) {
+      setProfileErrorMsg("O preenchimento do Telefone / WhatsApp é obrigatório.");
+      return;
+    }
+    if (!isValidPhone(cleanPhone)) {
+      setProfileErrorMsg("Por favor, informe um número de Telefone / WhatsApp válido com DDD (10 ou 11 dígitos).");
+      return;
+    }
+
+    // Validação de Endereço Completo (Obrigatórios)
+    const cleanCep = profileCep.replace(/\D/g, "");
+    if (!cleanCep || cleanCep.length !== 8) {
+      setProfileErrorMsg("O CEP residencial completo é obrigatório (8 dígitos numéricos).");
+      return;
+    }
+    if (!profileAddressRua.trim()) {
+      setProfileErrorMsg("O Logradouro / Rua é de preenchimento obrigatório.");
+      return;
+    }
+    if (!profileAddressNumero.trim()) {
+      setProfileErrorMsg("O Número do endereço é de preenchimento obrigatório.");
+      return;
+    }
+    if (!profileAddressBairro.trim()) {
+      setProfileErrorMsg("O Bairro é de preenchimento obrigatório.");
+      return;
+    }
+    if (!profileCity.trim()) {
+      setProfileErrorMsg("A Cidade é de preenchimento obrigatório.");
+      return;
+    }
+    if (!profileState.trim()) {
+      setProfileErrorMsg("O Estado (UF) é de preenchimento obrigatório.");
+      return;
+    }
 
     try {
-      // Complete sanitization of remaining fields to avoid script injection or overlength values
+      // Sanitização de campos opcionais/complementares
       const cleanName = sanitizeInput(profileName, 100);
       const cleanBirthDate = sanitizeInput(profileBirthDate, 20);
       const cleanRank = sanitizeInput(profileRank, 50);
       const cleanRgMilitar = sanitizeInput(profileRgMilitar, 50);
       const cleanChurch = sanitizeInput(profileChurch, 150);
       const cleanCity = sanitizeInput(profileCity, 50);
+      const cleanState = sanitizeInput(profileState, 2);
+      const cleanRua = sanitizeInput(profileAddressRua, 150);
+      const cleanNumero = sanitizeInput(profileAddressNumero, 50);
+      const cleanComplemento = sanitizeInput(profileAddressComplemento, 50);
+      const cleanBairro = sanitizeInput(profileAddressBairro, 100);
+      const cleanNotes = sanitizeInput(profileNotes, 255);
+
+      const fullAddress = [
+        cleanRua,
+        cleanNumero ? `nº ${cleanNumero}` : "",
+        cleanComplemento ? `(${cleanComplemento})` : "",
+        cleanBairro ? `- ${cleanBairro}` : "",
+        cleanCity ? `${cleanCity}/${cleanState || "SC"}` : "",
+        cleanCep ? `CEP: ${cleanCep}` : ""
+      ].filter(Boolean).join(", ");
 
       const updatedFields: Partial<MemberRegistration> = {
-        name: cleanName,
-        birthDate: cleanBirthDate,
-        militaryForce: profileForce,
-        rank: cleanRank,
-        rgMilitar: cleanRgMilitar,
-        church: cleanChurch,
+        name: cleanName || loggedInUser.name,
+        cpf: cleanCpf,
+        birthDate: cleanBirthDate || loggedInUser.rawBirthDate || "",
+        militaryForce: (profileForce as any) || (loggedInUser.rawForce as any) || "PM",
+        rank: cleanRank || loggedInUser.rank,
+        rgMilitar: cleanRgMilitar || loggedInUser.registrationID,
+        church: cleanChurch || loggedInUser.rawChurch || "",
         phone: cleanPhone,
         email: cleanEmail,
         city: cleanCity,
         password: cleanPassword,
-        photoUrl: profilePhotoUrl
+        photoUrl: profilePhotoUrl,
+        address: fullAddress,
+        addressRua: cleanRua,
+        addressNumero: cleanNumero,
+        addressBairro: cleanBairro,
+        addressCep: cleanCep,
+        addressCidade: cleanCity,
+        addressEstado: cleanState || "SC",
+        notes: cleanNotes
       };
 
       const success = await membersService.updateMember(loggedInUser.securityHash, updatedFields);
       if (success) {
         setProfileSuccessMsg(true);
-        // Update local session
+        // Atualiza a sessão ativa no navegador
         const nextUserSession = {
           ...loggedInUser,
-          name: cleanName,
-          rank: cleanRank,
-          force: profileForce === "PM" ? "Polícia Militar SC" : profileForce === "BM" ? "Bombeiro Militar SC" : profileForce === "FFAA" ? "Forças Armadas" : profileForce === "Civil" ? "Polícia Civil / Servente" : "Apoiador Voluntário",
+          name: cleanName || loggedInUser.name,
+          rank: cleanRank || loggedInUser.rank,
+          force: profileForce === "PM" ? "Polícia Militar SC" : profileForce === "BM" ? "Bombeiro Militar SC" : profileForce === "FFAA" ? "Forças Armadas" : profileForce === "Civil" ? "Polícia Civil / Servente" : profileForce === "Apoiador" ? "Apoiador Voluntário" : loggedInUser.force,
           city: cleanCity,
-          registrationID: cleanRgMilitar || "N/A",
-          rawBirthDate: cleanBirthDate,
-          rawForce: profileForce,
-          rawChurch: cleanChurch,
+          registrationID: cleanRgMilitar || loggedInUser.registrationID,
+          rawBirthDate: cleanBirthDate || loggedInUser.rawBirthDate,
+          rawForce: profileForce || loggedInUser.rawForce,
+          rawChurch: cleanChurch || loggedInUser.rawChurch,
           rawPhone: cleanPhone,
           rawEmail: cleanEmail,
+          rawCpf: cleanCpf,
           password: cleanPassword,
           photoUrl: profilePhotoUrl
         };
         setLoggedInUser(nextUserSession);
         sessionStorage.setItem("umesc_active_session", JSON.stringify(nextUserSession));
         
-        // Refresh members list
+        // Atualiza lista interna
         try {
           const list = await membersService.getMembers();
           setMembersList(list);
         } catch (_) {}
 
-        // Notify other windows/panels in real-time (e.g. Administrative Portal)
+        // Notifica demais janelas e portais abertos
         window.dispatchEvent(new CustomEvent("umesc_content_updated"));
 
         setTimeout(() => {
           setProfileSuccessMsg(false);
         }, 5010);
       } else {
-        setProfileErrorMsg("Não foi possível salvar suas correções cadastrais.");
+        setProfileErrorMsg("Não foi possível salvar suas correções cadastrais no banco de dados.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao atualizar dados cadastrais:", err);
-      setProfileErrorMsg("Falha técnica de comunicação ao salvar os dados.");
+      setProfileErrorMsg(err?.message || "Falha técnica de comunicação ao salvar os dados.");
     }
   };
 
@@ -1802,28 +1930,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                 <ChevronRight className="w-4 h-4" />
               </button>
 
-              {/* Acerto de Sacolas & Materiais com WebAuthn */}
-              <button
-                onClick={() => {
-                  setActiveTab("sacola");
-                }}
-                className={`w-full flex items-center justify-between p-4 rounded text-left border transition-all ${
-                  activeTab === "sacola"
-                    ? "bg-amber-500 text-slate-950 font-black border-transparent shadow shadow-amber-500/10"
-                    : "bg-[#131f2e] text-slate-105 hover:text-white border-white/5 hover:bg-[#1a2a40]"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <ShoppingBag className="w-5 h-5 shrink-0 text-amber-400" />
-                  <div>
-                    <span className="block text-sm">
-                      Acerto de Sacolas
-                    </span>
-                    <span className="block text-[9px] font-normal uppercase tracking-wider opacity-85 text-amber-400">Prestação de Contas & Materiais</span>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4" />
-              </button>
 
               {/* Discrete link to access Terms of Use & Privacy Policy */}
               <button
@@ -2366,205 +2472,448 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                     </div>
                   )}
 
-                  <form onSubmit={handleProfileUpdateSubmit} className="bg-[#132031] rounded-xl border border-white/5 p-6 space-y-4 max-w-2xl">
+                  <form onSubmit={handleProfileUpdateSubmit} className="bg-[#132031] rounded-xl border border-white/5 p-6 space-y-6 max-w-3xl">
                     
-                    {/* Foto de Perfil 3x4 do Associado */}
-                    <div className="p-4 bg-[#0a111a] rounded-xl border border-white/5 space-y-3">
-                      <div className="flex items-center gap-1.5 text-[10px] font-black tracking-widest text-[#d6a528] font-mono uppercase">
-                        <UploadCloud className="w-3.5 h-3.5" /> FOTO OFICIAL DE PERFIL CADASTRAL (3x4)
+                    {/* Aviso de Preenchimento Inicial */}
+                    <div className="p-4 rounded-lg bg-[#0e1724] border border-blue-550/20 text-slate-300 text-xs flex items-start gap-3">
+                      <Lock className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                      <div className="space-y-1 leading-relaxed">
+                        <p className="font-semibold text-white">
+                          Sessão de Atualização Cadastral
+                        </p>
+                        <p className="text-[11px] text-slate-450">
+                          Nesta sessão, somente seu <strong>E-mail</strong> e <strong>Senha</strong> foram mantidos preenchidos. Por favor, informe seu <strong>CPF</strong>, <strong>Telefone</strong> e <strong>Endereço Residencial Completo</strong> (campos de preenchimento obrigatório assinalados com <span className="text-red-400 font-bold">*</span>) e preencha os demais dados para emissão de credenciais e registro associativo.
+                        </p>
                       </div>
-                      <p className="text-[10px] text-slate-400 leading-normal">
-                        Esta foto de identificação será utilizada para preenchimento inteligente automático de credenciais de Congressos e confecção do seu Voucher/Crachá Oficial.
-                      </p>
-                      
-                      <div className="flex items-center gap-4">
-                        <div className="w-16 h-16 rounded-xl border border-white/10 bg-slate-950 overflow-hidden shrink-0 relative flex items-center justify-center">
-                          {profilePhotoUrl ? (
-                            <img src={profilePhotoUrl} alt="Foto Perfil" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          ) : (
-                            <User className="w-8 h-8 text-slate-700 animate-pulse" />
-                          )}
-                          {isUploadingProfilePhoto && (
-                            <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                              <span className="w-3.5 h-3.5 border-2 border-[#d6a528] border-t-transparent rounded-full animate-spin"></span>
-                            </div>
-                          )}
+                    </div>
+
+                    {/* SEÇÃO 1: CREDENCIAIS DE ACESSO */}
+                    <div className="p-4 bg-[#0a111a] rounded-xl border border-white/5 space-y-3">
+                      <div className="flex items-center gap-1.5 text-[10px] font-black tracking-widest text-emerald-400 font-mono uppercase">
+                        <Lock className="w-3.5 h-3.5" /> 1. CREDENCIAIS DE ACESSO AO PORTAL
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            E-mail Cadastrado <span className="text-red-400">*</span>:
+                          </label>
+                          <div className="relative">
+                            <Mail className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+                            <input 
+                              type="email"
+                              required
+                              maxLength={100}
+                              value={profileEmail}
+                              onChange={(e) => setProfileEmail(e.target.value)}
+                              placeholder="seu.email@pm.sc.gov.br"
+                              className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded pl-8 pr-3 py-2 text-xs text-white outline-none"
+                            />
+                          </div>
                         </div>
 
-                        <div className="flex-1 space-y-2">
-                          <label className="inline-block px-3 py-1.5 bg-[#121c2d] hover:bg-[#18263c] border border-white/10 rounded text-[10px] font-black text-slate-200 cursor-pointer transition-colors text-center uppercase tracking-wider font-mono">
-                            Alterar Foto de Identificação
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                if (e.target.files && e.target.files[0]) {
-                                  const file = e.target.files[0];
-                                  setIsUploadingProfilePhoto(true);
-                                  const reader = new FileReader();
-                                  reader.onloadend = () => {
-                                    setProfilePhotoUrl(reader.result as string);
-                                    setIsUploadingProfilePhoto(false);
-                                  };
-                                  reader.onerror = () => {
-                                    setIsUploadingProfilePhoto(false);
-                                  };
-                                  reader.readAsDataURL(file);
-                                }
-                              }}
-                            />
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Senha de Acesso ao Portal <span className="text-red-400">*</span> (Mín. 6 dígitos):
                           </label>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setProfilePhotoUrl("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=300")}
-                              className="text-[9px] text-[#d6a528] hover:underline hover:text-amber-400 font-bold"
-                            >
-                              Presets: Masculino
-                            </button>
-                            <span className="text-slate-600 text-[9px]">•</span>
-                            <button
-                              type="button"
-                              onClick={() => setProfilePhotoUrl("https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=300")}
-                              className="text-[9px] text-[#d6a528] hover:underline hover:text-amber-400 font-bold"
-                            >
-                              Femenino
-                            </button>
+                          <div className="relative">
+                            <Lock className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+                            <input 
+                              type="password"
+                              required
+                              maxLength={30}
+                              value={profilePassword}
+                              onChange={(e) => setProfilePassword(e.target.value)}
+                              placeholder="••••••••"
+                              className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded pl-8 pr-3 py-2 text-xs text-white outline-none"
+                            />
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Nome Completo (Matrícula):</label>
-                        <input 
-                          type="text"
-                          required
-                          maxLength={100}
-                          value={profileName}
-                          onChange={(e) => setProfileName(e.target.value)}
-                          className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
-                        />
+                    {/* SEÇÃO 2: DOCUMENTO E CONTATO (OBRIGATÓRIOS) */}
+                    <div className="p-4 bg-[#0a111a] rounded-xl border border-white/5 space-y-3">
+                      <div className="flex items-center gap-1.5 text-[10px] font-black tracking-widest text-[#d6a528] font-mono uppercase">
+                        <ShieldCheck className="w-3.5 h-3.5" /> 2. DOCUMENTAÇÃO E CONTATO (OBRIGATÓRIO)
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            CPF (Cadastro de Pessoa Física) <span className="text-red-400 font-bold">*</span>:
+                          </label>
+                          <input 
+                            type="text"
+                            required
+                            maxLength={14}
+                            placeholder="000.000.000-00"
+                            value={profileCpf}
+                            onChange={(e) => setProfileCpf(formatCpfMask(e.target.value))}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none font-mono"
+                          />
+                          <span className="text-[9px] text-slate-500 mt-0.5 block">
+                            Documento único e obrigatório para indexação e identificação civil.
+                          </span>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Telefone / WhatsApp com DDD <span className="text-red-400 font-bold">*</span>:
+                          </label>
+                          <div className="relative">
+                            <Phone className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+                            <input 
+                              type="text"
+                              required
+                              maxLength={15}
+                              placeholder="(48) 99999-9999"
+                              value={profilePhone}
+                              onChange={(e) => setProfilePhone(formatPhone(e.target.value))}
+                              className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded pl-8 pr-3 py-2 text-xs text-white outline-none font-mono"
+                            />
+                          </div>
+                          <span className="text-[9px] text-slate-500 mt-0.5 block">
+                            Contato direto para comunicações e acolhimento pastoral.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SEÇÃO 3: ENDEREÇO RESIDENCIAL COMPLETO (OBRIGATÓRIO) */}
+                    <div className="p-4 bg-[#0a111a] rounded-xl border border-white/5 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-[10px] font-black tracking-widest text-[#d6a528] font-mono uppercase">
+                          <MapPin className="w-3.5 h-3.5" /> 3. ENDEREÇO RESIDENCIAL COMPLETO (OBRIGATÓRIO)
+                        </div>
+                        <span className="text-[9px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-mono">
+                          ViaCEP Integrado
+                        </span>
                       </div>
 
+                      {/* Linha 1: CEP com busca automática */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="sm:col-span-1">
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            CEP Residencial <span className="text-red-400 font-bold">*</span>:
+                          </label>
+                          <div className="flex gap-1.5">
+                            <input 
+                              type="text"
+                              required
+                              maxLength={9}
+                              placeholder="00000-000"
+                              value={profileCep}
+                              onChange={(e) => {
+                                const masked = formatCepMask(e.target.value);
+                                setProfileCep(masked);
+                                if (masked.replace(/\D/g, "").length === 8) {
+                                  handleFetchAddressByCep(masked);
+                                }
+                              }}
+                              className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleFetchAddressByCep(profileCep)}
+                              disabled={isSearchingCep}
+                              className="bg-[#1a293d] hover:bg-[#253952] text-slate-200 px-2.5 py-2 rounded text-xs transition-colors shrink-0 flex items-center justify-center cursor-pointer border border-white/10"
+                              title="Consultar CEP"
+                            >
+                              {isSearchingCep ? (
+                                <span className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span>
+                              ) : (
+                                <Search className="w-3.5 h-3.5 text-amber-400" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Logradouro / Rua / Avenida <span className="text-red-400 font-bold">*</span>:
+                          </label>
+                          <input 
+                            type="text"
+                            required
+                            maxLength={150}
+                            placeholder="Ex: Rua Coronel Pedro Demoro"
+                            value={profileAddressRua}
+                            onChange={(e) => setProfileAddressRua(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Linha 2: Número e Complemento */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Número <span className="text-red-400 font-bold">*</span>:
+                          </label>
+                          <input 
+                            type="text"
+                            required
+                            maxLength={50}
+                            placeholder="Ex: 1250 ou S/N"
+                            value={profileAddressNumero}
+                            onChange={(e) => setProfileAddressNumero(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Complemento / Apto / Bloco (Opcional):
+                          </label>
+                          <input 
+                            type="text"
+                            maxLength={50}
+                            placeholder="Ex: Apto 302 Bloco B"
+                            value={profileAddressComplemento}
+                            onChange={(e) => setProfileAddressComplemento(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Linha 3: Bairro, Cidade e UF */}
+                      <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Bairro <span className="text-red-400 font-bold">*</span>:
+                          </label>
+                          <input 
+                            type="text"
+                            required
+                            maxLength={100}
+                            placeholder="Ex: Estreito"
+                            value={profileAddressBairro}
+                            onChange={(e) => setProfileAddressBairro(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-3">
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Cidade <span className="text-red-400 font-bold">*</span>:
+                          </label>
+                          <input 
+                            type="text"
+                            required
+                            maxLength={50}
+                            placeholder="Ex: Florianópolis"
+                            value={profileCity}
+                            onChange={(e) => setProfileCity(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-1">
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            UF <span className="text-red-400 font-bold">*</span>:
+                          </label>
+                          <select
+                            required
+                            value={profileState}
+                            onChange={(e) => setProfileState(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-2.5 py-2 text-xs text-white outline-none cursor-pointer"
+                          >
+                            <option value="SC">SC</option>
+                            <option value="PR">PR</option>
+                            <option value="RS">RS</option>
+                            <option value="SP">SP</option>
+                            <option value="RJ">RJ</option>
+                            <option value="MG">MG</option>
+                            <option value="ES">ES</option>
+                            <option value="DF">DF</option>
+                            <option value="GO">GO</option>
+                            <option value="MS">MS</option>
+                            <option value="MT">MT</option>
+                            <option value="BA">BA</option>
+                            <option value="PE">PE</option>
+                            <option value="CE">CE</option>
+                            <option value="AM">AM</option>
+                            <option value="PA">PA</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Observações de Endereço */}
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Data de Nascimento:</label>
+                        <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                          Ponto de Referência / Notas de Localização (Opcional):
+                        </label>
                         <input 
-                          type="date"
-                          required
-                          value={profileBirthDate || ""}
-                          onChange={(e) => setProfileBirthDate(e.target.value)}
-                          className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          type="text"
+                          maxLength={255}
+                          placeholder="Ex: Próximo ao Batalhão de Polícia Militar"
+                          value={profileNotes}
+                          onChange={(e) => setProfileNotes(e.target.value)}
+                          className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
                         />
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Vínculo Institucional:</label>
-                        <select
-                          value={profileForce}
-                          onChange={(e) => setProfileForce(e.target.value as any)}
-                          className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none cursor-pointer"
-                        >
-                          <option value="PM">Polícia Militar de SC (PMSC)</option>
-                          <option value="BM">Bombeiro Militar de SC (CBMSC)</option>
-                          <option value="FFAA">Forças Armadas (Marinha/Exército/Aeronáutica)</option>
-                          <option value="Civil">Agente Civil de Segurança (Polícia/IGP)</option>
-                          <option value="Apoiador">Apoiador Social Voluntário</option>
-                        </select>
+                    {/* SEÇÃO 4: DADOS PESSOAIS & MILITARES (PERMITIDO O USUÁRIO PREENCHER) */}
+                    <div className="p-4 bg-[#0a111a] rounded-xl border border-white/5 space-y-4">
+                      <div className="flex items-center gap-1.5 text-[10px] font-black tracking-widest text-slate-300 font-mono uppercase">
+                        <User className="w-3.5 h-3.5 text-blue-400" /> 4. DADOS COMPLEMENTARES (PREENCHIMENTO DO USUÁRIO)
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Posto / Profissão:</label>
-                        <input 
-                          type="text"
-                          required
-                          maxLength={50}
-                          value={profileRank}
-                          onChange={(e) => setProfileRank(e.target.value)}
-                          className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
-                        />
+                      {/* Foto de Perfil 3x4 do Associado */}
+                      <div className="p-3 bg-[#0d1624] rounded-lg border border-white/5 space-y-2">
+                        <div className="flex items-center gap-1.5 text-[10px] font-black tracking-widest text-[#d6a528] font-mono uppercase">
+                          <UploadCloud className="w-3.5 h-3.5" /> FOTO DE PERFIL CADASTRAL (3x4)
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="w-14 h-14 rounded-lg border border-white/10 bg-slate-950 overflow-hidden shrink-0 relative flex items-center justify-center">
+                            {profilePhotoUrl ? (
+                              <img src={profilePhotoUrl} alt="Foto Perfil" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <User className="w-7 h-7 text-slate-700" />
+                            )}
+                            {isUploadingProfilePhoto && (
+                              <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                <span className="w-3.5 h-3.5 border-2 border-[#d6a528] border-t-transparent rounded-full animate-spin"></span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex-1 space-y-1.5">
+                            <label className="inline-block px-3 py-1.5 bg-[#121c2d] hover:bg-[#18263c] border border-white/10 rounded text-[10px] font-black text-slate-200 cursor-pointer transition-colors text-center uppercase tracking-wider font-mono">
+                              Selecionar Foto 3x4
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => {
+                                  if (e.target.files && e.target.files[0]) {
+                                    const file = e.target.files[0];
+                                    setIsUploadingProfilePhoto(true);
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => {
+                                      setProfilePhotoUrl(reader.result as string);
+                                      setIsUploadingProfilePhoto(false);
+                                    };
+                                    reader.onerror = () => {
+                                      setIsUploadingProfilePhoto(false);
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }
+                                }}
+                              />
+                            </label>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setProfilePhotoUrl("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=300")}
+                                className="text-[9px] text-[#d6a528] hover:underline font-bold"
+                              >
+                                Preset Masculino
+                              </button>
+                              <span className="text-slate-600 text-[9px]">•</span>
+                              <button
+                                type="button"
+                                onClick={() => setProfilePhotoUrl("https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&q=80&w=300")}
+                                className="text-[9px] text-[#d6a528] hover:underline font-bold"
+                              >
+                                Preset Feminino
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Matrícula SC ou RG Militar:</label>
-                        <input 
-                          type="text"
-                          maxLength={50}
-                          value={profileRgMilitar}
-                          onChange={(e) => setProfileRgMilitar(e.target.value)}
-                          placeholder="Ex: PMSC 912.420-9"
-                          className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Nome Completo:
+                          </label>
+                          <input 
+                            type="text"
+                            maxLength={100}
+                            placeholder="Seu nome completo"
+                            value={profileName}
+                            onChange={(e) => setProfileName(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Data de Nascimento:
+                          </label>
+                          <input 
+                            type="date"
+                            value={profileBirthDate || ""}
+                            onChange={(e) => setProfileBirthDate(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Cidade Sede (SC):</label>
-                        <input 
-                          type="text"
-                          required
-                          maxLength={50}
-                          value={profileCity}
-                          onChange={(e) => setProfileCity(e.target.value)}
-                          className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
-                        />
-                      </div>
-                    </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Vínculo Institucional:
+                          </label>
+                          <select
+                            value={profileForce}
+                            onChange={(e) => setProfileForce(e.target.value as any)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none cursor-pointer"
+                          >
+                            <option value="">Selecione seu vínculo...</option>
+                            <option value="PM">Polícia Militar de SC (PMSC)</option>
+                            <option value="BM">Bombeiro Militar de SC (CBMSC)</option>
+                            <option value="FFAA">Forças Armadas (Marinha/Exército/Aeronáutica)</option>
+                            <option value="Civil">Agente Civil de Segurança (Polícia/IGP)</option>
+                            <option value="Apoiador">Apoiador Social Voluntário</option>
+                          </select>
+                        </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Igreja de Comunhão Ativa:</label>
-                      <input 
-                        type="text"
-                        required
-                        maxLength={150}
-                        value={profileChurch}
-                        onChange={(e) => setProfileChurch(e.target.value)}
-                        className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">E-mail Corporativo/Seguro:</label>
-                        <input 
-                          type="email"
-                          required
-                          maxLength={100}
-                          value={profileEmail}
-                          onChange={(e) => setProfileEmail(e.target.value)}
-                          className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
-                        />
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Posto / Graduação / Profissão:
+                          </label>
+                          <input 
+                            type="text"
+                            maxLength={50}
+                            placeholder="Ex: Sargento, Soldado, Capitão"
+                            value={profileRank}
+                            onChange={(e) => setProfileRank(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
                       </div>
 
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Telefone WhatsApp:</label>
-                        <input 
-                          type="text"
-                          required
-                          maxLength={15}
-                          placeholder="(48) 99999-9999"
-                          value={profilePhone}
-                          onChange={(e) => setProfilePhone(formatPhone(e.target.value))}
-                          className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
-                        />
-                      </div>
-                    </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Matrícula SC ou RG Militar:
+                          </label>
+                          <input 
+                            type="text"
+                            maxLength={50}
+                            placeholder="Ex: PMSC 912.420-9"
+                            value={profileRgMilitar}
+                            onChange={(e) => setProfileRgMilitar(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">Senha de Acesso ao Portal (Mínimo 6 caracteres):</label>
-                      <input 
-                        type="password"
-                        required
-                        maxLength={30}
-                        value={profilePassword}
-                        onChange={(e) => setProfilePassword(e.target.value)}
-                        className="w-full bg-[#0a101b] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
-                      />
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-300 uppercase mb-1">
+                            Igreja de Comunhão Ativa:
+                          </label>
+                          <input 
+                            type="text"
+                            maxLength={150}
+                            placeholder="Ex: Comunidade Batista do Estreito"
+                            value={profileChurch}
+                            onChange={(e) => setProfileChurch(e.target.value)}
+                            className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-3 py-2 text-xs text-white outline-none"
+                          />
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex gap-3 justify-end pt-2">
@@ -2573,7 +2922,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                         className="bg-[#10b981] hover:bg-[#059669] text-white font-extrabold uppercase text-xs tracking-wider px-6 py-3.5 rounded cursor-pointer transition-colors shadow-lg flex items-center gap-2"
                       >
                         <CheckCircle2 className="w-4 h-4" />
-                        Salvar Alterações de Ficha
+                        Salvar Cadastro Atualizado
                       </button>
                     </div>
 

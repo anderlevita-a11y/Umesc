@@ -78,6 +78,14 @@ export interface SupabaseMember {
   archived?: boolean;
   photo_url?: string;
   is_director?: boolean;
+  address?: string;
+  address_rua?: string;
+  address_numero?: string;
+  address_bairro?: string;
+  address_cep?: string;
+  address_estado?: string;
+  address_cidade?: string;
+  notes?: string;
 }
 
 // Convert from local model to DB model
@@ -102,7 +110,15 @@ function toSupabase(member: MemberRegistration): SupabaseMember {
     paused: member.paused ?? false,
     archived: member.archived ?? false,
     photo_url: member.photoUrl,
-    is_director: member.isDirector ?? false
+    is_director: member.isDirector ?? false,
+    address: member.address || "",
+    address_rua: member.addressRua || "",
+    address_numero: member.addressNumero || "",
+    address_bairro: member.addressBairro || "",
+    address_cep: member.addressCep || "",
+    address_estado: member.addressEstado || "SC",
+    address_cidade: member.addressCidade || member.city || "",
+    notes: member.notes || ""
   };
 }
 
@@ -111,24 +127,32 @@ function fromSupabase(dbMember: any): MemberRegistration {
   return {
     name: dbMember.name,
     cpf: dbMember.cpf,
-    birthDate: dbMember.birth_date,
-    militaryForce: dbMember.military_force as any,
-    rank: dbMember.rank,
-    rgMilitar: dbMember.rg_militar || "",
-    church: dbMember.church,
-    phone: dbMember.phone,
-    email: dbMember.email,
-    city: dbMember.city,
-    lgpdConsent: dbMember.lgpd_consent,
-    marketingConsent: dbMember.marketing_consent,
-    registrationDate: dbMember.registration_date,
-    securityHash: dbMember.security_hash,
+    birthDate: dbMember.birth_date || dbMember.birthDate || "",
+    militaryForce: (dbMember.military_force || dbMember.militaryForce || "PM") as any,
+    rank: dbMember.rank || "",
+    rgMilitar: dbMember.rg_militar || dbMember.rgMilitar || "",
+    church: dbMember.church || "",
+    phone: dbMember.phone || "",
+    email: dbMember.email || "",
+    city: dbMember.city || "",
+    lgpdConsent: dbMember.lgpd_consent ?? dbMember.lgpdConsent ?? true,
+    marketingConsent: dbMember.marketing_consent ?? dbMember.marketingConsent ?? true,
+    registrationDate: dbMember.registration_date || dbMember.registrationDate || "",
+    securityHash: dbMember.security_hash || dbMember.securityHash || "",
     password: dbMember.password || "",
     approved: dbMember.approved ?? false,
     paused: dbMember.paused ?? false,
     archived: dbMember.archived ?? false,
     photoUrl: dbMember.photo_url || dbMember.photoUrl || "",
-    isDirector: dbMember.is_director ?? false
+    isDirector: dbMember.is_director ?? dbMember.isDirector ?? false,
+    address: dbMember.address || dbMember.address_rua || "",
+    addressRua: dbMember.address_rua || dbMember.addressRua || "",
+    addressNumero: dbMember.address_numero || dbMember.addressNumero || "",
+    addressBairro: dbMember.address_bairro || dbMember.addressBairro || "",
+    addressCep: dbMember.address_cep || dbMember.addressCep || "",
+    addressEstado: dbMember.address_estado || dbMember.addressEstado || "SC",
+    addressCidade: dbMember.address_cidade || dbMember.addressCidade || dbMember.city || "",
+    notes: dbMember.notes || ""
   };
 }
 
@@ -403,19 +427,35 @@ export const membersService = {
         if (updatedFields.cpf !== undefined) dbFields.cpf = updatedFields.cpf;
         if (updatedFields.lgpdConsent !== undefined) dbFields.lgpd_consent = updatedFields.lgpdConsent;
         if (updatedFields.marketingConsent !== undefined) dbFields.marketing_consent = updatedFields.marketingConsent;
+        if (updatedFields.address !== undefined) dbFields.address = updatedFields.address;
+        if (updatedFields.addressRua !== undefined) dbFields.address_rua = updatedFields.addressRua;
+        if (updatedFields.addressNumero !== undefined) dbFields.address_numero = updatedFields.addressNumero;
+        if (updatedFields.addressBairro !== undefined) dbFields.address_bairro = updatedFields.addressBairro;
+        if (updatedFields.addressCep !== undefined) dbFields.address_cep = updatedFields.addressCep;
+        if (updatedFields.addressEstado !== undefined) dbFields.address_estado = updatedFields.addressEstado;
+        if (updatedFields.addressCidade !== undefined) dbFields.address_cidade = updatedFields.addressCidade;
+        if (updatedFields.notes !== undefined) dbFields.notes = updatedFields.notes;
 
         let { error } = await supabase
           .from("members")
           .update(dbFields)
           .eq("security_hash", securityHash);
 
-        if (error && (error.code === "PGRST204" || (error.message && (error.message.includes("is_director") || error.message.includes("paused") || error.message.includes("archived") || error.message.includes("photo_url"))))) {
-          console.warn("Colunas específicas não encontradas no Supabase. Retentando atualização...");
+        if (error && (error.code === "PGRST204" || (error.message && (error.message.includes("is_director") || error.message.includes("paused") || error.message.includes("archived") || error.message.includes("photo_url") || error.message.includes("address"))))) {
+          console.warn("Colunas específicas não encontradas no Supabase. Retentando atualização básica...");
           const cleanedDbFields = { ...dbFields };
           delete cleanedDbFields.paused;
           delete cleanedDbFields.archived;
           delete cleanedDbFields.photo_url;
           delete cleanedDbFields.is_director;
+          delete cleanedDbFields.address;
+          delete cleanedDbFields.address_rua;
+          delete cleanedDbFields.address_numero;
+          delete cleanedDbFields.address_bairro;
+          delete cleanedDbFields.address_cep;
+          delete cleanedDbFields.address_estado;
+          delete cleanedDbFields.address_cidade;
+          delete cleanedDbFields.notes;
           
           const retryRes = await supabase
             .from("members")

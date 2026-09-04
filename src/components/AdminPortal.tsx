@@ -4,7 +4,7 @@ import {
   Trash2, Edit, Plus, Check, X, LogIn, LogOut, ArrowLeft, RefreshCw, BarChart2, PieChart, Info,
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
   Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake, Eye, TrendingUp, Globe, Activity,
-  Fingerprint, ShoppingBag
+  Fingerprint, ShoppingBag, Mail, Phone, Home, User, Search, Copy, CheckCircle2, Sparkles
 } from "lucide-react";
 import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService, coordinatorsService, projectsService, announcementsService, documentsService, revistasService, settingsService } from "../lib/supabase.ts";
 import { accessTrackerService, AccessStats, DEFAULT_ACCESS_STATS } from "../lib/accessTracker.ts";
@@ -305,6 +305,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
   // Modals for Create/Edit inputs
   const [editingMember, setEditingMember] = useState<MemberRegistration | null>(null);
+  const [isSearchingCep, setIsSearchingCep] = useState(false);
   const [deletingMemberHash, setDeletingMemberHash] = useState<{ hash: string, name: string } | null>(null);
 
   const [projectForm, setProjectForm] = useState<Partial<Project> | null>(null);
@@ -600,6 +601,40 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     }
   };
 
+  const handleFetchAddressByCep = async (cepVal: string) => {
+    const clean = (cepVal || "").replace(/\D/g, "");
+    if (clean.length !== 8) {
+      alert("Por favor, informe um CEP válido com 8 dígitos.");
+      return;
+    }
+    setIsSearchingCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const data = await res.json();
+      if (data.erro) {
+        alert("CEP não localizado na base dos Correios.");
+        return;
+      }
+      if (editingMember) {
+        const fullAddr = `${data.logradouro || ""}, ${data.bairro || ""}, ${data.localidade || ""} - ${data.uf || ""}`.replace(/^,\s*/, "").replace(/,\s*-\s*$/, "").trim();
+        setEditingMember({
+          ...editingMember,
+          addressCep: data.cep || clean,
+          addressRua: data.logradouro || editingMember.addressRua || "",
+          addressBairro: data.bairro || editingMember.addressBairro || "",
+          addressCidade: data.localidade || editingMember.addressCidade || editingMember.city || "",
+          city: data.localidade || editingMember.city,
+          addressEstado: data.uf || editingMember.addressEstado || "SC",
+          address: fullAddr || editingMember.address || ""
+        });
+      }
+    } catch {
+      alert("Não foi possível consultar o CEP no momento.");
+    } finally {
+      setIsSearchingCep(false);
+    }
+  };
+
   const handleEditMemberSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingMember) return;
@@ -610,6 +645,8 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     try {
       const ok = await membersService.updateMember(editingMember.securityHash, {
         name: editingMember.name,
+        cpf: editingMember.cpf,
+        birthDate: editingMember.birthDate,
         rank: editingMember.rank,
         militaryForce: editingMember.militaryForce,
         church: editingMember.church,
@@ -620,7 +657,15 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
         approved: editingMember.approved,
         paused: editingMember.paused,
         archived: editingMember.archived,
-        isDirector: editingMember.isDirector
+        isDirector: editingMember.isDirector,
+        address: editingMember.address,
+        addressRua: editingMember.addressRua,
+        addressNumero: editingMember.addressNumero,
+        addressBairro: editingMember.addressBairro,
+        addressCep: editingMember.addressCep,
+        addressEstado: editingMember.addressEstado,
+        addressCidade: editingMember.addressCidade,
+        notes: editingMember.notes
       });
       if (ok) {
         setEditingMember(null);
@@ -1850,13 +1895,13 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
               {/* Members dynamic list table layout */}
               <div className="bg-[#0b1220] rounded-xl border border-white/5 overflow-hidden">
-                <div className="p-4 border-b border-white/5 bg-[#0e1624] text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest hidden md:grid grid-cols-12 gap-3">
+                <div className="p-4 border-b border-white/5 bg-[#0e1624] text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest hidden md:grid grid-cols-12 gap-3 items-center">
                   <div className="col-span-3">Nome / Corporação</div>
-                  <div className="col-span-1">CPF</div>
+                  <div className="col-span-2">CPF / WhatsApp</div>
                   <div className="col-span-2">Vínculo Militar / Cidade</div>
-                  <div className="col-span-2">Igreja</div>
+                  <div className="col-span-1">Igreja</div>
                   <div className="col-span-2 text-center">Status / Controle</div>
-                  <div className="col-span-2 text-right">Ação</div>
+                  <div className="col-span-2 text-right">Ações & Contato</div>
                 </div>
 
                 <div className="divide-y divide-white/5">
@@ -1904,8 +1949,40 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                             )}
                           </div>
 
-                          <div className="col-span-1 font-mono text-[9px] tracking-wider text-slate-200 truncate">
-                            {m.cpf}
+                          <div className="col-span-2">
+                            <span className="font-mono text-[9px] tracking-wider text-slate-200 block truncate select-all">
+                              {m.cpf}
+                            </span>
+                            {/* Permanent WhatsApp shortcut button */}
+                            {(() => {
+                              const cleanPhone = m.phone ? m.phone.replace(/\D/g, "") : "";
+                              const linkPhone = cleanPhone ? (cleanPhone.length === 10 || cleanPhone.length === 11 ? "55" + cleanPhone : cleanPhone) : "";
+                              return linkPhone ? (
+                                <a
+                                  href={`https://api.whatsapp.com/send?phone=${linkPhone}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title={`Abrir WhatsApp de ${m.name} (${m.phone})`}
+                                  className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 font-mono text-[8.5px] font-bold transition-all"
+                                >
+                                  <MessageCircle className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                                  <span className="truncate max-w-[95px]">{m.phone}</span>
+                                </a>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingMember(m);
+                                    alert(`O associado ${m.name} não possui número de WhatsApp cadastrado. Preencha o telefone na tela de edição.`);
+                                  }}
+                                  title="WhatsApp não cadastrado - Clique para cadastrar"
+                                  className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 border border-dashed border-white/10 hover:border-emerald-500/30 text-slate-400 hover:text-emerald-400 font-mono text-[8.5px] transition-all cursor-pointer"
+                                >
+                                  <MessageCircle className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                                  <span>+ WhatsApp</span>
+                                </button>
+                              );
+                            })()}
                           </div>
 
                           <div className="col-span-2">
@@ -1913,7 +1990,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                             <span className="block text-[9px] text-slate-400 font-bold uppercase mt-0.5">{m.city}</span>
                           </div>
 
-                          <div className="col-span-2 truncate font-semibold uppercase text-slate-400 max-w-[130px]" title={m.church}>
+                          <div className="col-span-1 truncate font-semibold uppercase text-slate-400 text-[9px]" title={m.church}>
                             {m.church}
                           </div>
 
@@ -1989,7 +2066,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                               </a>
                             )}
 
-                            {/* WhatsApp shortcut */}
+                            {/* WhatsApp shortcut permanente */}
                             {(() => {
                               const cleanPhone = m.phone ? m.phone.replace(/\D/g, "") : "";
                               const linkPhone = cleanPhone ? (cleanPhone.length === 10 || cleanPhone.length === 11 ? "55" + cleanPhone : cleanPhone) : "";
@@ -1998,12 +2075,24 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                                   href={`https://api.whatsapp.com/send?phone=${linkPhone}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  title={`Abrir WhatsApp de ${m.name}`}
-                                  className="p-1.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer flex items-center justify-center border border-emerald-500/20"
+                                  title={`Abrir WhatsApp de ${m.name} (${m.phone})`}
+                                  className="p-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer flex items-center justify-center border border-emerald-500/40 shadow-sm shrink-0"
                                 >
                                   <MessageCircle className="w-3.5 h-3.5" />
                                 </a>
-                              ) : null;
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingMember(m);
+                                    alert(`O associado ${m.name} não possui número de WhatsApp cadastrado. Preencha o telefone na tela de edição.`);
+                                  }}
+                                  title="WhatsApp não cadastrado - Clique para cadastrar"
+                                  className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-500 hover:text-emerald-400 transition-colors cursor-pointer flex items-center justify-center border border-dashed border-white/10 shrink-0"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5" />
+                                </button>
+                              );
                             })()}
 
                             {/* Promote to Director action */}
@@ -2113,13 +2202,17 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                           </div>
 
                           {/* Middle Details Grid */}
-                          <div className="grid grid-cols-3 gap-2 bg-[#070c18] p-2.5 rounded-lg border border-white/5 text-[9px] font-sans">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#070c18] p-2.5 rounded-lg border border-white/5 text-[9px] font-sans">
                             <div>
                               <span className="text-[7.5px] font-bold text-slate-500 block uppercase font-mono mb-0.5">CPF</span>
                               <span className="font-mono text-slate-300 select-all block leading-tight">{m.cpf}</span>
                             </div>
                             <div>
-                              <span className="text-[7.5px] font-bold text-slate-500 block uppercase font-mono mb-0.5">RG MILITAR</span>
+                              <span className="text-[7.5px] font-bold text-slate-500 block uppercase font-mono mb-0.5">WHATSAPP / TEL</span>
+                              <span className="font-mono text-emerald-400 block font-semibold leading-tight truncate">{m.phone || "Não informado"}</span>
+                            </div>
+                            <div>
+                              <span className="text-[7.5px] font-bold text-slate-500 block uppercase font-mono mb-0.5">RG MILITAR / CIDADE</span>
                               <span className="font-mono text-slate-300 block font-bold leading-tight truncate">{m.rgMilitar || "CIVIL"}</span>
                               <span className="text-[8px] text-slate-400 font-bold uppercase block leading-tight truncate">{m.city}</span>
                             </div>
@@ -2196,7 +2289,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                                 </a>
                               )}
 
-                              {/* WhatsApp shortcut */}
+                              {/* WhatsApp shortcut permanente Mobile */}
                               {(() => {
                                 const cleanPhone = m.phone ? m.phone.replace(/\D/g, "") : "";
                                 const linkPhone = cleanPhone ? (cleanPhone.length === 10 || cleanPhone.length === 11 ? "55" + cleanPhone : cleanPhone) : "";
@@ -2205,12 +2298,26 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                                     href={`https://api.whatsapp.com/send?phone=${linkPhone}`}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    title={`Abrir WhatsApp de ${m.name}`}
-                                    className="p-1.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 transition-colors cursor-pointer flex items-center justify-center border border-emerald-500/20"
+                                    title={`Abrir WhatsApp de ${m.name} (${m.phone})`}
+                                    className="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-colors cursor-pointer flex items-center justify-center gap-1 text-[9px] font-bold shrink-0 shadow-sm"
                                   >
-                                    <MessageCircle className="w-3.5 h-3.5" />
+                                    <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                    <span>WhatsApp</span>
                                   </a>
-                                ) : null;
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingMember(m);
+                                      alert(`O associado ${m.name} não possui número de WhatsApp cadastrado. Preencha o telefone na tela de edição.`);
+                                    }}
+                                    title="WhatsApp não cadastrado - Clique para cadastrar"
+                                    className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-emerald-300 border border-dashed border-white/10 transition-colors cursor-pointer flex items-center justify-center gap-1 text-[9px] shrink-0"
+                                  >
+                                    <MessageCircle className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>+ WhatsApp</span>
+                                  </button>
+                                );
                               })()}
 
                               {/* Archive Action button */}
@@ -4397,129 +4504,454 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
       {/* A. EDIT MEMBER MODAL */}
       {editingMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm shadow-2xl overflow-y-auto">
-          <div className="bg-[#0b1220] border border-white/10 rounded-2xl p-6 sm:p-8 w-full max-w-lg shadow-2xl text-white my-8">
-            <div className="flex justify-between items-center pb-3 border-b border-white/5 mb-5">
-              <h3 className="font-extrabold text-xs uppercase tracking-widest text-amber-500 font-display flex items-center gap-1.5">
-                Editar Cadastro do Associado ({editingMember.name.substring(0, 18)}...)
-              </h3>
-              <button onClick={() => setEditingMember(null)} className="text-slate-400 hover:text-white text-xs font-mono">FECHAR X</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/90 backdrop-blur-sm shadow-2xl overflow-y-auto">
+          <div className="bg-[#0b1220] border border-white/10 rounded-2xl w-full max-w-3xl shadow-2xl text-white my-6 max-h-[92vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-white/10 bg-[#0e1624] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-xs font-mono">
+                  {editingMember.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-amber-500 font-display flex items-center gap-1.5">
+                    Editar Cadastro do Associado
+                  </h3>
+                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-2">
+                    <span className="text-white font-bold">{editingMember.name}</span>
+                    <span>•</span>
+                    <span className="text-slate-400">Hash: {editingMember.securityHash.substring(0, 10)}...</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Permanent WhatsApp shortcut in modal header */}
+                {(() => {
+                  const cleanPhone = editingMember.phone ? editingMember.phone.replace(/\D/g, "") : "";
+                  const linkPhone = cleanPhone ? (cleanPhone.length === 10 || cleanPhone.length === 11 ? "55" + cleanPhone : cleanPhone) : "";
+                  return linkPhone ? (
+                    <a
+                      href={`https://api.whatsapp.com/send?phone=${linkPhone}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={`Conversar com ${editingMember.name} no WhatsApp`}
+                      className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold transition-all shadow-sm"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>WhatsApp</span>
+                    </a>
+                  ) : null;
+                })()}
+
+                <button 
+                  type="button"
+                  onClick={() => setEditingMember(null)} 
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-mono transition-all cursor-pointer"
+                >
+                  ✕ FECHAR
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleEditMemberSubmit} className="space-y-4 text-left">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Nome Completo:</label>
-                  <input type="text" required value={editingMember.name} onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })} className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white" />
+            {/* Modal Body */}
+            <form onSubmit={handleEditMemberSubmit} className="p-5 sm:p-6 overflow-y-auto space-y-5 text-left text-xs">
+              
+              {/* Linked Ficha Alert if exists */}
+              {(() => {
+                const cleanMemberCpf = (editingMember.cpf || "").replace(/\D/g, "");
+                const linkedFicha = cleanMemberCpf
+                  ? fichas.find((f) => (f.memberCpf || "").replace(/\D/g, "") === cleanMemberCpf)
+                  : fichas.find((f) => f.memberName && f.memberName.trim().toLowerCase() === editingMember.name.trim().toLowerCase());
+                
+                if (!linkedFicha) return null;
+
+                const hasFichaAddress = Boolean(linkedFicha.addressRua || linkedFicha.addressCep);
+
+                return (
+                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-emerald-400 font-bold uppercase tracking-wider text-[10px]">
+                        <FileCheck className="w-3.5 h-3.5" /> Ficha de Filiação Vinculada ({linkedFicha.organ})
+                      </div>
+                      <p className="text-[11px] text-slate-300 mt-0.5">
+                        {linkedFicha.addressRua ? `${linkedFicha.addressRua}, ${linkedFicha.addressBairro || ""} - ${linkedFicha.addressCidade || ""} (CEP: ${linkedFicha.addressCep || "S/N"})` : "Ficha cadastrada nos registros digitais da UMESC."}
+                      </p>
+                    </div>
+                    {hasFichaAddress && (!editingMember.addressRua || !editingMember.addressCep) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingMember({
+                            ...editingMember,
+                            addressRua: linkedFicha.addressRua || editingMember.addressRua || "",
+                            addressBairro: linkedFicha.addressBairro || editingMember.addressBairro || "",
+                            addressCep: linkedFicha.addressCep || editingMember.addressCep || "",
+                            addressCidade: linkedFicha.addressCidade || editingMember.city || "",
+                            city: linkedFicha.addressCidade || editingMember.city,
+                            addressEstado: linkedFicha.addressEstado || editingMember.addressEstado || "SC",
+                            address: `${linkedFicha.addressRua || ""}, ${linkedFicha.addressBairro || ""}, ${linkedFicha.addressCidade || ""}`.trim()
+                          });
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[9.5px] font-bold uppercase tracking-wider border border-emerald-500/40 transition-all cursor-pointer whitespace-nowrap self-start sm:self-auto"
+                      >
+                        Copiar Endereço da Ficha
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* SEÇÃO 1: DADOS PESSOAIS E IDENTIFICAÇÃO */}
+              <div className="bg-[#0e1624] border border-white/5 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1.5 font-display">
+                    <User className="w-3.5 h-3.5 text-amber-500" /> Identificação Civil & Militar
+                  </span>
+                  <span className="text-[8px] font-mono text-slate-500 uppercase">Documentos & Registro</span>
                 </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Patente / Posto em Farda:</label>
-                  <input type="text" required value={editingMember.rank} onChange={(e) => setEditingMember({ ...editingMember, rank: e.target.value })} className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Corporação (Força Catarinense):</label>
-                  <select value={editingMember.militaryForce} onChange={(e) => setEditingMember({ ...editingMember, militaryForce: e.target.value as any })} className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white">
-                    <option value="PM">Polícia Militar SC (PM)</option>
-                    <option value="BM">Bombbeiro Militar (BM)</option>
-                    <option value="FFAA">Forças Armadas (FFAA)</option>
-                    <option value="Civil">Polícia Civil / Científica</option>
-                    <option value="Apoiador">Apoiador Voluntário</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Registro / RG Militar:</label>
-                  <input type="text" value={editingMember.rgMilitar} onChange={(e) => setEditingMember({ ...editingMember, rgMilitar: e.target.value })} className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">E-mail Seguro:</label>
-                  <input type="email" required value={editingMember.email} onChange={(e) => setEditingMember({ ...editingMember, email: e.target.value })} className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white" />
-                </div>
-                <div>
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Cidade Base SC:</label>
-                  <input type="text" required value={editingMember.city} onChange={(e) => setEditingMember({ ...editingMember, city: e.target.value })} className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white" />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Vínculo Religioso / Paróquia:</label>
-                  <input type="text" required value={editingMember.church} onChange={(e) => setEditingMember({ ...editingMember, church: e.target.value })} className="w-full bg-[#121c2d] border border-white/10 rounded px-3 py-2 text-xs text-white" />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Nome Completo:</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={editingMember.name} 
+                      onChange={(e) => setEditingMember({ ...editingMember, name: e.target.value })} 
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-amber-500 outline-none" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <Fingerprint className="w-3 h-3 text-amber-500" /> CPF (Cadastro de Pessoa Física):
+                    </label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={editingMember.cpf || ""} 
+                      onChange={(e) => setEditingMember({ ...editingMember, cpf: e.target.value })} 
+                      placeholder="000.000.000-00"
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-600 focus:border-amber-500 outline-none" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <Cake className="w-3 h-3 text-pink-400" /> Data de Nascimento:
+                    </label>
+                    <input 
+                      type="date" 
+                      value={editingMember.birthDate ? editingMember.birthDate.split("T")[0] : ""} 
+                      onChange={(e) => setEditingMember({ ...editingMember, birthDate: e.target.value })} 
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-600 focus:border-amber-500 outline-none" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Corporação (Força Catarinense):</label>
+                    <select 
+                      value={editingMember.militaryForce} 
+                      onChange={(e) => setEditingMember({ ...editingMember, militaryForce: e.target.value as any })} 
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:border-amber-500 outline-none"
+                    >
+                      <option value="PM">Polícia Militar SC (PM)</option>
+                      <option value="BM">Bombeiro Militar (BM)</option>
+                      <option value="FFAA">Forças Armadas (FFAA)</option>
+                      <option value="Civil">Polícia Civil / Científica</option>
+                      <option value="Apoiador">Apoiador Voluntário</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Patente / Posto em Farda:</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={editingMember.rank} 
+                      onChange={(e) => setEditingMember({ ...editingMember, rank: e.target.value })} 
+                      placeholder="Ex: Sargento, Soldado, Capitão..."
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-amber-500 outline-none" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Registro / RG Militar:</label>
+                    <input 
+                      type="text" 
+                      value={editingMember.rgMilitar || ""} 
+                      onChange={(e) => setEditingMember({ ...editingMember, rgMilitar: e.target.value })} 
+                      placeholder="Ex: 928371-2"
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-600 focus:border-amber-500 outline-none" 
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-[#121c2d] p-3 rounded border border-white/5 flex justify-between items-center">
-                <span className="text-[10px] text-slate-300 font-bold uppercase">Status de Homologação:</span>
-                <button
-                  type="button"
-                  onClick={() => setEditingMember({ ...editingMember, approved: !editingMember.approved })}
-                  className={`px-3 py-1.5 rounded font-black text-[10px] uppercase tracking-wider border ${
-                    editingMember.approved 
-                      ? "bg-emerald-500/10 border-emerald-555 text-emerald-400" 
-                      : "bg-amber-500/10 border-amber-555 text-amber-500"
-                  }`}
-                >
-                  {editingMember.approved ? "✓ APROVADO / HOMOLOGADO" : "🔒 PENDENTE / BLOQUEADO"}
-                </button>
-              </div>
-
-              <div className="bg-[#121c2d] p-3 rounded border border-white/5 flex justify-between items-center">
-                <span className="text-[10px] text-slate-300 font-bold uppercase">Membro da Diretoria:</span>
-                <button
-                  type="button"
-                  onClick={() => setEditingMember({ ...editingMember, isDirector: !editingMember.isDirector })}
-                  className={`px-3 py-1.5 rounded font-black text-[10px] uppercase tracking-wider border ${
-                    editingMember.isDirector 
-                      ? "bg-purple-500/10 border-purple-555 text-purple-400" 
-                      : "bg-[#0b1220] border-white/5 text-slate-400"
-                  }`}
-                >
-                  {editingMember.isDirector ? "★ SIM / DIRETORIA" : "NÃO"}
-                </button>
-              </div>
-
-              <div className="bg-[#121c2d] p-3 rounded border border-white/5 flex justify-between items-center">
-                <span className="text-[10px] text-slate-300 font-bold uppercase">Pausar Atividade do Cadastro:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newPaused = !editingMember.paused;
-                    setEditingMember({ 
-                      ...editingMember, 
-                      paused: newPaused,
-                      archived: newPaused ? !!editingMember.archived : false 
-                    });
-                  }}
-                  className={`px-3 py-1.5 rounded font-black text-[10px] uppercase tracking-wider border ${
-                    editingMember.paused 
-                      ? "bg-orange-500/10 border-orange-522 text-orange-400" 
-                      : "bg-[#0b1220] border-white/5 text-slate-400"
-                  }`}
-                >
-                  {editingMember.paused ? "⏸ PAUSADO / SUSPENSO" : "ATIVO"}
-                </button>
-              </div>
-
-              <div className="bg-[#121c2d] p-3 rounded border border-white/5 flex justify-between items-center">
-                <div className="flex flex-col text-left">
-                  <span className="text-[10px] text-slate-300 font-bold uppercase">Arquivar Cadastro Legal:</span>
-                  {!editingMember.paused && (
-                    <span className="text-[8px] text-rose-400 font-semibold font-mono mt-0.5">* Apenas para cadastros pausados</span>
-                  )}
+              {/* SEÇÃO 2: CONTATO E WHATSAPP */}
+              <div className="bg-[#0e1624] border border-white/5 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-1.5 font-display">
+                    <Phone className="w-3.5 h-3.5 text-emerald-400" /> Contato & WhatsApp
+                  </span>
+                  <span className="text-[8px] font-mono text-slate-500 uppercase">Canais Diretos</span>
                 </div>
-                <button
-                  type="button"
-                  disabled={!editingMember.paused}
-                  onClick={() => setEditingMember({ ...editingMember, archived: !editingMember.archived })}
-                  className={`px-3 py-1.5 rounded font-black text-[10px] uppercase tracking-wider border transition-all ${
-                    !editingMember.paused 
-                      ? "bg-slate-950/40 border-white/5 text-slate-650 cursor-not-allowed opacity-50"
-                      : editingMember.archived 
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <Mail className="w-3 h-3 text-amber-500" /> E-mail Institucional / Pessoal:
+                    </label>
+                    <input 
+                      type="email" 
+                      required 
+                      value={editingMember.email} 
+                      onChange={(e) => setEditingMember({ ...editingMember, email: e.target.value })} 
+                      placeholder="exemplo@umesc.com.br"
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-emerald-500 outline-none" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1">
+                      <MessageCircle className="w-3 h-3 text-emerald-400" /> Telefone / WhatsApp:
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input 
+                        type="tel" 
+                        value={editingMember.phone || ""} 
+                        onChange={(e) => setEditingMember({ ...editingMember, phone: e.target.value })} 
+                        placeholder="(48) 99999-9999"
+                        className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:border-emerald-500 outline-none" 
+                      />
+                      {/* Permanent WhatsApp shortcut button right next to input */}
+                      {(() => {
+                        const cleanPhone = editingMember.phone ? editingMember.phone.replace(/\D/g, "") : "";
+                        const linkPhone = cleanPhone ? (cleanPhone.length === 10 || cleanPhone.length === 11 ? "55" + cleanPhone : cleanPhone) : "";
+                        return linkPhone ? (
+                          <a
+                            href={`https://api.whatsapp.com/send?phone=${linkPhone}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`Abrir WhatsApp de ${editingMember.name} (${editingMember.phone})`}
+                            className="px-3 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => alert("Preencha o número de telefone/WhatsApp acima para abrir o atalho.")}
+                            title="Preencha o telefone para testar o atalho"
+                            className="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 border border-dashed border-white/10 text-slate-500 hover:text-emerald-400 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                          </button>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SEÇÃO 3: ENDEREÇO RESIDENCIAL COMPLETO */}
+              <div className="bg-[#0e1624] border border-white/5 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1.5 font-display">
+                    <MapPin className="w-3.5 h-3.5 text-amber-500" /> Endereço Residencial Completo
+                  </span>
+                  <span className="text-[8px] font-mono text-slate-500 uppercase">Localização & Correspondência</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">CEP:</label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={editingMember.addressCep || ""}
+                        onChange={(e) => setEditingMember({ ...editingMember, addressCep: e.target.value })}
+                        placeholder="88000-000"
+                        maxLength={9}
+                        className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-slate-600 outline-none focus:border-amber-500"
+                      />
+                      <button
+                        type="button"
+                        disabled={isSearchingCep}
+                        onClick={() => handleFetchAddressByCep(editingMember.addressCep || "")}
+                        title="Consultar CEP no ViaCEP"
+                        className="px-2.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/30 text-[10px] font-bold uppercase tracking-wider shrink-0 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {isSearchingCep ? "..." : "Buscar"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Rua / Logradouro:</label>
+                    <input
+                      type="text"
+                      value={editingMember.addressRua || editingMember.address || ""}
+                      onChange={(e) => setEditingMember({ ...editingMember, addressRua: e.target.value, address: e.target.value })}
+                      placeholder="Rua, Avenida, Servidão..."
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Número / Compl.:</label>
+                    <input
+                      type="text"
+                      value={editingMember.addressNumero || ""}
+                      onChange={(e) => setEditingMember({ ...editingMember, addressNumero: e.target.value })}
+                      placeholder="Nº 123, Bloco B"
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Bairro:</label>
+                    <input
+                      type="text"
+                      value={editingMember.addressBairro || ""}
+                      onChange={(e) => setEditingMember({ ...editingMember, addressBairro: e.target.value })}
+                      placeholder="Bairro"
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Cidade Base SC:</label>
+                    <input
+                      type="text"
+                      required
+                      value={editingMember.city || editingMember.addressCidade || ""}
+                      onChange={(e) => setEditingMember({ ...editingMember, city: e.target.value, addressCidade: e.target.value })}
+                      placeholder="Florianópolis, Joinville..."
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Estado (UF):</label>
+                    <input
+                      type="text"
+                      value={editingMember.addressEstado || "SC"}
+                      onChange={(e) => setEditingMember({ ...editingMember, addressEstado: e.target.value.toUpperCase() })}
+                      maxLength={2}
+                      placeholder="SC"
+                      className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs uppercase font-mono text-white placeholder-slate-600 outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Ponto de Referência / Notas de Endereço:</label>
+                  <input
+                    type="text"
+                    value={editingMember.notes || ""}
+                    onChange={(e) => setEditingMember({ ...editingMember, notes: e.target.value })}
+                    placeholder="Próximo ao quartel, casa amarela, etc."
+                    className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* SEÇÃO 4: VÍNCULO RELIGIOSO */}
+              <div className="bg-[#0e1624] border border-white/5 rounded-xl p-4 space-y-2">
+                <label className="block text-[9px] font-bold text-slate-400 uppercase mb-1">Vínculo Religioso / Paróquia / Igreja:</label>
+                <input 
+                  type="text" 
+                  required 
+                  value={editingMember.church} 
+                  onChange={(e) => setEditingMember({ ...editingMember, church: e.target.value })} 
+                  placeholder="Nome da igreja e denominação"
+                  className="w-full bg-[#121c2d] border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:border-amber-500 outline-none" 
+                />
+              </div>
+
+              {/* SEÇÃO 5: GESTÃO ADMINISTRATIVA E PERMISSÕES */}
+              <div className="space-y-2">
+                <div className="bg-[#121c2d] p-3 rounded-xl border border-white/5 flex justify-between items-center">
+                  <span className="text-[10px] text-slate-300 font-bold uppercase">Status de Homologação:</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditingMember({ ...editingMember, approved: !editingMember.approved })}
+                    className={`px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider border cursor-pointer transition-all ${
+                      editingMember.approved 
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400" 
+                        : "bg-amber-500/10 border-amber-500/30 text-amber-500"
+                    }`}
+                  >
+                    {editingMember.approved ? "✓ APROVADO / HOMOLOGADO" : "🔒 PENDENTE / BLOQUEADO"}
+                  </button>
+                </div>
+
+                <div className="bg-[#121c2d] p-3 rounded-xl border border-white/5 flex justify-between items-center">
+                  <span className="text-[10px] text-slate-300 font-bold uppercase">Membro da Diretoria:</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditingMember({ ...editingMember, isDirector: !editingMember.isDirector })}
+                    className={`px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider border cursor-pointer transition-all ${
+                      editingMember.isDirector 
                         ? "bg-purple-500/10 border-purple-500/30 text-purple-400" 
                         : "bg-[#0b1220] border-white/5 text-slate-400"
-                  }`}
-                >
-                  {editingMember.archived ? "🗄️ ARQUIVADO" : "NÃO ARQUIVADO"}
-                </button>
+                    }`}
+                  >
+                    {editingMember.isDirector ? "★ SIM / DIRETORIA" : "NÃO"}
+                  </button>
+                </div>
+
+                <div className="bg-[#121c2d] p-3 rounded-xl border border-white/5 flex justify-between items-center">
+                  <span className="text-[10px] text-slate-300 font-bold uppercase">Pausar Atividade do Cadastro:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newPaused = !editingMember.paused;
+                      setEditingMember({ 
+                        ...editingMember, 
+                        paused: newPaused,
+                        archived: newPaused ? !!editingMember.archived : false 
+                      });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider border cursor-pointer transition-all ${
+                      editingMember.paused 
+                        ? "bg-orange-500/10 border-orange-500/30 text-orange-400" 
+                        : "bg-[#0b1220] border-white/5 text-slate-400"
+                    }`}
+                  >
+                    {editingMember.paused ? "⏸ PAUSADO / SUSPENSO" : "ATIVO"}
+                  </button>
+                </div>
+
+                <div className="bg-[#121c2d] p-3 rounded-xl border border-white/5 flex justify-between items-center">
+                  <div className="flex flex-col text-left">
+                    <span className="text-[10px] text-slate-300 font-bold uppercase">Arquivar Cadastro Legal:</span>
+                    {!editingMember.paused && (
+                      <span className="text-[8px] text-rose-400 font-semibold font-mono mt-0.5">* Apenas para cadastros pausados</span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!editingMember.paused}
+                    onClick={() => setEditingMember({ ...editingMember, archived: !editingMember.archived })}
+                    className={`px-3 py-1.5 rounded-lg font-black text-[10px] uppercase tracking-wider border transition-all ${
+                      !editingMember.paused 
+                        ? "bg-slate-950/40 border-white/5 text-slate-600 cursor-not-allowed opacity-50"
+                        : editingMember.archived 
+                          ? "bg-purple-500/10 border-purple-500/30 text-purple-400 cursor-pointer" 
+                          : "bg-[#0b1220] border-white/5 text-slate-400 cursor-pointer"
+                    }`}
+                  >
+                    {editingMember.archived ? "🗄️ ARQUIVADO" : "NÃO ARQUIVADO"}
+                  </button>
+                </div>
               </div>
 
-              <div className="flex gap-3 pt-4 justify-between items-center">
+              {/* Modal Actions Footer */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-white/10 justify-between items-center">
                 <div>
                   {editingMember.paused && (
                     <button
@@ -4530,15 +4962,26 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                         setEditingMember(null);
                         setDeletingMemberHash({ hash, name });
                       }}
-                      className="flex items-center gap-1.5 px-4 py-2 rounded bg-rose-500/10 hover:bg-rose-550 hover:bg-rose-600 border border-rose-500/30 hover:border-rose-500 text-rose-455 text-rose-400 hover:text-white font-extrabold text-[10px] uppercase tracking-wider transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-600 border border-rose-500/30 hover:border-rose-500 text-rose-400 hover:text-white font-extrabold text-[10px] uppercase tracking-wider transition-all cursor-pointer"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Excluir Cadastro
+                      <Trash2 className="w-3.5 h-3.5" /> Excluir Cadastro (LGPD)
                     </button>
                   )}
                 </div>
-                <div className="flex gap-3">
-                  <button type="submit" className="px-5 py-2.5 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider cursor-pointer">Salvar Alterações</button>
-                  <button type="button" onClick={() => setEditingMember(null)} className="px-5 py-2.5 rounded bg-slate-950 hover:bg-slate-900 border border-white/5 text-slate-455 text-slate-400 text-xs font-bold uppercase cursor-pointer">Cancelar</button>
+                <div className="flex gap-2.5 w-full sm:w-auto justify-end">
+                  <button 
+                    type="button" 
+                    onClick={() => setEditingMember(null)} 
+                    className="flex-1 sm:flex-initial px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/5 text-slate-300 text-xs font-bold uppercase transition-all cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-1 sm:flex-initial px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-lg shadow-amber-500/10"
+                  >
+                    Salvar Alterações
+                  </button>
                 </div>
               </div>
             </form>

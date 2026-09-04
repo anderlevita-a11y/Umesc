@@ -76,6 +76,15 @@ export interface MemberRegistration {
   archived?: boolean; // New: Option to archive registration (only for paused registrations)
   photoUrl?: string; // New: Profile / credential photo (3x4)
   isDirector?: boolean; // New: Option to promote member to director (can login to administrative panel)
+  // Informações completas de Endereço e Contato
+  address?: string;
+  addressRua?: string;
+  addressNumero?: string;
+  addressBairro?: string;
+  addressCep?: string;
+  addressEstado?: string;
+  addressCidade?: string;
+  notes?: string;
 }
 
 export interface DonationSim {
