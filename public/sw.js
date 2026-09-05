@@ -60,6 +60,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Strictly bypass Vite dev server scripts, hot reload, and module dependencies
+  if (
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/node_modules/') ||
+    url.pathname.startsWith('/src/') ||
+    url.searchParams.has('v') ||
+    url.searchParams.has('t') ||
+    url.searchParams.has('import')
+  ) {
+    return;
+  }
+
   // Navigation requests: Network-first, fallback to cached index.html
   if (request.mode === 'navigate') {
     event.respondWith(

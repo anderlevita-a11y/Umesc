@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { congressService, Congress, CongressInscription, Workshop } from "../lib/congressService.ts";
 import { MemberRegistration } from "../types";
+import { compressImage } from "../lib/storageUtils.ts";
 
 export function generatePixString(pixKey: string, amount: number, receiverName: string): string {
   if (!pixKey) return "";
@@ -599,19 +600,18 @@ export default function CongressoInscricaoMembro({ loggedInUser }: CongressoInsc
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         if (e.target.files && e.target.files[0]) {
                           const file = e.target.files[0];
                           setIsUploadingPhoto(true);
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setMemberPhotoUrl(reader.result as string);
+                          try {
+                            const compressed = await compressImage(file, 300, 400, 0.72);
+                            setMemberPhotoUrl(compressed);
+                          } catch (err) {
+                            console.error("Erro ao comprimir foto:", err);
+                          } finally {
                             setIsUploadingPhoto(false);
-                          };
-                          reader.onerror = () => {
-                            setIsUploadingPhoto(false);
-                          };
-                          reader.readAsDataURL(file);
+                          }
                         }
                       }}
                     />

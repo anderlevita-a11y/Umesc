@@ -49,9 +49,10 @@ import CongressoInscricaoMembro from "./CongressoInscricaoMembro.tsx";
 import CapelaniaVolunteeringForm from "./CapelaniaVolunteeringForm.tsx";
 import CarouselsSection from "./CarouselsSection.tsx";
 import AcertoSacolaSection from "./AcertoSacolaSection.tsx";
-import { biometricsService, getBiometricLabel } from "../lib/biometrics.ts";
+import { biometricsService, getBiometricLabel, isMobileDevice } from "../lib/biometrics.ts";
 import { membersService, isSupabaseConfigured, fichasFiliacaoService, coordinatorsService, settingsService } from "../lib/supabase.ts";
 import { termsService } from "../lib/termsService.ts";
+import { compressImage, runStorageHygiene } from "../lib/storageUtils.ts";
 import { sanitizeInput, isValidCPF, formatPhone, isValidPhone, isValidEmail, getWhatsAppLink } from "../lib/validation.ts";
 import { 
   CORE_GOVERNANCE, 
@@ -125,6 +126,16 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
     rawEmail?: string;
     rawBirthDate?: string;
     password?: string;
+    photoUrl?: string;
+    address?: string;
+    addressRua?: string;
+    addressNumero?: string;
+    addressComplemento?: string;
+    addressBairro?: string;
+    addressCep?: string;
+    addressCidade?: string;
+    addressEstado?: string;
+    notes?: string;
   } | null>(null);
 
   const isSuspended = !!loggedInUser?.paused || !!loggedInUser?.archived;
@@ -185,6 +196,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   const [isUploadingProfilePhoto, setIsUploadingProfilePhoto ] = useState(false);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState(false);
   const [profileErrorMsg, setProfileErrorMsg] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // On-screen notification states for auth and user activities
   const [loginError, setLoginError] = useState("");
@@ -221,6 +233,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   const [isBiometricEnrolled, setIsBiometricEnrolled] = useState(false);
   const [biometricFeedback, setBiometricFeedback] = useState<{ success: boolean; msg: string } | null>(null);
   const [isEnrollingBio, setIsEnrollingBio] = useState(false);
+  const [isAuthenticatingBio, setIsAuthenticatingBio] = useState(false);
 
   // Sync tab choice
   useEffect(() => {
@@ -230,31 +243,29 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
   }, [initialTab]);
 
   // Sync profile fields with authenticated user data
-  // Instrução: "Nesta sessão, deixe somente preenchido e-mail e senha; o restante deixe em branco, permitindo que o usuário preencha."
   useEffect(() => {
     if (loggedInUser) {
       setProfileEmail(loggedInUser.rawEmail || "");
       setProfilePassword(loggedInUser.password || "");
-      // O restante permanece em branco para preenchimento voluntário do associado:
-      setProfileName("");
-      setProfileCpf("");
-      setProfileBirthDate("");
-      setProfileForce("" as any);
-      setProfileRank("");
-      setProfileRgMilitar("");
-      setProfileChurch("");
-      setProfilePhone("");
-      setProfileCity("");
-      setProfilePhotoUrl("");
-      setProfileCep("");
-      setProfileAddressRua("");
-      setProfileAddressNumero("");
-      setProfileAddressComplemento("");
-      setProfileAddressBairro("");
-      setProfileState("SC");
-      setProfileNotes("");
+      setProfileName(loggedInUser.name || "");
+      setProfileCpf(loggedInUser.rawCpf ? formatCpfMask(loggedInUser.rawCpf) : "");
+      setProfileBirthDate(loggedInUser.rawBirthDate || "");
+      setProfileForce((loggedInUser.rawForce as any) || "");
+      setProfileRank(loggedInUser.rank || "");
+      setProfileRgMilitar(loggedInUser.registrationID && loggedInUser.registrationID !== "N/A" ? loggedInUser.registrationID : "");
+      setProfileChurch(loggedInUser.rawChurch || "");
+      setProfilePhone(loggedInUser.rawPhone ? formatPhone(loggedInUser.rawPhone) : "");
+      setProfileCity(loggedInUser.city || loggedInUser.addressCidade || "");
+      setProfilePhotoUrl(loggedInUser.photoUrl || "");
+      setProfileCep(loggedInUser.addressCep ? formatCepMask(loggedInUser.addressCep) : "");
+      setProfileAddressRua(loggedInUser.addressRua || "");
+      setProfileAddressNumero(loggedInUser.addressNumero || "");
+      setProfileAddressComplemento(loggedInUser.addressComplemento || "");
+      setProfileAddressBairro(loggedInUser.addressBairro || "");
+      setProfileState(loggedInUser.addressEstado || "SC");
+      setProfileNotes(loggedInUser.notes || "");
     }
-  }, [loggedInUser]);
+  }, [loggedInUser?.sessionID, loggedInUser?.securityHash]);
 
   // Load Submitted Ficha and Pre-fill form fields
   useEffect(() => {
@@ -477,6 +488,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
 
   // Load Sim DB and state on mount
   useEffect(() => {
+    runStorageHygiene();
     const loadMembers = async () => {
       try {
         const list = await membersService.getMembers();
@@ -509,7 +521,16 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                   rawEmail: freshUser.email,
                   rawBirthDate: freshUser.birthDate,
                   password: freshUser.password,
-                  photoUrl: freshUser.photoUrl || ""
+                  photoUrl: freshUser.photoUrl || "",
+                  address: freshUser.address || "",
+                  addressRua: freshUser.addressRua || "",
+                  addressNumero: freshUser.addressNumero || "",
+                  addressComplemento: "",
+                  addressBairro: freshUser.addressBairro || "",
+                  addressCep: freshUser.addressCep || "",
+                  addressCidade: freshUser.addressCidade || freshUser.city || "",
+                  addressEstado: freshUser.addressEstado || "SC",
+                  notes: freshUser.notes || ""
                 };
                 setLoggedInUser(mappedUser);
                 setIsLoggedIn(true);
@@ -630,7 +651,16 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
         rawEmail: found.email,
         rawBirthDate: found.birthDate,
         password: found.password,
-        photoUrl: found.photoUrl || ""
+        photoUrl: found.photoUrl || "",
+        address: found.address || "",
+        addressRua: found.addressRua || "",
+        addressNumero: found.addressNumero || "",
+        addressComplemento: "",
+        addressBairro: found.addressBairro || "",
+        addressCep: found.addressCep || "",
+        addressCidade: found.addressCidade || found.city || "",
+        addressEstado: found.addressEstado || "SC",
+        notes: found.notes || ""
       };
 
       setLoggedInUser(authenticatedUser);
@@ -656,19 +686,42 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
     }
   }, [loggedInUser]);
 
-  // Biometric Login handler (WebAuthn)
+  // Biometric Login handler (WebAuthn with Mobile Haptics & Fallback)
   const handleBiometricLogin = async () => {
     setLoginError("");
+    setIsAuthenticatingBio(true);
+
+    // Mobile haptic vibration feedback
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      try {
+        navigator.vibrate([30, 40, 30]);
+      } catch {}
+    }
+
     try {
-      if (!biometricsService.isWebAuthnSupported()) {
-        setLoginError("Seu navegador ou aparelho atual não possui suporte à API de Credenciais WebAuthn.");
+      let res: { success: boolean; error?: string; isSecurityError?: boolean } = { success: false };
+
+      if (biometricsService.isWebAuthnSupported()) {
+        res = await biometricsService.authenticate(authEmail.trim() || undefined);
+      }
+
+      // If WebAuthn was blocked by sandbox/iframe, unsupported, or restricted:
+      if (!res.success && (res.isSecurityError || !biometricsService.isWebAuthnSupported() || res.error?.includes("restrito") || res.error?.includes("permissão"))) {
+        // Fallback for mobile and preview touch authentication
+        res = await biometricsService.authenticateMobileTouch(authEmail.trim() || undefined);
+      }
+
+      if (!res.success) {
+        setLoginError(res.error || "A validação biométrica do dispositivo foi cancelada ou não reconhecida.");
+        setIsAuthenticatingBio(false);
         return;
       }
 
-      const res = await biometricsService.authenticate(authEmail.trim() || undefined);
-      if (!res.success) {
-        setLoginError(res.error || "A validação biométrica do dispositivo foi cancelada ou não reconhecida.");
-        return;
+      // Mobile success haptic confirmation
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try {
+          navigator.vibrate(60);
+        } catch {}
       }
 
       // Load members from DB to match user
@@ -699,6 +752,7 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
           found = list[0]; // Contingência pedagógica
         } else {
           setLoginError("Biometria do dispositivo confirmada, mas nenhum cadastro militar correspondente foi encontrado.");
+          setIsAuthenticatingBio(false);
           return;
         }
       }
@@ -722,7 +776,16 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
         rawEmail: found.email,
         rawBirthDate: found.birthDate,
         password: found.password,
-        photoUrl: found.photoUrl || ""
+        photoUrl: found.photoUrl || "",
+        address: found.address || "",
+        addressRua: found.addressRua || "",
+        addressNumero: found.addressNumero || "",
+        addressComplemento: "",
+        addressBairro: found.addressBairro || "",
+        addressCep: found.addressCep || "",
+        addressCidade: found.addressCidade || found.city || "",
+        addressEstado: found.addressEstado || "SC",
+        notes: found.notes || ""
       };
 
       setLoggedInUser(authenticatedUser);
@@ -732,6 +795,8 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
     } catch (err: any) {
       console.error("Erro no login biométrico:", err);
       setLoginError(err.message || "Falha na validação biométrica do dispositivo.");
+    } finally {
+      setIsAuthenticatingBio(false);
     }
   };
 
@@ -828,84 +893,69 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
 
     setProfileErrorMsg("");
     setProfileSuccessMsg(false);
+    setIsSavingProfile(true);
 
     // Validação de E-mail
-    const cleanEmail = sanitizeInput(profileEmail, 100);
-    if (!isValidEmail(cleanEmail)) {
+    const cleanEmail = sanitizeInput(profileEmail || loggedInUser.rawEmail || "", 100);
+    if (!cleanEmail || !isValidEmail(cleanEmail)) {
       setProfileErrorMsg("Por favor, informe um endereço de e-mail corporativo ou seguro válido.");
+      setIsSavingProfile(false);
       return;
     }
 
     // Validação de Senha
-    const cleanPassword = sanitizeInput(profilePassword, 30);
-    if (cleanPassword.length < 6) {
+    const cleanPassword = sanitizeInput(profilePassword || loggedInUser.password || "", 30);
+    if (cleanPassword && cleanPassword.length < 6) {
       setProfileErrorMsg("A senha de acesso deve possuir ao menos 6 caracteres.");
+      setIsSavingProfile(false);
       return;
     }
 
     // Validação de CPF (Obrigatório)
-    const cleanCpf = profileCpf.replace(/\D/g, "");
+    const rawCpfInput = profileCpf || loggedInUser.rawCpf || "";
+    const cleanCpf = rawCpfInput.replace(/\D/g, "");
     if (!cleanCpf) {
-      setProfileErrorMsg("O preenchimento do CPF é obrigatório.");
+      setProfileErrorMsg("O preenchimento do CPF é obrigatório para validação cadastral.");
+      setIsSavingProfile(false);
       return;
     }
-    if (!isValidCPF(cleanCpf)) {
+    if (cleanCpf.length === 11 && !isValidCPF(cleanCpf)) {
       setProfileErrorMsg("O CPF informado é inválido. Por favor, verifique os dígitos digitados.");
+      setIsSavingProfile(false);
       return;
     }
 
     // Validação de Telefone / WhatsApp (Obrigatório)
-    const cleanPhone = sanitizeInput(profilePhone, 20);
+    const rawPhoneInput = profilePhone || loggedInUser.rawPhone || "";
+    const cleanPhone = sanitizeInput(rawPhoneInput, 20);
     if (!cleanPhone) {
       setProfileErrorMsg("O preenchimento do Telefone / WhatsApp é obrigatório.");
+      setIsSavingProfile(false);
       return;
     }
     if (!isValidPhone(cleanPhone)) {
       setProfileErrorMsg("Por favor, informe um número de Telefone / WhatsApp válido com DDD (10 ou 11 dígitos).");
+      setIsSavingProfile(false);
       return;
     }
 
-    // Validação de Endereço Completo (Obrigatórios)
-    const cleanCep = profileCep.replace(/\D/g, "");
-    if (!cleanCep || cleanCep.length !== 8) {
-      setProfileErrorMsg("O CEP residencial completo é obrigatório (8 dígitos numéricos).");
-      return;
-    }
-    if (!profileAddressRua.trim()) {
-      setProfileErrorMsg("O Logradouro / Rua é de preenchimento obrigatório.");
-      return;
-    }
-    if (!profileAddressNumero.trim()) {
-      setProfileErrorMsg("O Número do endereço é de preenchimento obrigatório.");
-      return;
-    }
-    if (!profileAddressBairro.trim()) {
-      setProfileErrorMsg("O Bairro é de preenchimento obrigatório.");
-      return;
-    }
-    if (!profileCity.trim()) {
-      setProfileErrorMsg("A Cidade é de preenchimento obrigatório.");
-      return;
-    }
-    if (!profileState.trim()) {
-      setProfileErrorMsg("O Estado (UF) é de preenchimento obrigatório.");
-      return;
-    }
+    // Endereço Residencial
+    const cleanCep = (profileCep || loggedInUser.addressCep || "").replace(/\D/g, "");
+    const cleanRua = sanitizeInput(profileAddressRua || loggedInUser.addressRua || "", 150);
+    const cleanNumero = sanitizeInput(profileAddressNumero || loggedInUser.addressNumero || "", 50);
+    const cleanComplemento = sanitizeInput(profileAddressComplemento || loggedInUser.addressComplemento || "", 50);
+    const cleanBairro = sanitizeInput(profileAddressBairro || loggedInUser.addressBairro || "", 100);
+    const cleanCity = sanitizeInput(profileCity || loggedInUser.city || loggedInUser.addressCidade || "", 50);
+    const cleanState = sanitizeInput(profileState || loggedInUser.addressEstado || "SC", 2);
+    const cleanNotes = sanitizeInput(profileNotes || loggedInUser.notes || "", 255);
 
     try {
       // Sanitização de campos opcionais/complementares
-      const cleanName = sanitizeInput(profileName, 100);
-      const cleanBirthDate = sanitizeInput(profileBirthDate, 20);
-      const cleanRank = sanitizeInput(profileRank, 50);
-      const cleanRgMilitar = sanitizeInput(profileRgMilitar, 50);
-      const cleanChurch = sanitizeInput(profileChurch, 150);
-      const cleanCity = sanitizeInput(profileCity, 50);
-      const cleanState = sanitizeInput(profileState, 2);
-      const cleanRua = sanitizeInput(profileAddressRua, 150);
-      const cleanNumero = sanitizeInput(profileAddressNumero, 50);
-      const cleanComplemento = sanitizeInput(profileAddressComplemento, 50);
-      const cleanBairro = sanitizeInput(profileAddressBairro, 100);
-      const cleanNotes = sanitizeInput(profileNotes, 255);
+      const cleanName = sanitizeInput(profileName || loggedInUser.name || "", 100);
+      const cleanBirthDate = sanitizeInput(profileBirthDate || loggedInUser.rawBirthDate || "", 20);
+      const cleanRank = sanitizeInput(profileRank || loggedInUser.rank || "", 50);
+      const cleanRgMilitar = sanitizeInput(profileRgMilitar || loggedInUser.registrationID || "", 50);
+      const cleanChurch = sanitizeInput(profileChurch || loggedInUser.rawChurch || "", 150);
 
       const fullAddress = [
         cleanRua,
@@ -916,19 +966,28 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
         cleanCep ? `CEP: ${cleanCep}` : ""
       ].filter(Boolean).join(", ");
 
+      // Assegura que a foto de perfil esteja otimizada e comprimida para não exceder limites de storage
+      let finalPhoto = profilePhotoUrl || loggedInUser.photoUrl || "";
+      if (finalPhoto && finalPhoto.startsWith("data:image/") && finalPhoto.length > 35000) {
+        try {
+          finalPhoto = await compressImage(finalPhoto, 300, 400, 0.72);
+          setProfilePhotoUrl(finalPhoto);
+        } catch (_) {}
+      }
+
       const updatedFields: Partial<MemberRegistration> = {
         name: cleanName || loggedInUser.name,
         cpf: cleanCpf,
-        birthDate: cleanBirthDate || loggedInUser.rawBirthDate || "",
+        birthDate: cleanBirthDate,
         militaryForce: (profileForce as any) || (loggedInUser.rawForce as any) || "PM",
         rank: cleanRank || loggedInUser.rank,
         rgMilitar: cleanRgMilitar || loggedInUser.registrationID,
-        church: cleanChurch || loggedInUser.rawChurch || "",
+        church: cleanChurch,
         phone: cleanPhone,
         email: cleanEmail,
         city: cleanCity,
         password: cleanPassword,
-        photoUrl: profilePhotoUrl,
+        photoUrl: finalPhoto,
         address: fullAddress,
         addressRua: cleanRua,
         addressNumero: cleanNumero,
@@ -950,17 +1009,49 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
           force: profileForce === "PM" ? "Polícia Militar SC" : profileForce === "BM" ? "Bombeiro Militar SC" : profileForce === "FFAA" ? "Forças Armadas" : profileForce === "Civil" ? "Polícia Civil / Servente" : profileForce === "Apoiador" ? "Apoiador Voluntário" : loggedInUser.force,
           city: cleanCity,
           registrationID: cleanRgMilitar || loggedInUser.registrationID,
-          rawBirthDate: cleanBirthDate || loggedInUser.rawBirthDate,
+          rawBirthDate: cleanBirthDate,
           rawForce: profileForce || loggedInUser.rawForce,
-          rawChurch: cleanChurch || loggedInUser.rawChurch,
+          rawChurch: cleanChurch,
           rawPhone: cleanPhone,
           rawEmail: cleanEmail,
           rawCpf: cleanCpf,
           password: cleanPassword,
-          photoUrl: profilePhotoUrl
+          photoUrl: finalPhoto,
+          address: fullAddress,
+          addressRua: cleanRua,
+          addressNumero: cleanNumero,
+          addressComplemento: cleanComplemento,
+          addressBairro: cleanBairro,
+          addressCep: cleanCep,
+          addressCidade: cleanCity,
+          addressEstado: cleanState || "SC",
+          notes: cleanNotes
         };
+
         setLoggedInUser(nextUserSession);
-        sessionStorage.setItem("umesc_active_session", JSON.stringify(nextUserSession));
+        try {
+          sessionStorage.setItem("umesc_active_session", JSON.stringify(nextUserSession));
+        } catch (_) {}
+
+        // Mantém os campos do formulário atualizados
+        setProfileName(nextUserSession.name);
+        setProfileEmail(cleanEmail);
+        setProfilePassword(cleanPassword);
+        setProfileCpf(formatCpfMask(cleanCpf));
+        setProfilePhone(formatPhone(cleanPhone));
+        setProfileCity(cleanCity);
+        setProfileState(cleanState || "SC");
+        setProfileCep(formatCepMask(cleanCep));
+        setProfileAddressRua(cleanRua);
+        setProfileAddressNumero(cleanNumero);
+        setProfileAddressComplemento(cleanComplemento);
+        setProfileAddressBairro(cleanBairro);
+        setProfileNotes(cleanNotes);
+        setProfileRank(cleanRank);
+        setProfileRgMilitar(cleanRgMilitar);
+        setProfileChurch(cleanChurch);
+        if (profileForce) setProfileForce(profileForce);
+        if (finalPhoto) setProfilePhotoUrl(finalPhoto);
         
         // Atualiza lista interna
         try {
@@ -980,6 +1071,8 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
     } catch (err: any) {
       console.error("Erro ao atualizar dados cadastrais:", err);
       setProfileErrorMsg(err?.message || "Falha técnica de comunicação ao salvar os dados.");
+    } finally {
+      setIsSavingProfile(false);
     }
   };
 
@@ -1366,11 +1459,32 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
 
                     <button
                       type="button"
+                      id="mobile-biometric-auth-button"
                       onClick={handleBiometricLogin}
-                      className="w-full py-2.5 bg-gradient-to-r from-teal-900/50 via-emerald-900/50 to-teal-900/50 hover:from-teal-900/70 hover:to-emerald-900/70 text-emerald-300 border border-emerald-500/40 font-bold text-xs uppercase tracking-wider rounded flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-emerald-950/40"
+                      disabled={isAuthenticatingBio}
+                      className="w-full min-h-[50px] py-2.5 px-3.5 bg-gradient-to-r from-emerald-950/90 via-teal-900/75 to-emerald-950/90 hover:from-emerald-900 hover:to-teal-800 active:scale-[0.98] text-emerald-300 border border-emerald-500/50 hover:border-emerald-400 font-bold text-xs uppercase tracking-wider rounded-xl flex items-center justify-between gap-2.5 transition-all cursor-pointer shadow-lg shadow-emerald-950/60 group select-none disabled:opacity-75 disabled:cursor-wait"
                     >
-                      <Fingerprint className="w-4 h-4 text-emerald-400 animate-pulse" />
-                      <span>Entrar com Biometria ({getBiometricLabel()})</span>
+                      <div className="flex items-center gap-2.5 text-left">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0 text-emerald-400 group-hover:scale-105 group-hover:bg-emerald-500/30 transition-all">
+                          {isAuthenticatingBio ? (
+                            <Fingerprint className="w-4 h-4 text-emerald-300 animate-spin" />
+                          ) : (
+                            <Fingerprint className="w-4 h-4 text-emerald-400 animate-pulse" />
+                          )}
+                        </div>
+                        <div>
+                          <span className="block text-[11px] sm:text-xs font-black tracking-wider text-white group-hover:text-emerald-200 transition-colors">
+                            {isAuthenticatingBio ? "Verificando Sensor Biométrico..." : `Entrar com Biometria (${getBiometricLabel()})`}
+                          </span>
+                          <span className="block text-[9px] font-normal text-emerald-300/80 normal-case">
+                            Toque no sensor do smartphone (Digital ou Face ID)
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0 flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[9px] font-mono text-emerald-300">
+                        <Smartphone className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span className="font-bold uppercase tracking-wider">Mobile</span>
+                      </div>
                     </button>
                   </div>
                 </form>
@@ -2476,13 +2590,13 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                     
                     {/* Aviso de Preenchimento Inicial */}
                     <div className="p-4 rounded-lg bg-[#0e1724] border border-blue-550/20 text-slate-300 text-xs flex items-start gap-3">
-                      <Lock className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+                      <Lock className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
                       <div className="space-y-1 leading-relaxed">
                         <p className="font-semibold text-white">
-                          Sessão de Atualização Cadastral
+                          Edição e Atualização Cadastral
                         </p>
                         <p className="text-[11px] text-slate-450">
-                          Nesta sessão, somente seu <strong>E-mail</strong> e <strong>Senha</strong> foram mantidos preenchidos. Por favor, informe seu <strong>CPF</strong>, <strong>Telefone</strong> e <strong>Endereço Residencial Completo</strong> (campos de preenchimento obrigatório assinalados com <span className="text-red-400 font-bold">*</span>) e preencha os demais dados para emissão de credenciais e registro associativo.
+                          Seus dados cadastrais estão carregados abaixo. Você pode retificar suas informações de acesso, contato, endereço e dados complementares a qualquer momento. Ao concluir suas alterações, clique em <strong>Salvar Cadastro Atualizado</strong>.
                         </p>
                       </div>
                     </div>
@@ -2501,7 +2615,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                             <Mail className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
                             <input 
                               type="email"
-                              required
                               maxLength={100}
                               value={profileEmail}
                               onChange={(e) => setProfileEmail(e.target.value)}
@@ -2519,7 +2632,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                             <Lock className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
                             <input 
                               type="password"
-                              required
                               maxLength={30}
                               value={profilePassword}
                               onChange={(e) => setProfilePassword(e.target.value)}
@@ -2543,7 +2655,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                           </label>
                           <input 
                             type="text"
-                            required
                             maxLength={14}
                             placeholder="000.000.000-00"
                             value={profileCpf}
@@ -2563,7 +2674,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                             <Phone className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
                             <input 
                               type="text"
-                              required
                               maxLength={15}
                               placeholder="(48) 99999-9999"
                               value={profilePhone}
@@ -2598,7 +2708,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                           <div className="flex gap-1.5">
                             <input 
                               type="text"
-                              required
                               maxLength={9}
                               placeholder="00000-000"
                               value={profileCep}
@@ -2633,7 +2742,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                           </label>
                           <input 
                             type="text"
-                            required
                             maxLength={150}
                             placeholder="Ex: Rua Coronel Pedro Demoro"
                             value={profileAddressRua}
@@ -2651,7 +2759,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                           </label>
                           <input 
                             type="text"
-                            required
                             maxLength={50}
                             placeholder="Ex: 1250 ou S/N"
                             value={profileAddressNumero}
@@ -2683,7 +2790,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                           </label>
                           <input 
                             type="text"
-                            required
                             maxLength={100}
                             placeholder="Ex: Estreito"
                             value={profileAddressBairro}
@@ -2698,7 +2804,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                           </label>
                           <input 
                             type="text"
-                            required
                             maxLength={50}
                             placeholder="Ex: Florianópolis"
                             value={profileCity}
@@ -2712,7 +2817,6 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                             UF <span className="text-red-400 font-bold">*</span>:
                           </label>
                           <select
-                            required
                             value={profileState}
                             onChange={(e) => setProfileState(e.target.value)}
                             className="w-full bg-[#0d1624] border border-white/10 focus:border-emerald-500 rounded px-2.5 py-2 text-xs text-white outline-none cursor-pointer"
@@ -2785,19 +2889,19 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                                 type="file"
                                 accept="image/*"
                                 className="hidden"
-                                onChange={(e) => {
+                                onChange={async (e) => {
                                   if (e.target.files && e.target.files[0]) {
                                     const file = e.target.files[0];
                                     setIsUploadingProfilePhoto(true);
-                                    const reader = new FileReader();
-                                    reader.onloadend = () => {
-                                      setProfilePhotoUrl(reader.result as string);
+                                    try {
+                                      // Comprime a imagem imediatamente para formato 3x4 leve (<30KB)
+                                      const compressed = await compressImage(file, 300, 400, 0.72);
+                                      setProfilePhotoUrl(compressed);
+                                    } catch (err) {
+                                      console.error("Erro ao comprimir foto 3x4:", err);
+                                    } finally {
                                       setIsUploadingProfilePhoto(false);
-                                    };
-                                    reader.onerror = () => {
-                                      setIsUploadingProfilePhoto(false);
-                                    };
-                                    reader.readAsDataURL(file);
+                                    }
                                   }
                                 }}
                               />
@@ -2919,10 +3023,20 @@ export default function MemberDashboard({ onBackToHome, initialTab, onEnterAdmin
                     <div className="flex gap-3 justify-end pt-2">
                       <button
                         type="submit"
-                        className="bg-[#10b981] hover:bg-[#059669] text-white font-extrabold uppercase text-xs tracking-wider px-6 py-3.5 rounded cursor-pointer transition-colors shadow-lg flex items-center gap-2"
+                        disabled={isSavingProfile}
+                        className="bg-[#10b981] hover:bg-[#059669] disabled:opacity-50 disabled:cursor-not-allowed text-white font-extrabold uppercase text-xs tracking-wider px-6 py-3.5 rounded cursor-pointer transition-colors shadow-lg flex items-center gap-2"
                       >
-                        <CheckCircle2 className="w-4 h-4" />
-                        Salvar Cadastro Atualizado
+                        {isSavingProfile ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                            Salvando Atualizações...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4" />
+                            Salvar Cadastro Atualizado
+                          </>
+                        )}
                       </button>
                     </div>
 

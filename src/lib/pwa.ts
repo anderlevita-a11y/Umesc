@@ -15,6 +15,24 @@ let deferredPrompt: PWAInstallPromptEvent | null = null;
  */
 export function registerServiceWorker(): void {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    // In development mode or preview domains, unregister existing service workers and clear cache storage
+    // to prevent caching Vite module chunks which causes duplicate React instances and invalid hook calls.
+    if (import.meta.env.DEV || window.location.hostname === 'localhost' || window.location.hostname.includes('ais-dev')) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const reg of registrations) {
+          reg.unregister();
+        }
+      });
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          for (const name of names) {
+            caches.delete(name);
+          }
+        });
+      }
+      return;
+    }
+
     window.addEventListener('load', () => {
       navigator.serviceWorker
         .register('/sw.js')

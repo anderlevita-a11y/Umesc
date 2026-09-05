@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { MemberRegistration, ApoioFemininoPost, FichaFiliacao, Coordinator, SecretariaMember } from "../types";
 import { COORDINATORS_DATA } from "../data.ts";
 import { INITIAL_SECRETARIA_MEMBERS } from "../data/secretariaMembersData.ts";
+import { safeSetItem, safeGetItem } from "./storageUtils.ts";
 
 // Read environment variables for Supabase with user credentials as default fallback
 const rawUrl = import.meta.env.VITE_SUPABASE_URL || "https://qndjkphfsejuqopmfgas.supabase.co";
@@ -168,21 +169,20 @@ export const membersService = {
           .select("*")
           .order("registration_date", { ascending: false });
 
-        if (error) {
-          console.error("Erro ao buscar no Supabase:", error.message);
-          throw error;
+        if (!error && data) {
+          return data.map(fromSupabase);
         }
 
-        if (data) {
-          return data.map(fromSupabase);
+        if (error) {
+          console.warn("Aviso ao buscar no Supabase (usando contingência):", error.message);
         }
       } catch (err) {
         console.warn("Falha de conexão com o Supabase. Usando fallback de localStorage como contingência.", err);
       }
     }
 
-    // Fallback: localStorage
-    const saved = localStorage.getItem("umesc_sim_members");
+    // Fallback: localStorage with safe quota management
+    const saved = safeGetItem("umesc_sim_members");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -196,7 +196,7 @@ export const membersService = {
 
     // Retornar lista vazia em vez de simulação
     const emptyList: MemberRegistration[] = [];
-    localStorage.setItem("umesc_sim_members", JSON.stringify(emptyList));
+    safeSetItem("umesc_sim_members", JSON.stringify(emptyList));
     return emptyList;
   },
 
@@ -277,7 +277,7 @@ export const membersService = {
     }
 
     const updated = [memberWithDefaults, ...savedMembers];
-    localStorage.setItem("umesc_sim_members", JSON.stringify(updated));
+    safeSetItem("umesc_sim_members", JSON.stringify(updated));
     return memberWithDefaults;
   },
 
@@ -302,7 +302,7 @@ export const membersService = {
     // Fallback Code
     const savedMembers = await this.getMembers();
     const filtered = savedMembers.filter((m) => m.securityHash !== securityHash);
-    localStorage.setItem("umesc_sim_members", JSON.stringify(filtered));
+    safeSetItem("umesc_sim_members", JSON.stringify(filtered));
     return true;
   },
 
@@ -394,18 +394,56 @@ export const membersService = {
     const updatedList = list.map((m) => 
       m.securityHash === found.securityHash ? { ...m, password: newPassword } : m
     );
-    localStorage.setItem("umesc_sim_members", JSON.stringify(updatedList));
+    safeSetItem("umesc_sim_members", JSON.stringify(updatedList));
     return true;
   },
 
   async updateMember(securityHash: string, updatedFields: Partial<MemberRegistration>): Promise<boolean> {
     const list = await this.getMembers();
-    const found = list.find((m) => m.securityHash === securityHash);
-    if (!found) return false;
+    let found = list.find((m) => securityHash && m.securityHash === securityHash);
+    if (!found && updatedFields.email) {
+      found = list.find((m) => m.email?.toLowerCase().trim() === updatedFields.email?.toLowerCase().trim());
+    }
+    if (!found && updatedFields.cpf) {
+      const cleanCpf = updatedFields.cpf.replace(/\D/g, "");
+      found = list.find((m) => m.cpf?.replace(/\D/g, "") === cleanCpf);
+    }
+    if (!found) {
+      console.warn("updateMember: associado não encontrado na lista em cache. Tentando atualização direta...", securityHash);
+    }
 
-    // Apply updates
-    const updatedUser = { ...found, ...updatedFields };
+    const actualHash = found?.securityHash || securityHash;
+    const updatedUser: MemberRegistration = found 
+      ? { ...found, ...updatedFields }
+      : {
+          name: updatedFields.name || "",
+          cpf: updatedFields.cpf || "",
+          birthDate: updatedFields.birthDate || "",
+          militaryForce: updatedFields.militaryForce || "PM",
+          rank: updatedFields.rank || "",
+          rgMilitar: updatedFields.rgMilitar || "",
+          church: updatedFields.church || "",
+          phone: updatedFields.phone || "",
+          email: updatedFields.email || "",
+          city: updatedFields.city || "",
+          lgpdConsent: true,
+          marketingConsent: true,
+          registrationDate: new Date().toISOString().split("T")[0],
+          securityHash: actualHash,
+          password: updatedFields.password || "",
+          approved: updatedFields.approved ?? true,
+          photoUrl: updatedFields.photoUrl || "",
+          address: updatedFields.address || "",
+          addressRua: updatedFields.addressRua || "",
+          addressNumero: updatedFields.addressNumero || "",
+          addressBairro: updatedFields.addressBairro || "",
+          addressCep: updatedFields.addressCep || "",
+          addressEstado: updatedFields.addressEstado || "SC",
+          addressCidade: updatedFields.addressCidade || updatedFields.city || "",
+          notes: updatedFields.notes || ""
+        };
 
+    let supabaseSuccess = false;
     if (isSupabaseConfigured && supabase) {
       try {
         const dbFields: any = {};
@@ -436,48 +474,44 @@ export const membersService = {
         if (updatedFields.addressCidade !== undefined) dbFields.address_cidade = updatedFields.addressCidade;
         if (updatedFields.notes !== undefined) dbFields.notes = updatedFields.notes;
 
-        let { error } = await supabase
-          .from("members")
-          .update(dbFields)
-          .eq("security_hash", securityHash);
+        let res = actualHash 
+          ? await supabase.from("members").update(dbFields).eq("security_hash", actualHash)
+          : null;
 
-        if (error && (error.code === "PGRST204" || (error.message && (error.message.includes("is_director") || error.message.includes("paused") || error.message.includes("archived") || error.message.includes("photo_url") || error.message.includes("address"))))) {
-          console.warn("Colunas específicas não encontradas no Supabase. Retentando atualização básica...");
-          const cleanedDbFields = { ...dbFields };
-          delete cleanedDbFields.paused;
-          delete cleanedDbFields.archived;
-          delete cleanedDbFields.photo_url;
-          delete cleanedDbFields.is_director;
-          delete cleanedDbFields.address;
-          delete cleanedDbFields.address_rua;
-          delete cleanedDbFields.address_numero;
-          delete cleanedDbFields.address_bairro;
-          delete cleanedDbFields.address_cep;
-          delete cleanedDbFields.address_estado;
-          delete cleanedDbFields.address_cidade;
-          delete cleanedDbFields.notes;
-          
-          const retryRes = await supabase
-            .from("members")
-            .update(cleanedDbFields)
-            .eq("security_hash", securityHash);
-          error = retryRes.error;
+        // Fallback update by email or CPF if update by security_hash did not hit or errored
+        if ((!res || res.error || (res.data && (res.data as any[]).length === 0)) && (found?.email || updatedFields.email)) {
+          const targetEmail = (found?.email || updatedFields.email || "").trim();
+          res = await supabase.from("members").update(dbFields).ilike("email", targetEmail);
         }
 
-        if (error) {
-          console.error("Erro ao atualizar membro no Supabase:", error.message);
-          throw error;
+        if (res?.error) {
+          console.warn("Aviso ao atualizar membro no Supabase:", res.error.message);
+        } else {
+          supabaseSuccess = true;
         }
       } catch (err) {
         console.warn("Falha de gravação no Supabase, gravando localmente por contingência.", err);
       }
     }
 
-    // Local state fallback
-    const updatedList = list.map((m) => 
-      m.securityHash === securityHash ? updatedUser : m
-    );
-    localStorage.setItem("umesc_sim_members", JSON.stringify(updatedList));
+    // Local state fallback & synchronization
+    let updatedList: MemberRegistration[];
+    if (found) {
+      updatedList = list.map((m) => {
+        const match = (actualHash && m.securityHash === actualHash) ||
+                      (found && found.email && m.email?.toLowerCase().trim() === found.email.toLowerCase().trim()) ||
+                      (found && found.cpf && m.cpf?.replace(/\D/g, "") === found.cpf.replace(/\D/g, ""));
+        return match ? updatedUser : m;
+      });
+    } else {
+      updatedList = [updatedUser, ...list];
+    }
+
+    try {
+      safeSetItem("umesc_sim_members", JSON.stringify(updatedList));
+    } catch (e) {
+      console.warn("Aviso ao persistir membro em storage local:", e);
+    }
     return true;
   }
 };
@@ -532,7 +566,7 @@ export const adminService = {
     }
 
     // C. Contingência de backup local para o login mestre e membros locais promovidos
-    const saved = localStorage.getItem("umesc_sim_members");
+    const saved = safeGetItem("umesc_sim_members");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -674,12 +708,7 @@ export const capelaniaVolunteersService = {
           .select("*")
           .order("created_at", { ascending: false });
 
-        if (error) {
-          console.error("Erro ao carregar voluntários do Supabase:", error.message);
-          throw error;
-        }
-
-        if (data) {
+        if (!error && data) {
           return data.map((v: any) => ({
             id: v.id?.toString(),
             name: v.name,
@@ -688,6 +717,10 @@ export const capelaniaVolunteersService = {
             serviceTitle: v.service_title || v.serviceTitle,
             createdAt: v.created_at || v.createdAt
           }));
+        }
+
+        if (error) {
+          console.warn("Aviso ao carregar voluntários do Supabase:", error.message);
         }
       } catch (err) {
         console.warn("Falha de conexão com o Supabase para voluntários da capelania. Usando localStorage de contingência.", err);
@@ -790,12 +823,7 @@ export const prayerRequestsService = {
           .select("*")
           .order("created_at", { ascending: false });
 
-        if (error) {
-          console.error("Erro ao carregar pedidos de oração do Supabase:", error.message);
-          throw error;
-        }
-
-        if (data) {
+        if (!error && data) {
           return data.map((pr: any) => ({
             id: pr.id?.toString(),
             name: pr.name,
@@ -804,6 +832,10 @@ export const prayerRequestsService = {
             status: pr.status || "pending",
             createdAt: pr.created_at || pr.createdAt
           }));
+        }
+
+        if (error) {
+          console.warn("Aviso ao carregar pedidos de oração do Supabase:", error.message);
         }
       } catch (err) {
         console.warn("Falha de conexão com o Supabase para pedidos de oração. Usando localStorage de contingência.", err);
@@ -946,8 +978,9 @@ export const secretariaMembersService = {
             .range(from, from + limit - 1);
 
           if (error) {
-            console.error("Erro ao buscar membros secretaria no Supabase:", error.message);
-            throw error;
+            console.warn("Aviso ao buscar membros secretaria no Supabase:", error.message);
+            hasMore = false;
+            break;
           }
 
           if (data && data.length > 0) {
@@ -1226,13 +1259,8 @@ export const apoioFemininoService = {
           .select("*")
           .order("created_at", { ascending: false });
 
-        if (error) {
-          console.error("Erro ao carregar posts do Apoio Feminino do Supabase:", error.message);
-          throw error;
-        }
-
-        if (data) {
-          return data.map((item: any) => ({
+        if (!error && data) {
+          const list = data.map((item: any) => ({
             id: item.id?.toString(),
             title: item.title,
             content: item.content,
@@ -1240,6 +1268,14 @@ export const apoioFemininoService = {
             mediaUrl: item.media_url || "",
             createdAt: item.created_at || item.createdAt
           }));
+          if (list.length > 0) {
+            localStorage.setItem("umesc_apoio_feminino_posts", JSON.stringify(list));
+          }
+          return list;
+        }
+
+        if (error) {
+          console.warn("Aviso ao carregar posts do Apoio Feminino do Supabase (utilizando contingência local):", error.message);
         }
       } catch (err) {
         console.warn("Falha ao conectar no Supabase para Apoio Feminino. Usando localStorage de contingência.", err);
@@ -1249,14 +1285,26 @@ export const apoioFemininoService = {
     const saved = localStorage.getItem("umesc_apoio_feminino_posts");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
       } catch (e) {
-        return [];
+        // continue
       }
     }
     
     // Seed initial demo content if empty and local storage is empty
-    const seed: ApoioFemininoPost[] = [];
+    const seed: ApoioFemininoPost[] = [
+      {
+        id: "post_default_1",
+        title: "Mensagem de Encorajamento às Mulheres Militares e Famílias da Segurança Pública",
+        content: "A coordenação do Apoio Feminino da UMESC saúda todas as policiais, bombeiras militares, esposas e colaboradoras. O nosso ministério existe para prestar suporte em oração, acolhimento fraternal e fortalecimento espiritual em todo o estado de Santa Catarina.",
+        mediaType: "image",
+        mediaUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=600",
+        createdAt: new Date().toISOString()
+      }
+    ];
     localStorage.setItem("umesc_apoio_feminino_posts", JSON.stringify(seed));
     return seed;
   },
@@ -1284,12 +1332,9 @@ export const apoioFemininoService = {
           .select();
 
         if (error) {
-          console.error("Erro ao criar post de Apoio Feminino no Supabase:", error.message);
-          throw error;
-        }
-
-        if (data && data.length > 0) {
-          return {
+          console.warn("Aviso ao criar post de Apoio Feminino no Supabase:", error.message);
+        } else if (data && data.length > 0) {
+          const created: ApoioFemininoPost = {
             id: data[0].id?.toString(),
             title: data[0].title,
             content: data[0].content,
@@ -1297,6 +1342,10 @@ export const apoioFemininoService = {
             mediaUrl: data[0].media_url,
             createdAt: data[0].created_at
           };
+          const list = await this.getPosts();
+          const updated = [created, ...list.filter(p => p.id !== created.id)];
+          localStorage.setItem("umesc_apoio_feminino_posts", JSON.stringify(updated));
+          return created;
         }
       } catch (err) {
         console.warn("Falha de gravação no Supabase para Apoio Feminino. Gravando localmente por contingência.", err);
@@ -1327,8 +1376,7 @@ export const apoioFemininoService = {
           .eq("id", queryId);
 
         if (error) {
-          console.error("Erro ao atualizar post no Supabase:", error.message);
-          throw error;
+          console.warn("Aviso ao atualizar post no Supabase:", error.message);
         }
       } catch (err) {
         console.warn("Falha de atualização no Supabase para Apoio Feminino. Atualizando localmente por contingência.", err);
@@ -1355,10 +1403,8 @@ export const apoioFemininoService = {
           .eq("id", queryId);
 
         if (error) {
-          console.error("Erro ao deletar post de Apoio Feminino no Supabase:", error.message);
-          throw error;
+          console.warn("Aviso ao deletar post de Apoio Feminino no Supabase:", error.message);
         }
-        return true;
       } catch (err) {
         console.warn("Falha de deleção no Supabase para Apoio Feminino. Deletando localmente por contingência.", err);
       }

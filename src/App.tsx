@@ -79,7 +79,7 @@ export default function App() {
       apoioFemininoService.getPosts().then((posts) => {
         setApoioFemininoPosts(posts);
       }).catch(err => {
-        console.error("Erro ao buscar publicações do Apoio Feminino:", err);
+        console.warn("Aviso ao buscar publicações do Apoio Feminino:", err);
       });
 
       // Auto-scroll to congress section if deep linked via hash or search param
