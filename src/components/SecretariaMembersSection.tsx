@@ -2,10 +2,36 @@ import React, { useState, useEffect } from "react";
 import { 
   Users, Search, Plus, Edit, Trash2, ShieldCheck, RefreshCw, X, Check, Filter, 
   MapPin, Hash, Phone, Calendar, Group, Briefcase, FileSpreadsheet, PlusCircle,
-  ShieldAlert, AlertTriangle, Layers, Upload, Gift, Cake
+  ShieldAlert, AlertTriangle, Layers, Upload, Gift, Cake,
+  Send, MessageSquare, CheckCircle2, Clock, Video, ExternalLink, Copy, CheckCheck, RotateCcw, Share2, Info, Sparkles
 } from "lucide-react";
 import { SecretariaMember } from "../types";
 import { secretariaMembersService } from "../lib/supabase";
+
+export interface SiteNoticeRecord {
+  sent: boolean;
+  sentAt?: string;
+}
+
+export interface SiteNoticeSettings {
+  video1Url: string;
+  video2Url: string;
+  customHeader?: string;
+}
+
+const formatSentDate = (isoStr?: string) => {
+  if (!isoStr) return "";
+  try {
+    const d = new Date(isoStr);
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const hours = String(d.getHours()).padStart(2, "0");
+    const mins = String(d.getMinutes()).padStart(2, "0");
+    return `${day}/${month} ${hours}:${mins}`;
+  } catch (e) {
+    return "";
+  }
+};
 
 // Helper functions for birthday filtering and card links
 const parseBirthDate = (dateStr: string) => {
@@ -349,6 +375,149 @@ export default function SecretariaMembersSection() {
     const updated = { ...sentBdayCards, [matricula]: !sentBdayCards[matricula] };
     setSentBdayCards(updated);
     localStorage.setItem("umesc_sent_bday_cards_sec", JSON.stringify(updated));
+  };
+
+  // State for Site Migration & Congress notice tracking
+  const [sentSiteNotices, setSentSiteNotices] = useState<Record<string, SiteNoticeRecord>>(() => {
+    const saved = localStorage.getItem("umesc_sent_site_notices_sec");
+    if (!saved) return {};
+    try {
+      return JSON.parse(saved);
+    } catch (e) {
+      return {};
+    }
+  });
+
+  const [noticeFilter, setNoticeFilter] = useState<"all" | "pending" | "sent">("all");
+  const [isNoticeModalOpen, setIsNoticeModalOpen] = useState<boolean>(false);
+  const [noticeToast, setNoticeToast] = useState<{ message: string; type: "success" | "info" } | null>(null);
+  const [copiedNotice, setCopiedNotice] = useState<boolean>(false);
+
+  // Settings for video links and custom message
+  const [noticeSettings, setNoticeSettings] = useState<SiteNoticeSettings>(() => {
+    const saved = localStorage.getItem("umesc_site_notice_settings_sec");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        // fallback
+      }
+    }
+    return {
+      video1Url: "https://umesc.social.br/#area-membro",
+      video2Url: "https://umesc.social.br/#congresso"
+    };
+  });
+
+  const saveNoticeSettings = (newSettings: SiteNoticeSettings) => {
+    setNoticeSettings(newSettings);
+    try {
+      localStorage.setItem("umesc_site_notice_settings_sec", JSON.stringify(newSettings));
+    } catch (e) {
+      console.warn("Falha ao salvar configurações do aviso", e);
+    }
+  };
+
+  const generateNoticeMessage = (m: Partial<SecretariaMember>) => {
+    const nameSalutation = m.nome ? `, *${m.nome}*` : "";
+    const v1 = noticeSettings.video1Url?.trim() ? `\n${noticeSettings.video1Url.trim()}` : "";
+    const v2 = noticeSettings.video2Url?.trim() ? `\n${noticeSettings.video2Url.trim()}` : "";
+
+    return `Olá${nameSalutation}! Sou o Anderson (suporte ao site)! 🙏\n\nInformamos que o site da UMESC mudou. Agora, para realizar seu cadastro de membro e sua inscrição no XVIII Congresso UMESC — em Balneário Camboriú, dias 12 e 13 de Dezembro — acesse:\nhttps://umesc.social.br/\n\nEssa mudança pode ser confirmada no site antigo (www.umesc.com.br), que exibe um aviso na parte superior indicando o novo endereço.\n\n📹 *Veja como fazer seu acesso de membro:*${v1}\n\n📹 *Veja também como se inscrever no congresso:*${v2}\n\nSecretaria UMESC`;
+  };
+
+  const getSiteNoticeWhatsAppUrl = (m: SecretariaMember) => {
+    const cleanCod = m.cod ? m.cod.replace(/\D/g, "") : "";
+    const cleanPhone = m.telefone ? m.telefone.replace(/\D/g, "") : "";
+    if (!cleanPhone) return "";
+    
+    let fullNumber = `${cleanCod}${cleanPhone}`;
+    if (!fullNumber.startsWith("55") && fullNumber.length >= 10) {
+      fullNumber = `55${fullNumber}`;
+    }
+
+    const msg = generateNoticeMessage(m);
+    return `https://api.whatsapp.com/send?phone=${fullNumber}&text=${encodeURIComponent(msg)}`;
+  };
+
+  const markSiteNoticeSent = (matricula: string, memberName?: string) => {
+    setSentSiteNotices((prev) => {
+      const updated = {
+        ...prev,
+        [matricula]: {
+          sent: true,
+          sentAt: new Date().toISOString()
+        }
+      };
+      try {
+        localStorage.setItem("umesc_sent_site_notices_sec", JSON.stringify(updated));
+      } catch (e) {
+        console.warn("Falha ao gravar aviso enviado", e);
+      }
+      return updated;
+    });
+
+    setNoticeToast({
+      message: `Aviso enviado com sucesso para ${memberName || matricula}!`,
+      type: "success"
+    });
+    setTimeout(() => setNoticeToast(null), 4000);
+  };
+
+  const toggleSiteNoticeSent = (matricula: string, memberName?: string) => {
+    setSentSiteNotices((prev) => {
+      const isCurrentlySent = !!prev[matricula]?.sent;
+      const nextSent = !isCurrentlySent;
+      const updated = {
+        ...prev,
+        [matricula]: {
+          sent: nextSent,
+          sentAt: nextSent ? new Date().toISOString() : undefined
+        }
+      };
+      try {
+        localStorage.setItem("umesc_sent_site_notices_sec", JSON.stringify(updated));
+      } catch (e) {
+        console.warn("Falha ao salvar aviso", e);
+      }
+      return updated;
+    });
+
+    const isNowSent = !sentSiteNotices[matricula]?.sent;
+    setNoticeToast({
+      message: isNowSent 
+        ? `Aviso marcado como enviado para ${memberName || matricula}!`
+        : `Aviso de ${memberName || matricula} marcado como pendente.`,
+      type: isNowSent ? "success" : "info"
+    });
+    setTimeout(() => setNoticeToast(null), 3000);
+  };
+
+  const handleSendNotice = (member: SecretariaMember) => {
+    const url = getSiteNoticeWhatsAppUrl(member);
+    if (!url) {
+      alert("Este membro não possui telefone/WhatsApp cadastrado ou válido.");
+      return;
+    }
+    markSiteNoticeSent(member.matricula, member.nome);
+    window.open(url, "_blank");
+  };
+
+  const handleCopyFullNotice = () => {
+    const sampleMsg = generateNoticeMessage({
+      id: 0,
+      matricula: "00000",
+      nome: "Irmão(ã)",
+      cod: "48",
+      telefone: "999999999",
+      cidade: "FLORIANÓPOLIS",
+      dataNascimento: "",
+      opm: "PM",
+      grupo: "CAPELANIA"
+    });
+    navigator.clipboard.writeText(sampleMsg);
+    setCopiedNotice(true);
+    setTimeout(() => setCopiedNotice(false), 3000);
   };
   
   // Custom batch register & bulk delete states
@@ -861,8 +1030,19 @@ export default function SecretariaMembersSection() {
           ? isBirthdayThisWeek(m.dataNascimento)
           : isBirthdayThisMonth(m.dataNascimento);
 
-    return matchesSearch && matchesOpm && matchesCity && matchesBday;
+    const matchesNotice =
+      noticeFilter === "all"
+        ? true
+        : noticeFilter === "sent"
+          ? !!sentSiteNotices[m.matricula]?.sent
+          : !sentSiteNotices[m.matricula]?.sent;
+
+    return matchesSearch && matchesOpm && matchesCity && matchesBday && matchesNotice;
   });
+
+  const membersWithPhoneCount = members.filter(m => m.telefone && m.telefone.replace(/\D/g, "").length >= 8).length;
+  const sentNoticesCount = members.filter(m => sentSiteNotices[m.matricula]?.sent).length;
+  const pendingNoticesCount = members.length - sentNoticesCount;
 
   return (
     <div className="space-y-6 text-left">
@@ -878,6 +1058,19 @@ export default function SecretariaMembersSection() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {/* Site Notice & Congress Modal Trigger */}
+          <button
+            onClick={() => setIsNoticeModalOpen(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-950/50 hover:bg-blue-900/60 text-blue-300 hover:text-blue-200 text-xs font-bold uppercase rounded-xl transition-all cursor-pointer border border-blue-500/30 shadow-md shadow-blue-500/10"
+            title="Aviso do Novo Site & XVIII Congresso UMESC"
+          >
+            <Send className="w-4 h-4 text-blue-400" />
+            <span>Aviso Novo Site & Congresso</span>
+            <span className="ml-1 px-1.5 py-0.5 rounded bg-blue-500/30 text-blue-200 text-[10px] font-mono font-bold">
+              {sentNoticesCount}/{membersWithPhoneCount}
+            </span>
+          </button>
+
           <button
             onClick={() => setIsBatchModalOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-950/40 hover:bg-indigo-900/50 text-indigo-400 hover:text-indigo-300 text-xs font-bold uppercase rounded-xl transition-all cursor-pointer border border-indigo-500/20"
@@ -898,7 +1091,7 @@ export default function SecretariaMembersSection() {
       </div>
 
       {/* Stats Counter Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="bg-[#0b1220]/70 border border-white/5 p-4 rounded-2xl flex items-center gap-3">
           <div className="p-3 bg-amber-500/10 text-amber-500 rounded-xl">
             <Users className="w-5 h-5" />
@@ -942,11 +1135,87 @@ export default function SecretariaMembersSection() {
             <p className="text-xl font-bold text-white font-display mt-0.5">{uniqueCities.length}</p>
           </div>
         </div>
+
+        {/* Notice Stats Card */}
+        <div 
+          onClick={() => setNoticeFilter(noticeFilter === "sent" ? "all" : "sent")}
+          className="bg-[#0b1220]/70 border border-blue-500/20 hover:border-blue-500/40 p-4 rounded-2xl flex items-center gap-3 transition-all cursor-pointer group"
+          title="Clique para filtrar apenas os membros com aviso enviado"
+        >
+          <div className="p-3 bg-blue-500/15 group-hover:bg-blue-500/25 text-blue-400 rounded-xl transition-colors">
+            <Send className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Avisos Novo Site</span>
+            <p className="text-xl font-bold text-white font-display mt-0.5 flex items-baseline gap-1.5">
+              <span className="text-emerald-400">{sentNoticesCount}</span>
+              <span className="text-xs text-slate-500 font-sans font-normal">/ {members.length}</span>
+            </p>
+            <span className="text-[9px] text-blue-400/90 font-mono">
+              {pendingNoticesCount} pendentes
+            </span>
+          </div>
+        </div>
       </div>
 
 
       {/* Filtering and Search Header */}
       <div className="bg-[#0b1220]/40 border border-white/5 p-4 rounded-2xl space-y-3">
+        {/* Notice Filter Pills */}
+        <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-white/5">
+          <span className="text-[10px] uppercase font-black tracking-wider text-blue-400 flex items-center gap-1.5 mr-1">
+            <Send className="w-3.5 h-3.5" />
+            Avisos Novo Site:
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setNoticeFilter("all")}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase transition-all cursor-pointer ${
+              noticeFilter === "all"
+                ? "bg-blue-600 text-white font-black shadow-md shadow-blue-500/20"
+                : "bg-slate-900/60 text-slate-400 hover:text-white border border-white/5"
+            }`}
+          >
+            Todos ({members.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setNoticeFilter(noticeFilter === "pending" ? "all" : "pending")}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+              noticeFilter === "pending"
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/40 font-black shadow-md shadow-amber-500/10"
+                : "bg-slate-900/60 text-amber-400 hover:bg-amber-500/10 border-white/5 hover:border-amber-500/30"
+            }`}
+          >
+            <Clock className="w-3.5 h-3.5 text-amber-400" />
+            Pendentes ({pendingNoticesCount})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setNoticeFilter(noticeFilter === "sent" ? "all" : "sent")}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-1.5 border ${
+              noticeFilter === "sent"
+                ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-black shadow-md shadow-emerald-500/10"
+                : "bg-slate-900/60 text-emerald-400 hover:bg-emerald-500/10 border-white/5 hover:border-emerald-500/30"
+            }`}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            Enviados ({sentNoticesCount})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsNoticeModalOpen(true)}
+            className="ml-auto px-3 py-1.5 rounded-lg text-[10px] font-extrabold uppercase tracking-wider bg-blue-950/40 hover:bg-blue-900/50 text-blue-400 hover:text-blue-300 border border-blue-500/30 transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Ver Modelo & Tutorial</span>
+          </button>
+        </div>
+
         {/* Birthday Filter Pills */}
         <div className="flex flex-wrap items-center gap-2 pb-1 border-b border-white/5">
           <button
@@ -1068,6 +1337,7 @@ export default function SecretariaMembersSection() {
                   <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">D. Nascimento</th>
                   <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Corporação</th>
                   <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Grupo</th>
+                  <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-center">Aviso Novo Site & Congresso</th>
                   <th className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 text-right">Ações</th>
                 </tr>
               </thead>
@@ -1149,6 +1419,66 @@ export default function SecretariaMembersSection() {
                     {/* Grupo */}
                     <td className="px-4 py-3 text-xs font-mono font-semibold text-teal-400 whitespace-nowrap">
                       {member.grupo}
+                    </td>
+
+                    {/* Aviso Novo Site & Congresso */}
+                    <td className="px-4 py-3 text-xs whitespace-nowrap text-center">
+                      {member.telefone ? (
+                        <div className="flex items-center justify-center gap-1.5">
+                          {sentSiteNotices[member.matricula]?.sent ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => toggleSiteNoticeSent(member.matricula, member.nome)}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/40 shadow-sm shadow-emerald-500/10 cursor-pointer transition-all"
+                                title={sentSiteNotices[member.matricula]?.sentAt 
+                                  ? `Aviso enviado em ${new Date(sentSiteNotices[member.matricula]!.sentAt!).toLocaleString("pt-BR")}. Clique para marcar como pendente.` 
+                                  : "Aviso enviado. Clique para alternar status."}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span>Enviado</span>
+                                {sentSiteNotices[member.matricula]?.sentAt && (
+                                  <span className="text-[8px] font-mono text-emerald-300/80 font-normal ml-0.5">
+                                    ({formatSentDate(sentSiteNotices[member.matricula]?.sentAt)})
+                                  </span>
+                                )}
+                              </button>
+                              
+                              <button
+                                type="button"
+                                onClick={() => handleSendNotice(member)}
+                                title={`Reenviar mensagem via WhatsApp para ${member.nome}`}
+                                className="p-1 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 rounded-lg transition-all cursor-pointer"
+                              >
+                                <Share2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSendNotice(member)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md shadow-blue-500/20 hover:shadow-blue-500/30 transition-all cursor-pointer border border-blue-400/30"
+                                title={`Enviar aviso do novo site e congresso para ${member.nome} via WhatsApp`}
+                              >
+                                <Send className="w-3 h-3 text-blue-200" />
+                                <span>Enviar Aviso</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => toggleSiteNoticeSent(member.matricula, member.nome)}
+                                title="Marcar manualmente como enviado sem abrir WhatsApp"
+                                className="p-1 hover:bg-slate-800 text-slate-500 hover:text-emerald-400 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-emerald-500/30"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-550 italic">Sem WhatsApp</span>
+                      )}
                     </td>
 
                     {/* Acoes */}
@@ -2141,6 +2471,356 @@ export default function SecretariaMembersSection() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal: Aviso Novo Site & XVIII Congresso UMESC */}
+      {isNoticeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="bg-[#0b1220] border border-blue-500/30 rounded-3xl w-full max-w-4xl shadow-2xl shadow-blue-500/10 flex flex-col my-6 animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-blue-950/40 via-[#0b1220] to-[#0b1220]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-500/30 text-blue-400 flex items-center justify-center shadow-md shadow-blue-500/10">
+                  <Send className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white flex items-center gap-2 uppercase tracking-wide font-display">
+                    Aviso da Secretaria — Novo Portal & Congresso
+                  </h3>
+                  <p className="text-slate-400 text-xs mt-0.5">
+                    Orientação do suporte (Anderson) sobre a migração de site e inscrições do XVIII Congresso.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNoticeModalOpen(false)}
+                className="p-1.5 hover:bg-white/5 rounded-xl text-slate-400 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh]">
+              {/* Status and Progress Overview */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-slate-900/60 border border-white/5 p-3.5 rounded-2xl">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Com WhatsApp</span>
+                  <span className="text-lg font-bold text-white font-mono">{membersWithPhoneCount} membros</span>
+                </div>
+                <div className="bg-slate-900/60 border border-emerald-500/20 p-3.5 rounded-2xl">
+                  <span className="text-[10px] uppercase font-bold text-emerald-400 block">Avisos Enviados</span>
+                  <span className="text-lg font-bold text-emerald-300 font-mono flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    {sentNoticesCount} ({Math.round((sentNoticesCount / (members.length || 1)) * 100)}%)
+                  </span>
+                </div>
+                <div className="bg-slate-900/60 border border-amber-500/20 p-3.5 rounded-2xl">
+                  <span className="text-[10px] uppercase font-bold text-amber-400 block">Avisos Pendentes</span>
+                  <span className="text-lg font-bold text-amber-300 font-mono flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    {pendingNoticesCount}
+                  </span>
+                </div>
+              </div>
+
+              {/* Quick Actions Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-900/40 border border-white/5 rounded-2xl">
+                <div className="text-xs text-slate-300">
+                  <span className="font-bold text-white">Ações em Lote:</span> Marque ou alterne rapidamente os registros da secretaria.
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!confirm(`Deseja marcar os ${filteredMembers.length} membros filtrados como 'Aviso Enviado'?`)) return;
+                      const updated = { ...sentSiteNotices };
+                      const now = new Date().toISOString();
+                      filteredMembers.forEach((m) => {
+                        updated[m.matricula] = { sent: true, sentAt: now };
+                      });
+                      setSentSiteNotices(updated);
+                      try {
+                        localStorage.setItem("umesc_sent_site_notices_sec", JSON.stringify(updated));
+                      } catch (e) {
+                        console.warn(e);
+                      }
+                      setNoticeToast({
+                        message: `${filteredMembers.length} membros marcados como 'Aviso Enviado'!`,
+                        type: "success"
+                      });
+                      setTimeout(() => setNoticeToast(null), 4000);
+                    }}
+                    className="px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 text-[11px] font-bold uppercase rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <CheckCheck className="w-3.5 h-3.5" />
+                    Marcar Filtrados como Enviados
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!confirm("Deseja redefinir todos os envios de aviso para o status 'Pendente'?")) return;
+                      setSentSiteNotices({});
+                      try {
+                        localStorage.removeItem("umesc_sent_site_notices_sec");
+                      } catch (e) {
+                        console.warn(e);
+                      }
+                      setNoticeToast({
+                        message: "Todos os avisos foram redefinidos para pendente.",
+                        type: "info"
+                      });
+                      setTimeout(() => setNoticeToast(null), 4000);
+                    }}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-white/5 text-[11px] font-bold uppercase rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    Redefinir Tudo
+                  </button>
+                </div>
+              </div>
+
+              {/* WhatsApp Message Preview */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <MessageSquare className="w-4 h-4 text-blue-400" />
+                    Texto Oficial do Aviso (Disparado via WhatsApp)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleCopyFullNotice}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold uppercase transition-all cursor-pointer shadow-sm"
+                  >
+                    {copiedNotice ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5 text-white" />}
+                    {copiedNotice ? "Copiado!" : "Copiar Texto"}
+                  </button>
+                </div>
+
+                <div className="bg-[#0e1726] border border-blue-500/20 rounded-2xl p-4 sm:p-5 relative">
+                  <div className="max-w-xl bg-[#09221c] border border-emerald-500/20 text-emerald-50 rounded-2xl p-4 shadow-lg space-y-3 font-sans text-xs leading-relaxed">
+                    <p className="font-semibold text-emerald-300">
+                      Olá, <span className="underline italic">[Nome do Membro]</span>! Sou o Anderson (suporte ao site)! 🙏
+                    </p>
+                    <p>
+                      Informamos que o site da UMESC mudou. Agora, para realizar seu cadastro de membro e sua inscrição no <strong>XVIII Congresso UMESC</strong> — em Balneário Camboriú, dias 12 e 13 de Dezembro — acesse:
+                    </p>
+                    <p className="bg-emerald-950/60 p-2 rounded-lg border border-emerald-500/30 text-emerald-200 font-mono text-[11px] break-all">
+                      https://umesc.social.br/
+                    </p>
+                    <p className="text-emerald-100/90 text-[11px]">
+                      Essa mudança pode ser confirmada no site antigo (<span className="text-emerald-300 underline">www.umesc.com.br</span>), que exibe um aviso na parte superior indicando o novo endereço.
+                    </p>
+                    <div className="pt-1 space-y-2 border-t border-emerald-500/20">
+                      <div>
+                        <p className="font-bold text-emerald-200 flex items-center gap-1">
+                          📹 Veja como fazer seu acesso de membro:
+                        </p>
+                        <p className="text-blue-300 underline text-[11px] font-mono mt-0.5 break-all">
+                          {noticeSettings.video1Url || "https://umesc.social.br/#area-membro"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="font-bold text-emerald-200 flex items-center gap-1">
+                          📹 Veja também como se inscrever no congresso:
+                        </p>
+                        <p className="text-blue-300 underline text-[11px] font-mono mt-0.5 break-all">
+                          {noticeSettings.video2Url || "https://umesc.social.br/#congresso"}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="font-bold text-emerald-400 pt-1 text-[11px] uppercase tracking-wider">
+                      Secretaria UMESC
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Video URL Settings */}
+              <div className="bg-slate-900/50 border border-white/5 rounded-2xl p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <Video className="w-4 h-4 text-amber-400" />
+                    Configuração dos Links dos Vídeos Tutoriais
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      saveNoticeSettings({
+                        video1Url: "https://umesc.social.br/#area-membro",
+                        video2Url: "https://umesc.social.br/#congresso"
+                      });
+                      setNoticeToast({
+                        message: "Links restaurados para os endereços oficiais!",
+                        type: "info"
+                      });
+                      setTimeout(() => setNoticeToast(null), 3000);
+                    }}
+                    className="text-[10px] text-slate-400 hover:text-white uppercase font-bold transition-colors cursor-pointer"
+                  >
+                    Restaurar Padrão
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Link do Vídeo 1 (Acesso de Membro):
+                    </label>
+                    <input
+                      type="url"
+                      value={noticeSettings.video1Url}
+                      onChange={(e) => saveNoticeSettings({ ...noticeSettings, video1Url: e.target.value })}
+                      placeholder="https://youtube.com/... ou https://umesc.social.br/#area-membro"
+                      className="w-full px-3.5 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 font-mono transition-all"
+                    />
+                    <p className="text-[9.5px] text-slate-500">
+                      Instruções para o membro realizar o primeiro acesso com CPF e E-mail.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Link do Vídeo 2 (Inscrição no XVIII Congresso):
+                    </label>
+                    <input
+                      type="url"
+                      value={noticeSettings.video2Url}
+                      onChange={(e) => saveNoticeSettings({ ...noticeSettings, video2Url: e.target.value })}
+                      placeholder="https://youtube.com/... ou https://umesc.social.br/#congresso"
+                      className="w-full px-3.5 py-2 bg-slate-950/80 border border-white/10 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 font-mono transition-all"
+                    />
+                    <p className="text-[9.5px] text-slate-500">
+                      Instruções para filiados e visitantes garantirem sua vaga e crachá virtual.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Video Tutorials Step-by-Step Cards */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Info className="w-4 h-4 text-indigo-400" />
+                  Roteiro Completo dos 2 Tutoriais em Vídeo
+                </h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Tutorial 1 Card */}
+                  <div className="bg-slate-900/40 border border-indigo-500/20 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold text-xs flex items-center justify-center">1</span>
+                        <h5 className="font-bold text-xs text-white uppercase">Acesso de Membro UMESC</h5>
+                      </div>
+                      <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 text-[9px] font-black uppercase">Vídeo 1</span>
+                    </div>
+                    <ol className="text-xs text-slate-300 space-y-2 list-decimal list-inside leading-relaxed">
+                      <li>
+                        Acesse <strong className="text-white">umesc.social.br</strong> e clique em <strong className="text-indigo-300">"Área do Membro"</strong> no topo direito.
+                      </li>
+                      <li>
+                        Se for a primeira vez no novo portal, selecione a aba <strong className="text-white">"Primeiro Acesso"</strong>.
+                      </li>
+                      <li>
+                        Digite seu <strong className="text-white">CPF</strong>, <strong className="text-white">E-mail</strong> e defina sua <strong className="text-white">Senha de Acesso</strong>.
+                      </li>
+                      <li>
+                        Clique no botão verde <strong className="text-emerald-400">"Registrar Nova Credencial"</strong>.
+                      </li>
+                      <li>
+                        Retorne para a aba <strong className="text-white">"Logon Padrão"</strong>, insira sua senha e clique em <strong className="text-indigo-300">"Autenticar Assinatura"</strong>.
+                      </li>
+                      <li>
+                        Revise e aceite os Termos de Uso e LGPD para liberar seu painel e carteirinha digital!
+                      </li>
+                    </ol>
+                  </div>
+
+                  {/* Tutorial 2 Card */}
+                  <div className="bg-slate-900/40 border border-amber-500/20 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 font-bold text-xs flex items-center justify-center">2</span>
+                        <h5 className="font-bold text-xs text-white uppercase">Inscrição no XVIII Congresso</h5>
+                      </div>
+                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black uppercase">Vídeo 2</span>
+                    </div>
+                    <div className="text-xs text-slate-300 space-y-2.5 leading-relaxed">
+                      <div className="p-2.5 bg-slate-950/60 rounded-xl border border-white/5 space-y-1">
+                        <p className="font-bold text-amber-400 text-[11px] uppercase">
+                          Opção A: Membros Filiados da UMESC
+                        </p>
+                        <p className="text-[11px] text-slate-300">
+                          Faça login na <strong className="text-white">Área do Membro</strong>, acesse o card do <strong className="text-white">XVIII Congresso</strong> (12 e 13 de Dezembro em Balneário Camboriú) e clique em confirmar para emitir seu crachá virtual.
+                        </p>
+                      </div>
+
+                      <div className="p-2.5 bg-slate-950/60 rounded-xl border border-white/5 space-y-1">
+                        <p className="font-bold text-blue-400 text-[11px] uppercase">
+                          Opção B: Visitantes e Avulsos
+                        </p>
+                        <p className="text-[11px] text-slate-300">
+                          Na página inicial, clique em <strong className="text-white">"Cadastro de Visitantes"</strong>, preencha Nome, CPF e WhatsApp. Acompanhe a qualquer hora em <strong className="text-white">"Consultar Status"</strong>.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between bg-[#070c18]/30">
+              <div className="text-xs text-slate-400 flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-blue-400" />
+                <span>Clique em <strong>"Enviar Aviso"</strong> na tabela para disparar direto no WhatsApp de cada irmão.</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNoticeFilter("pending");
+                    setIsNoticeModalOpen(false);
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase rounded-xl transition-all cursor-pointer shadow-md shadow-blue-500/20 flex items-center gap-1.5"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Filtrar Pendentes na Tabela
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsNoticeModalOpen(false)}
+                  className="px-4 py-2 border border-white/10 rounded-xl hover:bg-white/5 text-slate-300 text-xs font-bold uppercase transition-all cursor-pointer"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Toast Notification */}
+      {noticeToast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3 bg-slate-900/95 border border-emerald-500/40 text-white text-xs font-semibold rounded-2xl shadow-2xl shadow-emerald-500/20 backdrop-blur-md animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-4 h-4" />
+          </div>
+          <div className="flex-1">
+            <p className="font-bold text-white text-xs leading-snug">{noticeToast.message}</p>
+            <p className="text-[10px] text-slate-400">Status atualizado e salvo localmente no seu navegador.</p>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setNoticeToast(null)}
+            className="p-1 text-slate-500 hover:text-white rounded-lg transition-colors ml-1"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
     </div>
