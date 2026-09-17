@@ -4,9 +4,11 @@ import {
   Trash2, Edit, Plus, Check, X, LogIn, LogOut, ArrowLeft, RefreshCw, BarChart2, PieChart, Info,
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
   Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake, Eye, TrendingUp, Globe, Activity,
-  Fingerprint, ShoppingBag, Mail, Phone, Home, User, Search, Copy, CheckCircle2, Sparkles
+  Fingerprint, ShoppingBag, Mail, Phone, Home, User, Search, Copy, CheckCircle2, Sparkles,
+  Send, Smartphone, Loader2, BellRing
 } from "lucide-react";
 import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService, coordinatorsService, projectsService, announcementsService, documentsService, revistasService, settingsService } from "../lib/supabase.ts";
+import { dispatchPushNotificationToAll, getPushSubscriberCount, getPushHistory, PushQueueItem } from "../lib/pushService.ts";
 import { accessTrackerService, AccessStats, DEFAULT_ACCESS_STATS } from "../lib/accessTracker.ts";
 import { termsService } from "../lib/termsService.ts";
 import { donationsService } from "../lib/donationService.ts";
@@ -327,9 +329,17 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [announcementForm, setAnnouncementForm] = useState<Partial<Announcement> | null>(null);
   const [deletingAnnouncement, setDeletingAnnouncement] = useState<Announcement | null>(null);
+  const [sendAnnouncementAsPush, setSendAnnouncementAsPush] = useState(false);
 
   // Sub-tabs for "conteudos" ("avisos" | "arquivos")
   const [conteudosSubTab, setConteudosSubTab] = useState<"avisos" | "arquivos">("avisos");
+
+  // Web Push Notifications state (Central de Disparo - Painel de Governança)
+  const [pushSubscriberCount, setPushSubscriberCount] = useState(0);
+  const [pushHistory, setPushHistory] = useState<PushQueueItem[]>([]);
+  const [pushForm, setPushForm] = useState({ title: "", body: "", url: "/" });
+  const [isSendingPush, setIsSendingPush] = useState(false);
+  const [pushFeedback, setPushFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Documents/Repository state
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
@@ -421,6 +431,10 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
       // 8.8. Repositório de Documentos
       const documentsList = await documentsService.getDocuments();
       setDocuments(documentsList.length > 0 ? documentsList : INITIAL_DOCUMENTS);
+
+      // 8.9. Central de Notificações Push (inscritos + histórico de disparos)
+      getPushSubscriberCount().then(setPushSubscriberCount).catch(() => {});
+      getPushHistory().then(setPushHistory).catch(() => {});
 
       // 9. Donations (Doações)
       const donationsList = await donationsService.getDonations();
@@ -1095,9 +1109,24 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
 
     const updatedList = await announcementsService.getAnnouncements();
     setAnnouncements(updatedList);
+
+    let pushNote = "";
+    if (sendAnnouncementAsPush) {
+      const result = await dispatchPushNotificationToAll(
+        announcementForm.title || "Novo Aviso UMESC",
+        announcementForm.content || "",
+        "/?tab=notices",
+      );
+      pushNote = result.success
+        ? `\n\n📲 Notificação Push disparada com sucesso para ${result.totalSent ?? 0} dispositivo(s).`
+        : `\n\n⚠️ O aviso foi publicado no Mural, mas o disparo da notificação Push falhou: ${result.error || "erro desconhecido"}.`;
+      getPushHistory().then(setPushHistory).catch(() => {});
+    }
+
     setAnnouncementForm(null);
+    setSendAnnouncementAsPush(false);
     notifyContentChange();
-    alert("Aviso salvo e publicado com sucesso no Mural!");
+    alert(`Aviso salvo e publicado com sucesso no Mural!${pushNote}`);
   };
 
   const handleDeleteAnnouncement = (a: Announcement) => {
@@ -1112,6 +1141,36 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
     setDeletingAnnouncement(null);
     notifyContentChange();
     alert("Aviso removido do Mural.");
+  };
+
+  // Web Push Notifications - Disparo avulso (Central de Notificações do Painel de Governança)
+  const handleDispatchPush = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pushForm.title.trim() || !pushForm.body.trim()) return;
+
+    setIsSendingPush(true);
+    setPushFeedback(null);
+
+    const result = await dispatchPushNotificationToAll(
+      pushForm.title.trim(),
+      pushForm.body.trim(),
+      pushForm.url.trim() || "/",
+    );
+
+    setIsSendingPush(false);
+
+    if (result.success) {
+      setPushFeedback({
+        ok: true,
+        message: `Notificação disparada com sucesso! Enviada para ${result.totalSent ?? 0} de ${result.totalTargeted ?? 0} dispositivo(s) inscrito(s).`,
+      });
+      setPushForm({ title: "", body: "", url: "/" });
+    } else {
+      setPushFeedback({ ok: false, message: result.error || "Falha ao disparar a notificação Push." });
+    }
+
+    getPushHistory().then(setPushHistory).catch(() => {});
+    getPushSubscriberCount().then(setPushSubscriberCount).catch(() => {});
   };
 
   // Documents CRUD Actions
@@ -3149,11 +3208,110 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                     <button
                       type="button"
                       id="btn-admin-create-announcement"
-                      onClick={() => setAnnouncementForm({ title: "", category: "Geral", content: "", date: new Date().toISOString().split("T")[0], isImportant: false })}
+                      onClick={() => { setAnnouncementForm({ title: "", category: "Geral", content: "", date: new Date().toISOString().split("T")[0], isImportant: false }); setSendAnnouncementAsPush(false); }}
                       className="px-4 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center gap-1.5 transition-all shadow-md cursor-pointer self-start md:self-auto shrink-0"
                     >
                       <Plus className="w-4 h-4 font-black" /> Criar Novo Aviso
                     </button>
+                  </div>
+
+                  {/* CENTRAL DE NOTIFICAÇÕES PUSH */}
+                  <div id="painel-notificacoes-push" className="bg-[#0b1220] border border-teal-500/20 rounded-2xl p-4 sm:p-5 space-y-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-white uppercase tracking-tight flex items-center gap-2 font-display">
+                          <BellRing className="w-4 h-4 text-teal-400" />
+                          Central de Notificações Push
+                        </h3>
+                        <p className="text-slate-400 text-[11px]">Dispare avisos instantâneos (Web Push) para os dispositivos inscritos, com ou sem publicação no Mural.</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/10 border border-teal-500/20 rounded-lg text-teal-300 text-[11px] font-bold uppercase tracking-wide shrink-0">
+                        <Smartphone className="w-3.5 h-3.5" />
+                        {pushSubscriberCount} inscrito{pushSubscriberCount === 1 ? "" : "s"}
+                      </div>
+                    </div>
+
+                    <form onSubmit={handleDispatchPush} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Título da Notificação</label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={100}
+                          value={pushForm.title}
+                          onChange={(e) => setPushForm({ ...pushForm, title: e.target.value })}
+                          placeholder="EX: NOVO COMUNICADO OFICIAL UMESC"
+                          className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none"
+                        />
+                      </div>
+
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Mensagem</label>
+                        <textarea
+                          required
+                          rows={2}
+                          maxLength={180}
+                          value={pushForm.body}
+                          onChange={(e) => setPushForm({ ...pushForm, body: e.target.value })}
+                          placeholder="Texto curto e direto que aparecerá na notificação..."
+                          className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none font-sans leading-relaxed"
+                        />
+                      </div>
+
+                      <div className="space-y-1 sm:col-span-2">
+                        <label className="block text-[10px] font-bold text-slate-400 uppercase">Link de destino (opcional)</label>
+                        <input
+                          type="text"
+                          value={pushForm.url}
+                          onChange={(e) => setPushForm({ ...pushForm, url: e.target.value })}
+                          placeholder="/ (abre a página inicial do app)"
+                          className="w-full px-3 py-2 bg-[#060a12] text-white border border-white/10 rounded-lg text-xs focus:border-teal-500 outline-none font-mono"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2 flex justify-end">
+                        <button
+                          type="submit"
+                          id="btn-disparar-web-push"
+                          disabled={isSendingPush}
+                          className="px-4 py-2 bg-teal-500 hover:bg-teal-400 text-slate-950 rounded-lg font-black text-[11px] uppercase tracking-wider cursor-pointer shadow-lg shadow-teal-500/15 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {isSendingPush ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                          {isSendingPush ? "Disparando..." : "Disparar Web Push"}
+                        </button>
+                      </div>
+                    </form>
+
+                    {pushFeedback && (
+                      <div className={`text-[11px] font-bold rounded-lg px-3 py-2 border ${pushFeedback.ok ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" : "bg-rose-500/10 border-rose-500/20 text-rose-300"}`}>
+                        {pushFeedback.ok ? "✅ " : "⚠️ "}{pushFeedback.message}
+                      </div>
+                    )}
+
+                    {pushHistory.length > 0 && (
+                      <div className="pt-2 border-t border-white/5">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Histórico de Disparos Recentes</p>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                          {pushHistory.map((item) => (
+                            <div key={item.id} className="flex items-center justify-between gap-2 text-[10px] bg-[#060a12] border border-white/5 rounded-lg px-3 py-2">
+                              <div className="min-w-0">
+                                <p className="text-white font-bold truncate">{item.title}</p>
+                                <p className="text-slate-500 font-mono">{new Date(item.created_at).toLocaleString("pt-BR")}</p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={`px-2 py-0.5 rounded font-black uppercase tracking-wide ${
+                                  item.status === "completed" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                                  item.status === "failed" ? "bg-rose-500/10 text-rose-400 border border-rose-500/20" :
+                                  "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                }`}>
+                                  {item.status === "completed" ? `✔ ${item.total_sent} enviados` : item.status === "failed" ? "Falhou" : item.status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Toolbar filters and searches */}
@@ -3225,7 +3383,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                               <div className="flex items-center gap-3">
                                 <button
                                   type="button"
-                                  onClick={() => setAnnouncementForm(item)}
+                                  onClick={() => { setAnnouncementForm(item); setSendAnnouncementAsPush(false); }}
                                   className="text-teal-400 hover:text-teal-300 cursor-pointer font-bold uppercase text-[9px] tracking-wide"
                                   title="Editar Aviso"
                                 >
@@ -3451,6 +3609,20 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                         />
                         <label htmlFor="isImportant-toggle" className="text-[11px] text-rose-300 font-bold select-none cursor-pointer leading-none">
                           Marcar este comunicado como URGENTE / IMPORTANTE (Aviso prioritário destacado em vermelho) ⚠️
+                        </label>
+                      </div>
+
+                      {/* Disparo simultâneo de Web Push */}
+                      <div className="flex items-center gap-2 p-3 bg-teal-500/10 border border-teal-500/20 rounded-xl">
+                        <input
+                          type="checkbox"
+                          id="sendAsPush-toggle"
+                          checked={sendAnnouncementAsPush}
+                          onChange={(e) => setSendAnnouncementAsPush(e.target.checked)}
+                          className="w-4 h-4 text-teal-500 border-white/10 rounded bg-[#060a12] focus:ring-0 cursor-pointer"
+                        />
+                        <label htmlFor="sendAsPush-toggle" className="text-[11px] text-teal-300 font-bold select-none cursor-pointer leading-none flex items-center gap-1.5">
+                          <BellRing className="w-3.5 h-3.5" /> Enviar também como Notificação Push para os {pushSubscriberCount} inscrito{pushSubscriberCount === 1 ? "" : "s"}
                         </label>
                       </div>
 

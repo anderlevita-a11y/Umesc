@@ -3,7 +3,7 @@
  * Service Worker for PWA Installation and Basic Offline Caching
  */
 
-const CACHE_NAME = 'umesc-cache-v1';
+const CACHE_NAME = 'umesc-cache-v2';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -39,6 +39,57 @@ self.addEventListener('activate', (event) => {
         })
       );
     }).then(() => self.clients.claim())
+  );
+});
+
+// Push: Receive a Web Push message and display a system notification
+self.addEventListener('push', (event) => {
+  let payload = { title: 'UMESC', body: 'Você recebeu uma nova notificação.', url: '/' };
+
+  if (event.data) {
+    try {
+      const data = event.data.json();
+      payload = {
+        title: data.title || payload.title,
+        body: data.body || payload.body,
+        url: data.url || payload.url
+      };
+    } catch (err) {
+      payload.body = event.data.text() || payload.body;
+    }
+  }
+
+  const notificationOptions = {
+    body: payload.body,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    data: { url: payload.url || '/' },
+    tag: 'umesc-notification',
+    renotify: true,
+    vibrate: [100, 50, 100]
+  };
+
+  event.waitUntil(self.registration.showNotification(payload.title, notificationOptions));
+});
+
+// Notification click: Focus an existing tab or open a new one at the target URL
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        const clientUrl = new URL(client.url);
+        if (clientUrl.origin === self.location.origin && 'focus' in client) {
+          client.navigate(targetUrl).catch(() => {});
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
   );
 });
 
