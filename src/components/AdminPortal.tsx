@@ -5,10 +5,22 @@ import {
   Pause, Play, Archive, MessageCircle, Scale, Download, MapPin, FileCheck, FileText, Printer, QrCode,
   Coins, ExternalLink, Paperclip, Compass, Bell, Heart, Gift, Cake, Eye, TrendingUp, Globe, Activity,
   Fingerprint, ShoppingBag, Mail, Phone, Home, User, Search, Copy, CheckCircle2, Sparkles,
-  Send, Smartphone, Loader2, BellRing
+  Send, Smartphone, Loader2, BellRing, ShieldQuestion, ListChecks, Sparkle, Ban
 } from "lucide-react";
 import { membersService, adminService, isSupabaseConfigured, capelaniaVolunteersService, CapelaniaVolunteer, prayerRequestsService, apoioFemininoService, fichasFiliacaoService, coordinatorsService, projectsService, announcementsService, documentsService, revistasService, settingsService } from "../lib/supabase.ts";
-import { dispatchPushNotificationToAll, getPushSubscriberCount, getPushHistory, PushQueueItem } from "../lib/pushService.ts";
+import {
+  dispatchPushNotificationToAll,
+  getPushSubscriberCount,
+  getPushHistory,
+  PushQueueItem,
+  getRegisteredDevices,
+  removeRegisteredDevice,
+  getDeliveryLog,
+  getPushHygieneStats,
+  PushDeviceRow,
+  PushDeliveryLogRow,
+  PushHygieneStats,
+} from "../lib/pushService.ts";
 import { accessTrackerService, AccessStats, DEFAULT_ACCESS_STATS } from "../lib/accessTracker.ts";
 import { termsService } from "../lib/termsService.ts";
 import { donationsService } from "../lib/donationService.ts";
@@ -340,6 +352,55 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [pushForm, setPushForm] = useState({ title: "", body: "", url: "/" });
   const [isSendingPush, setIsSendingPush] = useState(false);
   const [pushFeedback, setPushFeedback] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Dashboard de Aparelhos / Log de Entrega / Higienização (dentro da Central de Notificações Push)
+  const [pushDashboardTab, setPushDashboardTab] = useState<"disparo" | "aparelhos" | "log" | "higienizacao">("disparo");
+  const [pushDevices, setPushDevices] = useState<PushDeviceRow[]>([]);
+  const [pushDeliveryLog, setPushDeliveryLog] = useState<PushDeliveryLogRow[]>([]);
+  const [pushHygieneStats, setPushHygieneStats] = useState<PushHygieneStats | null>(null);
+  const [isLoadingPushDashboard, setIsLoadingPushDashboard] = useState(false);
+  const [removingDeviceId, setRemovingDeviceId] = useState<string | null>(null);
+
+  const refreshPushDashboardData = async () => {
+    setIsLoadingPushDashboard(true);
+    try {
+      const [devices, log, stats] = await Promise.all([
+        getRegisteredDevices(),
+        getDeliveryLog(),
+        getPushHygieneStats(),
+      ]);
+      setPushDevices(devices);
+      setPushDeliveryLog(log);
+      setPushHygieneStats(stats);
+    } finally {
+      setIsLoadingPushDashboard(false);
+    }
+  };
+
+  const handleRemoveDevice = async (id: string) => {
+    if (!window.confirm("Remover este aparelho cadastrado? Ele deixará de receber notificações Web Push até se inscrever novamente.")) return;
+    setRemovingDeviceId(id);
+    try {
+      const ok = await removeRegisteredDevice(id);
+      if (ok) {
+        setPushDevices((prev) => prev.filter((d) => d.id !== id));
+        getPushHygieneStats().then(setPushHygieneStats).catch(() => {});
+      } else {
+        alert("Não foi possível remover o aparelho. Tente novamente.");
+      }
+    } finally {
+      setRemovingDeviceId(null);
+    }
+  };
+
+  // Carrega os dados do dashboard (Aparelhos / Log de Entrega / Higienização) sob demanda,
+  // apenas quando o administrador abre uma dessas abas dentro da Central de Notificações Push.
+  useEffect(() => {
+    if (pushDashboardTab !== "disparo") {
+      refreshPushDashboardData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pushDashboardTab]);
 
   // Documents/Repository state
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
@@ -3231,6 +3292,32 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                       </div>
                     </div>
 
+                    {/* Sub-abas: Disparo / Aparelhos Cadastrados / Log de Entrega / Higienização */}
+                    <div className="flex flex-wrap gap-1.5 border-b border-white/5 pb-2">
+                      {([
+                        { key: "disparo", label: "Disparo", icon: Send },
+                        { key: "aparelhos", label: `Aparelhos Cadastrados (${pushSubscriberCount})`, icon: Smartphone },
+                        { key: "log", label: "Log de Entrega", icon: ListChecks },
+                        { key: "higienizacao", label: "Higienização e Tokens Expirados", icon: Sparkle },
+                      ] as const).map((tabDef) => (
+                        <button
+                          key={tabDef.key}
+                          type="button"
+                          id={`push-dashboard-tab-${tabDef.key}`}
+                          onClick={() => setPushDashboardTab(tabDef.key)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide flex items-center gap-1.5 transition-colors cursor-pointer ${
+                            pushDashboardTab === tabDef.key
+                              ? "bg-teal-500 text-slate-950"
+                              : "bg-[#060a12] text-slate-400 border border-white/5 hover:text-white hover:border-teal-500/30"
+                          }`}
+                        >
+                          <tabDef.icon className="w-3.5 h-3.5" />
+                          {tabDef.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {pushDashboardTab === "disparo" && (
                     <form onSubmit={handleDispatchPush} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-1 sm:col-span-2">
                         <label className="block text-[10px] font-bold text-slate-400 uppercase">Título da Notificação</label>
@@ -3281,14 +3368,15 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                         </button>
                       </div>
                     </form>
+                    )}
 
-                    {pushFeedback && (
+                    {pushDashboardTab === "disparo" && pushFeedback && (
                       <div className={`text-[11px] font-bold rounded-lg px-3 py-2 border ${pushFeedback.ok ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300" : "bg-rose-500/10 border-rose-500/20 text-rose-300"}`}>
                         {pushFeedback.ok ? "✅ " : "⚠️ "}{pushFeedback.message}
                       </div>
                     )}
 
-                    {pushHistory.length > 0 && (
+                    {pushDashboardTab === "disparo" && pushHistory.length > 0 && (
                       <div className="pt-2 border-t border-white/5">
                         <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">Histórico de Disparos Recentes</p>
                         <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
@@ -3310,6 +3398,151 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                             </div>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {/* ABA: APARELHOS CADASTRADOS */}
+                    {pushDashboardTab === "aparelhos" && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-slate-400 text-[11px]">Todos os dispositivos com inscrição ativa de Web Push (navegador/aparelho que autorizou notificações).</p>
+                          <button
+                            type="button"
+                            onClick={refreshPushDashboardData}
+                            disabled={isLoadingPushDashboard}
+                            className="text-teal-400 hover:text-teal-300 text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isLoadingPushDashboard ? "animate-spin" : ""}`} /> Atualizar
+                          </button>
+                        </div>
+
+                        {isLoadingPushDashboard && pushDevices.length === 0 ? (
+                          <p className="text-slate-500 text-[11px] italic py-4 text-center">Carregando aparelhos...</p>
+                        ) : pushDevices.length === 0 ? (
+                          <p className="text-slate-500 text-[11px] italic py-4 text-center">Nenhum aparelho cadastrado ainda.</p>
+                        ) : (
+                          <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                            {pushDevices.map((device) => (
+                              <div key={device.id} className="flex items-center justify-between gap-2 text-[10px] bg-[#060a12] border border-white/5 rounded-lg px-3 py-2">
+                                <div className="min-w-0 flex items-center gap-2">
+                                  <Smartphone className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                                  <div className="min-w-0">
+                                    <p className="text-white font-bold truncate">{device.device_name || "Aparelho sem identificação"}</p>
+                                    <p className="text-slate-500 truncate max-w-[220px] sm:max-w-xs" title={device.user_agent || ""}>{device.user_agent || "—"}</p>
+                                    <p className="text-slate-600 font-mono">Inscrito em {new Date(device.created_at).toLocaleString("pt-BR")}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveDevice(device.id)}
+                                  disabled={removingDeviceId === device.id}
+                                  title="Remover aparelho"
+                                  className="p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                                >
+                                  {removingDeviceId === device.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ABA: LOG DE ENTREGA */}
+                    {pushDashboardTab === "log" && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-slate-400 text-[11px]">Detalhamento de cada tentativa de entrega, por aparelho e por aviso disparado.</p>
+                          <button
+                            type="button"
+                            onClick={refreshPushDashboardData}
+                            disabled={isLoadingPushDashboard}
+                            className="text-teal-400 hover:text-teal-300 text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isLoadingPushDashboard ? "animate-spin" : ""}`} /> Atualizar
+                          </button>
+                        </div>
+
+                        {isLoadingPushDashboard && pushDeliveryLog.length === 0 ? (
+                          <p className="text-slate-500 text-[11px] italic py-4 text-center">Carregando log de entrega...</p>
+                        ) : pushDeliveryLog.length === 0 ? (
+                          <p className="text-slate-500 text-[11px] italic py-4 text-center">Nenhum registro de entrega ainda. Dispare uma notificação para começar a gerar o log.</p>
+                        ) : (
+                          <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                            {pushDeliveryLog.map((row) => (
+                              <div key={row.id} className="flex items-center justify-between gap-2 text-[10px] bg-[#060a12] border border-white/5 rounded-lg px-3 py-2">
+                                <div className="min-w-0">
+                                  <p className="text-white font-bold truncate">{row.push_queue?.title || "Disparo avulso"}</p>
+                                  <p className="text-slate-500 truncate">{row.device_name || row.endpoint_host || "Aparelho desconhecido"}</p>
+                                  <p className="text-slate-600 font-mono">{new Date(row.created_at).toLocaleString("pt-BR")}</p>
+                                </div>
+                                <span className={`px-2 py-0.5 rounded font-black uppercase tracking-wide shrink-0 ${
+                                  row.status === "sent" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                                  row.status === "expired" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                                  "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                }`}>
+                                  {row.status === "sent" ? "✔ Enviado" : row.status === "expired" ? "Token expirado" : "Falhou"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ABA: HIGIENIZAÇÃO E TOKENS EXPIRADOS */}
+                    {pushDashboardTab === "higienizacao" && (
+                      <div className="space-y-3">
+                        <p className="text-slate-400 text-[11px]">
+                          A cada disparo, aparelhos cujo token de notificação expirou ou foi revogado (erro 404/410) são automaticamente
+                          removidos do cadastro (<strong className="text-slate-300">higienização automática</strong>). Os números abaixo refletem o histórico consolidado.
+                        </p>
+
+                        {isLoadingPushDashboard && !pushHygieneStats ? (
+                          <p className="text-slate-500 text-[11px] italic py-4 text-center">Calculando estatísticas...</p>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            <div className="bg-[#060a12] border border-white/5 rounded-xl p-3 flex flex-col items-center text-center gap-1">
+                              <Smartphone className="w-4 h-4 text-teal-400" />
+                              <p className="text-lg font-black text-white">{pushHygieneStats?.totalDevices ?? 0}</p>
+                              <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wide">Aparelhos Ativos</p>
+                            </div>
+                            <div className="bg-[#060a12] border border-white/5 rounded-xl p-3 flex flex-col items-center text-center gap-1">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                              <p className="text-lg font-black text-white">{pushHygieneStats?.totalSent ?? 0}</p>
+                              <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wide">Entregas com Sucesso</p>
+                            </div>
+                            <div className="bg-[#060a12] border border-white/5 rounded-xl p-3 flex flex-col items-center text-center gap-1">
+                              <Ban className="w-4 h-4 text-amber-400" />
+                              <p className="text-lg font-black text-white">{pushHygieneStats?.totalExpired ?? 0}</p>
+                              <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wide">Tokens Expirados</p>
+                            </div>
+                            <div className="bg-[#060a12] border border-white/5 rounded-xl p-3 flex flex-col items-center text-center gap-1">
+                              <ShieldQuestion className="w-4 h-4 text-rose-400" />
+                              <p className="text-lg font-black text-white">{pushHygieneStats?.totalFailed ?? 0}</p>
+                              <p className="text-[9px] uppercase font-bold text-slate-500 tracking-wide">Falhas de Envio</p>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-between bg-teal-500/5 border border-teal-500/20 rounded-xl px-3 py-2.5">
+                          <div className="flex items-center gap-2 text-[11px] text-teal-300">
+                            <Sparkle className="w-3.5 h-3.5 shrink-0" />
+                            <span><strong>{pushHygieneStats?.totalCleanedHistorico ?? 0}</strong> token{(pushHygieneStats?.totalCleanedHistorico ?? 0) === 1 ? "" : "s"} expirado{(pushHygieneStats?.totalCleanedHistorico ?? 0) === 1 ? "" : "s"} já limpo{(pushHygieneStats?.totalCleanedHistorico ?? 0) === 1 ? "" : "s"} automaticamente pelo sistema</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={refreshPushDashboardData}
+                            disabled={isLoadingPushDashboard}
+                            className="text-teal-400 hover:text-teal-300 text-[10px] font-bold uppercase flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isLoadingPushDashboard ? "animate-spin" : ""}`} /> Recalcular
+                          </button>
+                        </div>
+
+                        {pushHygieneStats?.lastDeliveryAt && (
+                          <p className="text-slate-600 text-[10px] font-mono text-center">Última tentativa de entrega registrada em {new Date(pushHygieneStats.lastDeliveryAt).toLocaleString("pt-BR")}</p>
+                        )}
                       </div>
                     )}
                   </div>

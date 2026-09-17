@@ -43,6 +43,37 @@ export interface PushQueueItem {
   updated_at: string;
 }
 
+export interface PushDeviceRow {
+  id: string;
+  endpoint: string;
+  device_name: string | null;
+  user_agent: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PushDeliveryLogRow {
+  id: string;
+  queue_id: string | null;
+  subscription_id: string | null;
+  endpoint_host: string | null;
+  device_name: string | null;
+  status: "sent" | "failed" | "expired";
+  status_code: number | null;
+  message: string | null;
+  created_at: string;
+  push_queue?: { title: string } | null;
+}
+
+export interface PushHygieneStats {
+  totalDevices: number;
+  totalSent: number;
+  totalFailed: number;
+  totalExpired: number;
+  totalCleanedHistorico: number;
+  lastDeliveryAt: string | null;
+}
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -204,8 +235,12 @@ export async function getPushHistory(limit = 20): Promise<PushQueueItem[]> {
 }
 
 /**
- * Dispara imediatamente uma notificação Push para todos os inscritos
- * (Modo A da Edge Function `process-push-queue`, sem depender da fila).
+ * Dispara imediatamente uma notificação Push para todos os inscritos.
+ * Usa o Modo B (baseado em fila) da Edge Function `process-push-queue`: o registro
+ * é criado primeiro em `push_queue` e o `queue_id` é repassado à função, que assume
+ * a atualização de status/contadores e o registro detalhado em `push_delivery_log`
+ * (necessário para o painel de "Log de Entrega / Higienização" mostrar cada disparo
+ * corretamente vinculado ao aviso que o originou).
  * Usado pelo botão "Disparar Web Push" no Painel de Governança UMESC.
  */
 export async function dispatchPushNotificationToAll(
@@ -219,13 +254,18 @@ export async function dispatchPushNotificationToAll(
 
   try {
     // 1. Registra o disparo no histórico (push_queue) para exibição no painel.
-    const { data: queueRow } = await supabase
+    const { data: queueRow, error: insertError } = await supabase
       .from("push_queue")
       .insert({ title, body, url, status: "pending" })
       .select()
       .single();
 
-    // 2. Aciona a Edge Function em modo direto — envia de imediato para todas as inscrições.
+    if (insertError || !queueRow?.id) {
+      return { success: false, error: insertError?.message || "Não foi possível registrar o disparo" };
+    }
+
+    // 2. Aciona a Edge Function em modo fila — ela lê o registro, envia para todas as
+    //    inscrições, grava o log de entrega detalhado e atualiza o próprio `push_queue`.
     const response = await fetch(`${FUNCTIONS_BASE_URL}/process-push-queue`, {
       method: "POST",
       headers: {
@@ -233,24 +273,10 @@ export async function dispatchPushNotificationToAll(
         Authorization: `Bearer ${supabaseProjectAnonKey}`,
         apikey: supabaseProjectAnonKey,
       },
-      body: JSON.stringify({ title, body, url }),
+      body: JSON.stringify({ queue_id: queueRow.id }),
     });
 
     const result = await response.json();
-
-    // 3. Atualiza o registro do histórico com o resultado do disparo.
-    if (queueRow?.id) {
-      await supabase
-        .from("push_queue")
-        .update({
-          status: response.ok ? "completed" : "failed",
-          total_sent: result.sentCount ?? result.totalSent ?? 0,
-          total_cleaned: result.totalCleaned ?? 0,
-          error_message: response.ok ? null : result.error || "Falha desconhecida",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", queueRow.id);
-    }
 
     if (!response.ok) {
       return { success: false, error: result.error || "Falha ao disparar notificações" };
@@ -267,5 +293,101 @@ export async function dispatchPushNotificationToAll(
   } catch (err) {
     console.error("[Push] Erro ao disparar notificações:", err);
     return { success: false, error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+/**
+ * Lista os aparelhos (inscrições Web Push) atualmente cadastrados, mais recentes primeiro.
+ */
+export async function getRegisteredDevices(limit = 200): Promise<PushDeviceRow[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("push_subscriptions")
+      .select("id, endpoint, device_name, user_agent, created_at, updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+    if (error || !data) return [];
+    return data as PushDeviceRow[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Remove manualmente um aparelho cadastrado (higienização manual pelo administrador).
+ */
+export async function removeRegisteredDevice(id: string): Promise<boolean> {
+  if (!isSupabaseConfigured || !supabase) return false;
+  try {
+    const { error } = await supabase.from("push_subscriptions").delete().eq("id", id);
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Busca o log de entrega detalhado (por aparelho/disparo), com o título do aviso
+ * associado quando disponível, mais recentes primeiro.
+ */
+export async function getDeliveryLog(limit = 100): Promise<PushDeliveryLogRow[]> {
+  if (!isSupabaseConfigured || !supabase) return [];
+  try {
+    const { data, error } = await supabase
+      .from("push_delivery_log")
+      .select("*, push_queue(title)")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error || !data) return [];
+    return data as unknown as PushDeliveryLogRow[];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Calcula um resumo de higienização: total de aparelhos cadastrados, totais de
+ * entregas por status (enviados/falhos/expirados) e o total histórico de tokens
+ * expirados já limpos automaticamente pela Edge Function (soma de `total_cleaned`
+ * em `push_queue`).
+ */
+export async function getPushHygieneStats(): Promise<PushHygieneStats> {
+  const empty: PushHygieneStats = {
+    totalDevices: 0,
+    totalSent: 0,
+    totalFailed: 0,
+    totalExpired: 0,
+    totalCleanedHistorico: 0,
+    lastDeliveryAt: null,
+  };
+  if (!isSupabaseConfigured || !supabase) return empty;
+
+  try {
+    const [devicesCountRes, sentCountRes, failedCountRes, expiredCountRes, lastLogRes, queueRes] =
+      await Promise.all([
+        supabase.from("push_subscriptions").select("*", { count: "exact", head: true }),
+        supabase.from("push_delivery_log").select("*", { count: "exact", head: true }).eq("status", "sent"),
+        supabase.from("push_delivery_log").select("*", { count: "exact", head: true }).eq("status", "failed"),
+        supabase.from("push_delivery_log").select("*", { count: "exact", head: true }).eq("status", "expired"),
+        supabase.from("push_delivery_log").select("created_at").order("created_at", { ascending: false }).limit(1),
+        supabase.from("push_queue").select("total_cleaned"),
+      ]);
+
+    const totalCleanedHistorico = (queueRes.data || []).reduce(
+      (acc: number, row: { total_cleaned: number | null }) => acc + (row.total_cleaned || 0),
+      0,
+    );
+
+    return {
+      totalDevices: devicesCountRes.count || 0,
+      totalSent: sentCountRes.count || 0,
+      totalFailed: failedCountRes.count || 0,
+      totalExpired: expiredCountRes.count || 0,
+      totalCleanedHistorico,
+      lastDeliveryAt: lastLogRes.data?.[0]?.created_at || null,
+    };
+  } catch {
+    return empty;
   }
 }
