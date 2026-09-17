@@ -5,6 +5,7 @@
 
 import React, { useState } from "react";
 import { ShieldCheck, Menu, X, Landmark, Heart, FileText, UserPlus, Calendar, Compass } from "lucide-react";
+import NotificationBellButton from "./NotificationBellButton.tsx";
 const logoImg = "https://qndjkphfsejuqopmfgas.supabase.co/storage/v1/object/public/qr%20code%20pix%20entidade/Nova%20Log.png";
 
 interface HeaderProps {
@@ -137,6 +138,8 @@ export default function Header({ activeTab, setActiveTab, onScrollToSection, onE
           {/* Action CTA Buttons */}
           <div className="hidden sm:flex items-center gap-2.5">
 
+            <NotificationBellButton />
+
             <button
               id="header-btn-register"
               onClick={() => handleNavClick("register")}
@@ -202,6 +205,8 @@ export default function Header({ activeTab, setActiveTab, onScrollToSection, onE
               <span className="bg-emerald-950 text-[8px] px-1 py-0.5 text-emerald-300 rounded font-sans font-bold">Ativo</span>
             </div>
             
+            <NotificationBellButton variant="mobile" />
+
             <button
               onClick={() => handleNavClick("register")}
               className="w-full flex items-center justify-center gap-2 py-2 bg-[#1e2f4a] border border-[#3a5885] hover:bg-[#253b5c]/80 text-white rounded text-xs uppercase font-black"

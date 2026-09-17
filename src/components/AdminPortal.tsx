@@ -329,7 +329,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [announcementForm, setAnnouncementForm] = useState<Partial<Announcement> | null>(null);
   const [deletingAnnouncement, setDeletingAnnouncement] = useState<Announcement | null>(null);
-  const [sendAnnouncementAsPush, setSendAnnouncementAsPush] = useState(false);
+  const [sendAnnouncementAsPush, setSendAnnouncementAsPush] = useState(true);
 
   // Sub-tabs for "conteudos" ("avisos" | "arquivos")
   const [conteudosSubTab, setConteudosSubTab] = useState<"avisos" | "arquivos">("avisos");
@@ -3208,7 +3208,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                     <button
                       type="button"
                       id="btn-admin-create-announcement"
-                      onClick={() => { setAnnouncementForm({ title: "", category: "Geral", content: "", date: new Date().toISOString().split("T")[0], isImportant: false }); setSendAnnouncementAsPush(false); }}
+                      onClick={() => { setAnnouncementForm({ title: "", category: "Geral", content: "", date: new Date().toISOString().split("T")[0], isImportant: false }); setSendAnnouncementAsPush(true); }}
                       className="px-4 py-2 text-xs uppercase font-bold tracking-wider rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 flex items-center gap-1.5 transition-all shadow-md cursor-pointer self-start md:self-auto shrink-0"
                     >
                       <Plus className="w-4 h-4 font-black" /> Criar Novo Aviso
@@ -3622,7 +3622,7 @@ export default function AdminPortal({ onBackToHome }: AdminPortalProps) {
                           className="w-4 h-4 text-teal-500 border-white/10 rounded bg-[#060a12] focus:ring-0 cursor-pointer"
                         />
                         <label htmlFor="sendAsPush-toggle" className="text-[11px] text-teal-300 font-bold select-none cursor-pointer leading-none flex items-center gap-1.5">
-                          <BellRing className="w-3.5 h-3.5" /> Enviar também como Notificação Push para os {pushSubscriberCount} inscrito{pushSubscriberCount === 1 ? "" : "s"}
+                          <BellRing className="w-3.5 h-3.5" /> Notificar via Web Push os {pushSubscriberCount} inscrito{pushSubscriberCount === 1 ? "" : "s"} ao publicar (ativado por padrão)
                         </label>
                       </div>
 
