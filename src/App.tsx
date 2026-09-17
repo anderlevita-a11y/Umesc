@@ -25,6 +25,7 @@ import { CapelaniaService, ApoioFemininoPost } from "./types";
 import { getCleanImageUrl } from "./lib/imageDriveHelper";
 import { apoioFemininoService, settingsService } from "./lib/supabase";
 import { accessTrackerService } from "./lib/accessTracker";
+import { ensurePushSubscriptionSynced } from "./lib/pushService";
 
 export default function App() {
   const [view, setView] = useState<"public" | "dashboard" | "admin">("public");
@@ -42,6 +43,14 @@ export default function App() {
     accessTrackerService.recordAccess().catch(err => {
       console.warn("Error recording page access:", err);
     });
+  }, []);
+
+  React.useEffect(() => {
+    // Repara de forma proativa (em qualquer tela, não só onde o Sino/Banner aparecem)
+    // uma inscrição de Web Push que o navegador já concedeu mas que não chegou a ser
+    // persistida no Supabase em uma visita anterior — evita que o visitante precise
+    // clicar novamente em "ativar" para o dispositivo passar a receber os avisos.
+    ensurePushSubscriptionSynced().catch(() => {});
   }, []);
 
   React.useEffect(() => {

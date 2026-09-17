@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Bell, BellRing, X, CheckCircle } from "lucide-react";
-import { isPushSupported, getPushPermissionState, subscribeToPush } from "../lib/pushService.ts";
+import { isPushSupported, getPushPermissionState, subscribeToPush, ensurePushSubscriptionSynced } from "../lib/pushService.ts";
 
 /**
  * Banner flutuante que convida o visitante a ativar as notificações Push da UMESC.
@@ -15,31 +15,45 @@ export default function PushNotificationPrompt() {
   const [visible, setVisible] = useState(false);
   const [isSubscribing, setIsSubscribing] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPushSupported()) return;
 
     const dismissed = sessionStorage.getItem("umesc_push_prompt_dismissed");
-    const alreadySubscribed = localStorage.getItem("umesc_push_subscribed") === "true";
     const permission = getPushPermissionState();
 
-    if (!dismissed && !alreadySubscribed && permission === "default") {
-      // Pequeno atraso para não competir com o prompt de instalação do PWA
-      const timer = setTimeout(() => setVisible(true), 4000);
-      return () => clearTimeout(timer);
-    }
+    if (dismissed || permission !== "default") return;
+
+    // Pequeno atraso para não competir com o prompt de instalação do PWA.
+    const timer = setTimeout(async () => {
+      // Antes disso, o banner confiava apenas em uma flag no localStorage para decidir
+      // se já estava "inscrito" — se a inscrição anterior tivesse falhado silenciosamente
+      // (o "falso positivo" relatado), a flag nunca era setada corretamente e o banner
+      // reaparecia sem nunca reparar a inscrição de fato. Agora ele checa e repara o
+      // estado real da inscrição antes de decidir se ainda precisa se mostrar.
+      const status = await ensurePushSubscriptionSynced();
+      if (status !== "subscribed") setVisible(true);
+    }, 4000);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleEnable = async () => {
     setIsSubscribing(true);
+    setError(null);
     const result = await subscribeToPush();
     setIsSubscribing(false);
 
     if (result.ok) {
       setSubscribed(true);
       setTimeout(() => setVisible(false), 3000);
-    } else {
+    } else if (result.reason === "denied") {
       setVisible(false);
+    } else {
+      // Falha real (rede instável, Supabase indisponível etc.): mostra o motivo e permite
+      // tentar de novo, em vez de o banner simplesmente desaparecer como se tivesse dado
+      // certo — era exatamente isso que fazia o primeiro clique parecer um falso positivo.
+      setError("Não foi possível ativar agora. Verifique sua conexão e tente novamente.");
     }
   };
 
@@ -89,6 +103,12 @@ export default function PushNotificationPrompt() {
             </button>
           </div>
 
+          {error && (
+            <p className="mt-3 text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-2.5 py-1.5">
+              {error}
+            </p>
+          )}
+
           <div className="mt-3.5 pt-3 border-t border-white/10 flex items-center justify-between gap-2">
             <span className="text-[9px] font-mono text-teal-400 flex items-center gap-1">
               <Bell className="w-3 h-3" /> Grátis e a qualquer momento você pode desativar
@@ -108,7 +128,7 @@ export default function PushNotificationPrompt() {
                 className="px-3.5 py-1.5 bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-400 hover:to-teal-500 text-slate-950 font-black text-xs uppercase tracking-wider rounded-lg shadow-md shadow-teal-500/20 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
               >
                 <Bell className="w-3.5 h-3.5" />
-                {isSubscribing ? "Ativando..." : "Ativar"}
+                {isSubscribing ? "Ativando..." : error ? "Tentar novamente" : "Ativar"}
               </button>
             </div>
           </div>

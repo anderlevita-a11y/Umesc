@@ -74,6 +74,31 @@ export interface PushHygieneStats {
   lastDeliveryAt: string | null;
 }
 
+// Barramento simples de eventos para manter Sino (Header) e Banner (PushNotificationPrompt)
+// sempre sincronizados sobre o estado real da inscrição — evita a sensação de "falso
+// positivo" em que um componente mostra ativado e o outro continua pedindo para ativar.
+export type PushSubscriptionStatus = "unknown" | "subscribed" | "unsubscribed";
+
+let currentPushStatus: PushSubscriptionStatus = "unknown";
+const pushStatusEvents = new EventTarget();
+
+function setPushStatus(status: PushSubscriptionStatus) {
+  currentPushStatus = status;
+  pushStatusEvents.dispatchEvent(new CustomEvent("change", { detail: status }));
+}
+
+/** Último status conhecido (sem consultar o navegador), útil para estado inicial otimista. */
+export function getCachedPushStatus(): PushSubscriptionStatus {
+  return currentPushStatus;
+}
+
+/** Assina mudanças de status de inscrição. Retorna a função para cancelar a assinatura. */
+export function onPushStatusChange(callback: (status: PushSubscriptionStatus) => void): () => void {
+  const handler = (event: Event) => callback((event as CustomEvent<PushSubscriptionStatus>).detail);
+  pushStatusEvents.addEventListener("change", handler);
+  return () => pushStatusEvents.removeEventListener("change", handler);
+}
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -149,27 +174,35 @@ export async function subscribeToPush(deviceName?: string): Promise<{ ok: boolea
       return { ok: false, reason: "invalid_subscription" };
     }
 
-    if (isSupabaseConfigured && supabase) {
-      const { error } = await supabase.from("push_subscriptions").upsert(
-        {
-          endpoint: json.endpoint,
-          keys: json.keys,
-          p256dh: json.keys.p256dh,
-          auth: json.keys.auth,
-          user_agent: navigator.userAgent,
-          device_name: deviceName || null,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "endpoint" },
-      );
+    // Importante: a inscrição só é considerada concluída quando realmente persistida no
+    // Supabase. Antes, quando o Supabase não estava configurado, o código seguia direto
+    // para "ok: true" mesmo sem salvar nada — um falso positivo (permissão concedida e
+    // UI mostrando sucesso, mas o dispositivo nunca era cadastrado em `push_subscriptions`
+    // e por isso nunca recebia os disparos).
+    if (!isSupabaseConfigured || !supabase) {
+      return { ok: false, reason: "not_configured" };
+    }
 
-      if (error) {
-        console.error("[Push] Erro ao salvar inscrição no Supabase:", error);
-        return { ok: false, reason: "save_failed" };
-      }
+    const { error } = await supabase.from("push_subscriptions").upsert(
+      {
+        endpoint: json.endpoint,
+        keys: json.keys,
+        p256dh: json.keys.p256dh,
+        auth: json.keys.auth,
+        user_agent: navigator.userAgent,
+        device_name: deviceName || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "endpoint" },
+    );
+
+    if (error) {
+      console.error("[Push] Erro ao salvar inscrição no Supabase:", error);
+      return { ok: false, reason: "save_failed" };
     }
 
     localStorage.setItem("umesc_push_subscribed", "true");
+    setPushStatus("subscribed");
     return { ok: true };
   } catch (err) {
     console.error("[Push] Erro ao inscrever para notificações:", err);
@@ -193,10 +226,64 @@ export async function unsubscribeFromPush(): Promise<boolean> {
       }
     }
     localStorage.removeItem("umesc_push_subscribed");
+    setPushStatus("unsubscribed");
     return true;
   } catch (err) {
     console.error("[Push] Erro ao cancelar inscrição:", err);
     return false;
+  }
+}
+
+/**
+ * Confere se o navegador já possui uma inscrição de push ativa (permissão concedida)
+ * e, em caso positivo, garante que ela está persistida no Supabase — reparando de forma
+ * silenciosa qualquer inscrição "órfã" (criada no navegador mas que por algum motivo não
+ * chegou a ser salva, ex.: instabilidade de rede na primeira tentativa). Deve ser chamada
+ * ao montar os componentes que exibem o estado de inscrição (Sino e Banner), assim o
+ * visitante nunca precisa clicar duas vezes para o mesmo dispositivo funcionar de verdade.
+ */
+export async function ensurePushSubscriptionSynced(deviceName?: string): Promise<PushSubscriptionStatus> {
+  if (!isPushSupported() || Notification.permission !== "granted") {
+    setPushStatus("unsubscribed");
+    return "unsubscribed";
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+
+    if (!subscription) {
+      setPushStatus("unsubscribed");
+      return "unsubscribed";
+    }
+
+    const json = subscription.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
+    if (json.endpoint && json.keys?.p256dh && json.keys?.auth && isSupabaseConfigured && supabase) {
+      // Upsert idempotente: se a linha já existir e estiver correta, isso é praticamente
+      // um no-op; se estiver faltando (o "falso positivo" relatado), ela é recriada agora.
+      const { error } = await supabase.from("push_subscriptions").upsert(
+        {
+          endpoint: json.endpoint,
+          keys: json.keys,
+          p256dh: json.keys.p256dh,
+          auth: json.keys.auth,
+          user_agent: navigator.userAgent,
+          device_name: deviceName || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "endpoint" },
+      );
+      if (error) {
+        console.warn("[Push] Erro ao sincronizar inscrição existente:", error);
+      }
+    }
+
+    localStorage.setItem("umesc_push_subscribed", "true");
+    setPushStatus("subscribed");
+    return "subscribed";
+  } catch (err) {
+    console.warn("[Push] Erro ao verificar inscrição existente:", err);
+    return currentPushStatus;
   }
 }
 
