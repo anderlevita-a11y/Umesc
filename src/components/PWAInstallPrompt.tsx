@@ -1,6 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { Download, WifiOff, X, CheckCircle, ShieldCheck } from "lucide-react";
 import { promptPWAInstall, isPWAInstallAvailable, isRunningStandalone } from "../lib/pwa";
+import { isPushSupported, getPushPermissionState, subscribeToPush } from "../lib/pushService.ts";
+
+// Solicita a permissão de notificações Push logo após a instalação do app,
+// sem depender do banner separado "Ativar Notificações".
+let pushRequestedAfterInstall = false;
+function requestPushPermissionAfterInstall() {
+  if (!isPushSupported()) return;
+  if (pushRequestedAfterInstall) return; // evita disparo duplicado (evento appinstalled + clique do botão)
+  if (getPushPermissionState() !== "default") return; // já concedida, negada ou indisponível
+  pushRequestedAfterInstall = true;
+  // Pequeno atraso para não sobrepor o diálogo nativo de instalação do navegador
+  setTimeout(() => {
+    subscribeToPush("Instalação PWA").catch((err) => {
+      console.warn("[PWA] Não foi possível ativar notificações após a instalação:", err);
+    });
+  }, 1200);
+}
 
 export default function PWAInstallPrompt() {
   const [canInstall, setCanInstall] = useState(false);
@@ -34,6 +51,7 @@ export default function PWAInstallPrompt() {
       setCanInstall(false);
       setInstallSuccess(true);
       setTimeout(() => setInstallSuccess(false), 5000);
+      requestPushPermissionAfterInstall();
     };
 
     // Online / Offline listeners
@@ -62,6 +80,7 @@ export default function PWAInstallPrompt() {
       setCanInstall(false);
       setInstallSuccess(true);
       setTimeout(() => setInstallSuccess(false), 5000);
+      requestPushPermissionAfterInstall();
     }
   };
 

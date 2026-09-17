@@ -16,6 +16,7 @@ import AdminPortal from "./components/AdminPortal";
 import PrayerRequestsSection from "./components/PrayerRequestsSection";
 import LgpdPolicyBanner from "./components/LgpdPolicyBanner";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
+import PushNotificationPrompt from "./components/PushNotificationPrompt";
 import Footer from "./components/Footer";
 
 import { ShieldCheck, Calendar, Users, Scale, UserPlus, Info, Compass, Star, X } from "lucide-react";
@@ -522,6 +523,9 @@ export default function App() {
 
       {/* PWA Offline & Install Prompt */}
       <PWAInstallPrompt />
+
+      {/* Convite para ativação de Notificações Push */}
+      <PushNotificationPrompt />
 
       {/* 7. Footer Section with full addresses and legal numbers */}
       <Footer 

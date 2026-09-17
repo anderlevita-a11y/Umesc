@@ -48,11 +48,15 @@ const isKeyValid =
   !supabaseAnonKey.toLowerCase().includes("null");
 
 // Initialize Supabase Client if credentials are valid
-export const supabase = (isUrlValid && isKeyValid) 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
+export const supabase = (isUrlValid && isKeyValid)
+  ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
 export const isSupabaseConfigured = !!supabase;
+
+// Exportados para uso em chamadas diretas (ex: fetch para Edge Functions, como o disparo de Web Push)
+export const supabaseProjectUrl = supabaseUrl;
+export const supabaseProjectAnonKey = supabaseAnonKey;
 
 /**
  * Maps the internal application camelCase properties to Supabase database snake_case columns
